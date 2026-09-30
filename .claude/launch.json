@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "chay-thu", "runtimeExecutable": "node", "runtimeArgs": ["dev/chay-thu.js"], "port": 5178 }
+  ]
+}
