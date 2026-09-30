@@ -235,6 +235,14 @@ table.lines { width: 100%; border-collapse: collapse; min-width: 1040px; }
 #busy { position: fixed; top: 0; left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--brand), #f59e0b); z-index: 99; }
 #busy.on { width: 85%; transition: width 6s cubic-bezier(.1,.7,.3,1); }
 
+/* ---- Mã QR chuyển khoản, báo cáo ---- */
+.qr { margin-top: 14px; }
+.qr-box { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; margin-top: 10px; color: var(--ink2); }
+.qr-box img { width: 210px; max-width: 100%; border: 1px solid var(--line); border-radius: 12px; }
+.qr-box div { flex: 1; min-width: 180px; }
+.rpt-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 14px 18px; }
+.rpt-bar input[type=date] { padding: 7px 10px; }
+
 /* ---- Bản in ---- */
 #print { display: none; }
 @media print {
@@ -259,6 +267,11 @@ table.lines { width: 100%; border-collapse: collapse; min-width: 1040px; }
 .p-sign { display: flex; justify-content: space-around; margin-top: 18px; text-align: center; font-weight: 700; }
 .p-sign div { flex: 1; padding-bottom: 70px; }
 .p-sign i { display: block; font-weight: 400; }
+.p-pay { display: flex; gap: 14px; justify-content: space-between; align-items: flex-start; }
+.p-qr { flex: none; text-align: center; font-size: 11px; }
+.p-qr img { display: block; width: 34mm; height: 34mm; margin: 0 auto 2px; }
+.p-form { display: flex; justify-content: space-between; gap: 20px; }
+.p-form .r { text-align: center; font-size: 11.5px; max-width: 72mm; }
 </style>
 </head>
 <body>
@@ -271,13 +284,13 @@ table.lines { width: 100%; border-collapse: collapse; min-width: 1040px; }
       <p>Báo giá nhanh theo giá sỉ – lẻ, chốt đơn, giao hàng trừ kho và theo dõi tiền khách còn nợ ở một nơi.</p>
       <ul id="artList"></ul>
     </div>
-    <small>© phuonghihi</small>
+    <small id="artCopy">© phuonghihi</small>
   </div>
   <div class="login-box">
     <form id="loginForm" autocomplete="on">
       <div class="mark" id="formMark"></div>
       <h1>Đăng nhập</h1>
-      <p class="sub">phuonghihi – Cửa hàng iPhone chính hãng</p>
+      <p class="sub" id="lgSub">phuonghihi – Cửa hàng iPhone chính hãng</p>
       <div class="field"><label for="lgUser">Tên đăng nhập</label><input id="lgUser" name="username" autocomplete="username" required></div>
       <div class="field"><label for="lgPass">Mật khẩu</label><input id="lgPass" name="password" type="password" autocomplete="current-password" required></div>
       <button class="btn primary" type="submit">Đăng nhập</button>
@@ -313,7 +326,7 @@ table.lines { width: 100%; border-collapse: collapse; min-width: 1040px; }
 <script>
 // ===================== Trạng thái & tiện ích =====================
 const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], ton: {},
-  thongKe: { topHang: [], theoNhom: [] }, taiKhoan: null, view: 'home', loai: '', doc: null, extra: {}, dirty: false, q: {}, onNew: null };
+  thongKe: { topHang: [], theoNhom: [] }, taiKhoan: null, baoHanh: null, nhatKy: null, view: 'home', loai: '', doc: null, extra: {}, dirty: false, q: {}, onNew: null };
 const D = { thuDH: {}, thuKH: {}, muaKH: {}, noKH: {}, dhBG: {} }; // số liệu suy ra: đã thu, công nợ, báo giá đã chốt
 const LG = { si: 'Giá sỉ', le: 'Giá lẻ', tuy: 'Giá tùy chọn' };
 const LIMIT = 300;
@@ -398,11 +411,34 @@ const IC = {
   phone: '<rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   flame: '<path d="M12 2c.6 3.4 4.6 5.4 4.6 10.2A4.6 4.6 0 0 1 12 17a4.6 4.6 0 0 1-4.6-4.8c0-2.4 1.3-3.9 2.4-4.9.2 1.8 1 2.9 2.2 3.4C11.4 8 11 5.2 12 2z"/><path d="M5 21h14"/>',
+  award: '<circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>',
+  chart: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
 };
 // Logo phuonghihi (lấy từ website cửa hàng)
 const LOGO_PHONE = '<svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="11" fill="#0B4174"/><rect x="13" y="10" width="5" height="23" rx="2.5" fill="#FF6B4A"/><rect x="15" y="13" width="15" height="15" rx="7.5" fill="#FF6B4A"/><circle cx="25" cy="20.5" r="4.3" fill="#0B4174"/></svg>';
 const markHtml = ic => ic === 'phone' ? LOGO_PHONE : icon(ic || 'box');
 const icon = n => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
+
+// Ngân hàng nhận chuyển khoản qua mã VietQR: [mã BIN, tên] (theo danh sách của vietqr.io)
+const BANKS = [['970436', 'Vietcombank'], ['970415', 'VietinBank'], ['970418', 'BIDV'], ['970405', 'Agribank'], ['970407', 'Techcombank'], ['970422', 'MB Bank'],
+  ['970416', 'ACB'], ['970432', 'VPBank'], ['970423', 'TPBank'], ['970403', 'Sacombank'], ['970437', 'HDBank'], ['970441', 'VIB'], ['970443', 'SHB'],
+  ['970431', 'Eximbank'], ['970426', 'MSB'], ['970448', 'OCB'], ['970440', 'SeABank'], ['970449', 'LPBank'], ['970428', 'Nam A Bank'], ['970409', 'Bac A Bank'],
+  ['970425', 'ABBank'], ['970427', 'VietABank'], ['970412', 'PVcomBank'], ['970429', 'SCB'], ['970419', 'NCB'], ['970452', 'KienlongBank'], ['970400', 'Saigonbank'],
+  ['970438', 'BaoViet Bank'], ['970433', 'VietBank'], ['970430', 'PGBank'], ['970454', 'Viet Capital Bank'], ['970414', 'MBV'], ['970446', 'Co-opBank'],
+  ['970424', 'Shinhan Bank'], ['970457', 'Woori Bank'], ['422589', 'CIMB'], ['668888', 'KBank'], ['546034', 'CAKE'], ['546035', 'Ubank'], ['963388', 'Timo']];
+// Ảnh mã VietQR: khách quét bằng app ngân hàng là có sẵn số tài khoản, số tiền, nội dung. Chưa khai tài khoản thì trả về ''.
+// ponytail: ảnh do dịch vụ Quick Link của vietqr.io tạo (số TK + số tiền đi qua máy chủ đó); muốn không phụ thuộc thì tự sinh chuỗi EMVCo + thư viện QR.
+function qrUrl(soTien, noiDung, kieu) {
+  const c = S.congTy, p = [];
+  if (!c.qrNganHang || !c.qrSoTK) return '';
+  if (soTien > 0) p.push('amount=' + Math.round(soTien));
+  if (noiDung) p.push('addInfo=' + encodeURIComponent(norm(noiDung).replace(/[^0-9a-z]+/g, ' ').trim().toUpperCase().slice(0, 50)));
+  if (c.qrChuTK) p.push('accountName=' + encodeURIComponent(c.qrChuTK));
+  // Viết tách 'https:/' + '/…': Apps Script tự xóa chú thích trong trang và sẽ cắt mọi thứ sau hai dấu gạch chéo liền nhau (xem dev/kiem-tra-html.js)
+  return 'https:/' + '/img.vietqr.io/image/' + encodeURIComponent(c.qrNganHang) + '-' + encodeURIComponent(c.qrSoTK) + '-' + (kieu || 'compact2') + '.png?' + p.join('&');
+}
 
 function toast(msg, type) {
   const d = document.createElement('div');
@@ -470,6 +506,8 @@ function showLogin(msg) {
   closeModal(); hidePicker();
   $('#lgErr').textContent = msg || '';
   $('#lgUser').focus();
+  // tên cửa hàng trên trang đăng nhập theo thông tin quản trị đã sửa trong Cài đặt
+  call('thongTinDangNhap').then(c => { $('#lgSub').textContent = c.ten + ' – ' + c.moTa; $('#artCopy').textContent = '© ' + c.ten; }).catch(() => {});
 }
 
 $('#loginForm').addEventListener('submit', async e => {
@@ -488,6 +526,7 @@ $('#loginForm').addEventListener('submit', async e => {
 
 async function loadAll() {
   Object.assign(S, await api('taiDuLieu'));
+  if (S.q.baocao) S.q.baocao.hang = null;
   sortAll(); derive();
 }
 
@@ -502,7 +541,7 @@ function applyShop() {
 async function switchShop(id) {
   const d = await api('chonCuaHang', id);
   Object.assign(S, d);
-  S.q = {}; S.taiKhoan = null; S.doc = null; S.dirty = false;
+  S.q = {}; S.taiKhoan = S.baoHanh = S.nhatKy = null; S.doc = null; S.dirty = false;
   sortAll(); derive(); applyShop(); go('home');
   toast('Đang làm việc ở cửa hàng ' + S.cuaHang.ten + '.');
 }
@@ -537,11 +576,11 @@ $('#btnPass').onclick = () => modal({
 
 // ===================== Điều hướng =====================
 const NAV = [
-  ['', [['home', 'Tổng quan', 'home']]],
-  ['Bán hàng', [['baogia', 'Báo giá', 'file'], ['donhang', 'Đơn hàng', 'cart'], ['congno', 'Thu tiền & công nợ', 'card']]],
+  ['', [['home', 'Tổng quan', 'home'], ['baocao', 'Báo cáo & sổ doanh thu', 'chart']]],
+  ['Bán hàng', [['baogia', 'Báo giá', 'file'], ['donhang', 'Đơn hàng', 'cart'], ['congno', 'Thu tiền & công nợ', 'card'], ['baohanh', 'Bảo hành', 'award']]],
   ['Kho hàng', [['hang', 'Hàng hóa & bảng giá', 'box'], ['kho', 'Nhập – xuất kho', 'truck'], ['ton', 'Tồn kho', 'layers']]],
   ['Danh mục', [['khach', 'Khách hàng', 'users']]],
-  ['Hệ thống', [['caidat', 'Cài đặt', 'settings'], ['taikhoan', 'Tài khoản', 'shield', true]]],
+  ['Hệ thống', [['caidat', 'Cài đặt', 'settings'], ['taikhoan', 'Tài khoản', 'shield', true], ['nhatky', 'Nhật ký', 'clock', true]]],
 ];
 const DOC = {
   BG: { ten: 'Báo giá', list: 'baogia', key: 'SoBG', arr: 'baoGia', crumb: 'Bán hàng', price: true },
@@ -584,7 +623,7 @@ function go(view) {
 function render() {
   S.onNew = null; hidePicker(); drawNav();
   const el = $('#view');
-  el.innerHTML = ''; el.onclick = el.oninput = el.onchange = null;
+  el.innerHTML = ''; el.onclick = el.oninput = el.onchange = el.onkeydown = null;
   VIEWS[S.view](el);
 }
 
@@ -871,7 +910,7 @@ function openThu(pt) {
       <label class="field"><span class="lb">Ngày thu</span><input name="Ngay" type="date" value="${esc(pt.Ngay)}"></label>
       <label class="field"><span class="lb">Hình thức</span><select name="HinhThuc">${hinhThuc.map(x => `<option${x === pt.HinhThuc ? ' selected' : ''}>${x}</option>`).join('')}</select></label>
       <label class="field"><span class="lb">Ghi chú</span><input name="GhiChu" value="${esc(pt.GhiChu)}" placeholder="vd: Đặt cọc 50%"></label>
-    </div>${isNew ? '' : `<p class="muted">Lập bởi ${esc(pt.NguoiTao)} lúc ${esc(pt.NgayTao)}</p>`}`,
+    </div>${isNew ? '' : `<p class="muted">Lập bởi ${esc(pt.NguoiTao)} lúc ${esc(pt.NgayTao)}</p>`}${S.congTy.qrSoTK ? `<div class="qr"><button type="button" class="btn sm" data-qr>${icon('card')}Mã QR chuyển khoản</button><div class="qr-box" data-qrbox></div></div>` : ''}`,
     buttons: [
       { t: 'Lưu (F8)', ic: 'save', cls: 'primary', save: true, fn: run(async m => {
         const d = formData(m);
@@ -901,6 +940,13 @@ function openThu(pt) {
     });
   };
   sel.onchange = fillFromOrder;
+  const qb = $('[data-qr]', m);
+  if (qb) qb.onclick = () => {
+    const so = parseMoney(tien.value) || 0, ck = [...$('[name=HinhThuc]', m).options].find(o => /chuyển khoản/i.test(o.value));
+    if (ck) ck.selected = true; // khách quét mã tức là trả bằng chuyển khoản
+    $('[data-qrbox]', m).innerHTML = so > 0 ? `<img alt="Mã QR chuyển khoản" src="${esc(qrUrl(so, 'TT ' + (sel.value || mk.value)))}">
+      <div>Khách quét bằng app ngân hàng: có sẵn số tiền <b>${money(so)} ₫</b> và nội dung chuyển khoản. Thấy tiền về thì bấm Lưu.</div>` : '<div>Nhập số tiền trước.</div>';
+  };
 }
 
 // ===================== Khách hàng =====================
@@ -1023,6 +1069,7 @@ function openHang(h) {
       f('NhomHang', 'Nhóm hàng', { list: 'dl-nhom' }), f('PhanLoai', 'Phân loại', { list: 'dl-loai' }), f('DVT', 'Đơn vị tính', { list: 'dl-dvt' }), f('XuatXu', 'Xuất xứ'),
       f('GiaSi', 'Giá sỉ' + (S.congTy.vatMacDinh ? ' (chưa VAT)' : ''), { money: true }), f('GiaLe', 'Giá lẻ' + (S.congTy.vatMacDinh ? ' (chưa VAT)' : ''), { money: true }),
       f('TonToiThieu', 'Tồn tối thiểu (báo sắp hết)', { type: 'number', ph: 'Để trống nếu không theo dõi' }),
+      f('BaoHanh', 'Bảo hành (tháng)', { type: 'number', ph: `Trống = ${S.congTy.baoHanhThang ?? 12} tháng theo cửa hàng, 0 = không bảo hành` }),
       f('GhiChu', 'Ghi chú', { area: true }),
     ], h) + datalist('dl-nhom', S.hang.map(x => x.NhomHang)) + datalist('dl-loai', S.hang.map(x => x.PhanLoai)) + datalist('dl-dvt', S.hang.map(x => x.DVT))
       + (isNew ? '' : `<div class="stats"><div class="stat"><div class="l">Đã nhập</div><div class="v">${money(t ? t.nhap : 0)}</div></div>
@@ -1051,7 +1098,7 @@ async function openTheKho(h) {
   const mv = await api('theKho', h.MaHH);
   let ton = 0;
   const rows = mv.map(x => { ton += x.Loai === 'Nhập' ? x.SoLuong : -x.SoLuong; return `<tr data-pk="${esc(x.SoPK)}"><td>${dmy(x.Ngay)}</td><td class="code">${esc(x.SoPK)}</td>
-    <td>${esc(x.DoiTac || '')}${x.SoDH ? `<span class="sub">Đơn ${esc(x.SoDH)}</span>` : ''}</td><td class="num green">${x.Loai === 'Nhập' ? money(x.SoLuong) : ''}</td>
+    <td>${esc(x.DoiTac || '')}${x.SoDH ? `<span class="sub">Đơn ${esc(x.SoDH)}</span>` : ''}${x.IMEI ? `<span class="sub">IMEI: ${esc(x.IMEI)}</span>` : ''}</td><td class="num green">${x.Loai === 'Nhập' ? money(x.SoLuong) : ''}</td>
     <td class="num red">${x.Loai === 'Xuất' ? money(x.SoLuong) : ''}</td><td class="num"><b>${money(ton)}</b></td></tr>`; }).reverse();
   const m = modal({
     title: 'Thẻ kho – ' + h.TenHang, wide: true,
@@ -1167,7 +1214,11 @@ function vDoc(el) {
     if (conNo(d) > 0) btns.push({ t: 'Thu tiền', ic: 'card', cls: 'soft', fn: () => openThu({ SoDH: d.SoDH }) });
   }
   if (L === 'DH' && saved) btns.push({ t: d.TrangThai === 'Hủy' ? 'Khôi phục đơn' : 'Hủy đơn', ic: 'x', fn: run(huyDon) });
-  if (L === 'XK' && d.SoDH) btns.push({ t: 'Mở đơn ' + d.SoDH, ic: 'cart', fn: run(() => openDoc('DH', S.donHang.find(x => x.SoDH === d.SoDH))) });
+  if (L === 'XK' && d.SoDH) {
+    const dh = S.donHang.find(x => x.SoDH === d.SoDH);
+    if (saved && dh && conNo(dh) > 0) btns.push({ t: 'Thu tiền', ic: 'card', cls: 'soft', fn: () => openThu({ SoDH: d.SoDH }) }); // giao xong thu tiền luôn, khỏi quay lại đơn
+    btns.push({ t: 'Mở đơn ' + d.SoDH, ic: 'cart', fn: run(() => openDoc('DH', dh)) });
+  }
   if (isAdmin() && saved) btns.push({ t: 'Xóa', ic: 'trash', cls: 'danger', fn: run(delDoc) });
   setTop(c.crumb + ' › ' + (L === 'NK' || L === 'XK' ? 'Nhập – xuất kho' : c.ten), docTitle() + (S.dirty ? ' •' : ''), btns);
   S.onNew = () => newDoc(L);
@@ -1193,7 +1244,7 @@ function vDoc(el) {
   // [tiêu đề, độ rộng px] – cột tên hàng tự giãn
   const heads = price
     ? [['#', 40], ['Tên hàng hóa, dịch vụ'], ['Model', 110], ['ĐVT', 70], ['Xuất xứ', 110], ['SL', 70], ['Loại giá', 132], ['Đơn giá', 110], ['Thành tiền', 120]].concat(L === 'DH' && saved ? [['Đã giao', 80]] : [])
-    : [['#', 40], ['Tên hàng hóa'], ['Model', 150], ['ĐVT', 90], ['Số lượng', 120], [L === 'XK' ? 'Có thể xuất' : 'Tồn hiện tại', 130]];
+    : [['#', 40], ['Tên hàng hóa'], ['Model', 150], ['ĐVT', 80], ['Số lượng', 100], ['IMEI / Serial', 260], [L === 'XK' ? 'Có thể xuất' : 'Tồn hiện tại', 120]];
   const numCol = ['SL', 'Số lượng', 'Đơn giá', 'Thành tiền', 'Đã giao', 'Tồn hiện tại', 'Có thể xuất'];
   const payCard = L === 'DH' && saved ? (() => {
     const pts = S.thuTien.filter(p => p.SoDH === d.SoDH), pks = S.phieuKho.filter(p => p.SoDH === d.SoDH);
@@ -1210,7 +1261,7 @@ function vDoc(el) {
   el.innerHTML = `<div class="card"><div class="doc-head">${head.join('')}</div>
     <div class="lines-wrap"><table class="lines"><thead><tr>${heads.map(([h, w]) => `<th class="${numCol.includes(h) ? 'num' : ''}"${w ? ` style="width:${w}px"` : ''}>${h}</th>`).join('')}<th style="width:44px"></th></tr></thead><tbody></tbody></table></div>
     <div class="doc-foot"><button class="btn sm" data-act="addline">${icon('plus')}Thêm dòng</button>
-      <span class="hint">${price ? 'Gõ tên hoặc model để chọn hàng. Cột "Loại giá": chọn Giá sỉ / Giá lẻ để lấy giá từ bảng giá; tự sửa đơn giá thì tự chuyển sang Giá tùy chọn.' : 'Gõ tên hoặc model để chọn hàng, rồi nhập số lượng.'}</span>
+      <span class="hint">${price ? 'Gõ tên hoặc model để chọn hàng. Cột "Loại giá": chọn Giá sỉ / Giá lẻ để lấy giá từ bảng giá; tự sửa đơn giá thì tự chuyển sang Giá tùy chọn.' : 'Gõ tên hoặc model để chọn hàng, rồi nhập số lượng. Máy có IMEI/serial: gõ hoặc quét mã vào cột IMEI, mỗi máy một mã – số lượng tự đếm theo số mã.'}</span>
       ${price ? `<div class="totals"><div><span>Cộng tiền hàng</span><b data-t="TienHang"></b></div><div><span>Thuế GTGT (<span data-t="VATp"></span>%)</span><b data-t="TienVAT"></b></div>
         <div class="sum"><span>Tổng cộng</span><span data-t="TongCong"></span></div></div>` : `<div class="totals"><div class="sum"><span>Tổng số lượng</span><span data-t="SoLuong"></span></div></div>`}
     </div></div>${payCard}`;
@@ -1234,6 +1285,14 @@ function vDoc(el) {
   });
   el.oninput = e => onDocInput(el, e.target);
   el.onchange = e => { if (e.target.dataset.f === 'LoaiGia') onTypeChange(el, e.target); };
+  // Máy quét mã vạch gõ xong IMEI rồi Enter: thêm dấu phẩy để quét tiếp máy kế
+  el.onkeydown = e => {
+    const t = e.target;
+    if (e.key !== 'Enter' || t.dataset.f !== 'IMEI') return;
+    e.preventDefault();
+    t.value = t.value.replace(/[\s,;]+$/, '') + ', ';
+    onDocInput(el, t);
+  };
 }
 
 function drawLines(el) {
@@ -1248,6 +1307,7 @@ function drawLines(el) {
     if (!price) {
       const t = l.MaHH ? tonOf(l.MaHH) + (L === 'XK' ? (S.extra.goc && S.extra.goc[l.MaHH]) || 0 : 0) : null;
       return `<tr data-i="${i}"><td class="c muted">${i + 1}</td>${name}${txt('Model')}${txt('DVT')}${qty}
+        <td><input data-f="IMEI" value="${esc(l.IMEI)}" aria-label="IMEI hoặc serial dòng ${i + 1}"${i ? '' : ' placeholder="Mỗi máy một mã, cách nhau dấu phẩy"'}></td>
         <td class="c num" data-c="ton">${t === null ? '' : `<span data-av="${t}" class="${L === 'XK' && +l.SoLuong > t ? 'red' : ''}">${money(t)}</span>`}</td>${rm}</tr>`;
     }
     let giao = '';
@@ -1311,6 +1371,10 @@ function onDocInput(el, t) {
   if (f === 'DonGia') { l.DonGia = parseMoney(t.value); l.LoaiGia = detectType(l); }
   else if (f === 'SoLuong') l.SoLuong = t.value === '' ? '' : +t.value;
   else l[f] = t.value;
+  if (f === 'IMEI') { // số lượng đếm theo số mã đã nhập
+    const n = t.value.split(/[\s,;]+/).filter(Boolean).length;
+    if (n) { l.SoLuong = n; $('[data-f="SoLuong"]', tr).value = n; }
+  }
   if (f === 'TenHang') {
     if (!t.value.trim()) l.MaHH = '';
     showPicker(t, hangSource, h => pickHang(i, h));
@@ -1359,6 +1423,7 @@ function pickKhach(kh) {
 // Cập nhật danh sách sau khi lưu/xóa: chứng từ, tồn kho, trạng thái đơn bị ảnh hưởng
 function applyResult(r) {
   if (r.ton) S.ton = r.ton;
+  if (S.q.baocao) S.q.baocao.hang = null;
   (r.donHang || []).forEach(dh => upsertLocal('donHang', 'SoDH', dh));
   sortAll(); derive();
 }
@@ -1457,9 +1522,15 @@ async function printDoc() {
     await saveDoc();
     if (!S.doc[DOC[S.loai].key] || S.dirty) return;
   }
-  printHtml(docPrintHtml(S.loai, S.doc));
+  await printHtml(docPrintHtml(S.loai, S.doc));
 }
-function printHtml(html) { $('#print').innerHTML = html; window.print(); }
+async function printHtml(html) {
+  const p = $('#print');
+  p.innerHTML = html;
+  // chờ ảnh (mã QR) tải xong rồi mới in, tối đa 4 giây
+  await Promise.all([...p.querySelectorAll('img')].map(i => i.complete ? null : new Promise(r => { i.onload = i.onerror = r; setTimeout(r, 4000); })));
+  window.print();
+}
 
 function letterhead(title) {
   const c = S.congTy;
@@ -1471,17 +1542,22 @@ const signs = list => `<div class="p-sign">${list.map(s => `<div>${s}<i>(Ký, gh
 function docPrintHtml(L, d) {
   const c = S.congTy, lines = filled(d.lines);
   if (!DOC[L].price) {
-    const title = L === 'NK' ? 'PHIẾU NHẬP KHO' : d.SoDH ? 'PHIẾU XUẤT KHO – GIAO HÀNG' : 'PHIẾU XUẤT KHO';
+    const bh = L === 'XK' && lines.some(l => l.HetHan); // phiếu giao có hàng còn bảo hành: dùng luôn làm phiếu bảo hành
+    const title = L === 'NK' ? 'PHIẾU NHẬP KHO' : !d.SoDH ? 'PHIẾU XUẤT KHO' : bh ? 'PHIẾU GIAO HÀNG KIÊM PHIẾU BẢO HÀNH' : 'PHIẾU XUẤT KHO – GIAO HÀNG';
     return `<div class="p-page">${letterhead(title)}
       ${infoTable([['Số phiếu:', d.SoPK, 'Ngày:', dmy(d.Ngay)], [L === 'NK' ? 'Nhà cung cấp:' : 'Người nhận:', d.DoiTac, d.SoDH ? 'Theo đơn hàng:' : '', d.SoDH || ''], ['Ghi chú:', d.GhiChu, '', '']])}
-      <table class="p-lines"><thead><tr><th>STT</th><th>Tên hàng hóa</th><th>Model</th><th>ĐVT</th><th>Số lượng</th><th>Ghi chú</th></tr></thead>
-      <tbody>${lines.map((l, i) => `<tr><td class="num">${i + 1}</td><td>${esc(l.TenHang)}</td><td>${esc(l.Model)}</td><td>${esc(l.DVT)}</td><td class="num">${money(l.SoLuong)}</td><td></td></tr>`).join('')}</tbody>
-      <tfoot><tr><td colspan="4" class="num">Tổng số lượng</td><td class="num">${money(sum(lines, l => l.SoLuong))}</td><td></td></tr></tfoot></table>
+      <table class="p-lines"><thead><tr><th>STT</th><th>Tên hàng hóa</th><th>Model</th><th>ĐVT</th><th>Số lượng</th><th>IMEI / Serial</th>${bh ? '<th>Bảo hành đến</th>' : ''}</tr></thead>
+      <tbody>${lines.map((l, i) => `<tr><td class="num">${i + 1}</td><td>${esc(l.TenHang)}</td><td>${esc(l.Model)}</td><td>${esc(l.DVT)}</td><td class="num">${money(l.SoLuong)}</td><td>${esc(l.IMEI)}</td>${bh ? `<td>${dmy(l.HetHan)}</td>` : ''}</tr>`).join('')}</tbody>
+      <tfoot><tr><td colspan="4" class="num">Tổng số lượng</td><td class="num">${money(sum(lines, l => l.SoLuong))}</td><td${bh ? ' colspan="2"' : ''}></td></tr></tfoot></table>
+      ${bh ? '<div><i>Bảo hành tính từ ngày giao hàng. Khi cần bảo hành, Quý khách đọc số điện thoại hoặc IMEI/serial của máy để cửa hàng tra cứu.</i></div>' : ''}
       ${signs(L === 'NK' ? ['Người lập phiếu', 'Người giao hàng', 'Thủ kho'] : ['Người lập phiếu', 'Người giao hàng', 'Người nhận hàng'])}</div>`;
   }
   const tien = sum(lines, lineTotal), vat = +d.VAT || 0, tienVat = Math.round(tien * vat / 100);
   const info = [['Kính gửi:', d.TenKH, L === 'BG' ? 'Số BG:' : 'Số đơn:', d[DOC[L].key]], ['Người nhận:', d.NguoiNhan, 'Ngày:', dmy(d.Ngay)], ['Địa chỉ:', d.DiaChi, 'Điện thoại:', d.SDT]];
   if (L === 'DH' && d.NgayGiao) info.push(['Hẹn giao:', dmy(d.NgayGiao), '', '']);
+  // Mã VietQR: đơn hàng in số tiền còn nợ, báo giá để khách tự nhập số tiền
+  const no = L === 'DH' ? conNo(d) : 0, url = L === 'BG' || no > 0 ? qrUrl(no, 'TT ' + d[DOC[L].key], 'compact') : '';
+  const qr = url ? `<div class="p-qr"><img alt="Mã QR chuyển khoản" src="${esc(url)}">Quét mã để chuyển khoản${no ? `<br><b>${money(no)} đ</b>` : ''}</div>` : '';
   return `<div class="p-page">${letterhead(L === 'BG' ? 'BẢNG BÁO GIÁ' : 'ĐƠN ĐẶT HÀNG')}${infoTable(info)}
     ${L === 'BG' ? `<div>${esc(c.loiMo)}</div>` : ''}
     <table class="p-lines"><thead><tr><th>STT</th><th>Tên hàng hóa, dịch vụ</th><th>Model</th><th>ĐVT</th><th>SL</th><th>Xuất xứ</th><th>Đơn giá${vat ? '<br>(chưa VAT)' : ''}</th><th>Thành tiền</th></tr></thead>
@@ -1490,10 +1566,10 @@ function docPrintHtml(L, d) {
     <tr><td colspan="7" class="num">TỔNG CỘNG</td><td class="num">${money(tien + tienVat)}</td></tr></tfoot></table>
     <div><b>Bằng chữ:</b> <i>${esc(docSo(tien + tienVat))}</i></div>
     ${d.GhiChu ? `<div><b>Ghi chú:</b> ${esc(d.GhiChu)}</div>` : ''}
-    ${L === 'BG' ? `<div style="margin-top:6px"><b>Các điều kiện thương mại:</b><ul>${(c.dieuKien || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
-      ${c.nganHang ? `<div>Thanh toán tiền mặt hoặc chuyển khoản: ${esc(c.nganHang)}</div>` : ''}<p><i>${esc(c.gioiThieu)}</i></p>
+    ${L === 'BG' ? `<div class="p-pay"><div><div style="margin-top:6px"><b>Các điều kiện thương mại:</b><ul>${(c.dieuKien || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
+      ${c.nganHang ? `<div>Thanh toán tiền mặt hoặc chuyển khoản: ${esc(c.nganHang)}</div>` : ''}</div>${qr}</div><p><i>${esc(c.gioiThieu)}</i></p>
       <div class="p-sign"><div style="flex:0 0 280px;margin-left:auto">${esc(c.ten)}<br>${esc(c.kyTen)}</div></div>`
-    : `${c.nganHang ? `<div>Thanh toán: ${esc(c.nganHang)}</div>` : ''}${signs(['Khách hàng xác nhận', 'Đại diện ' + esc(c.ten)])}`}</div>`;
+    : `<div class="p-pay"><div>${c.nganHang ? `Thanh toán: ${esc(c.nganHang)}` : ''}</div>${qr}</div>${signs(['Khách hàng xác nhận', 'Đại diện ' + esc(c.ten)])}`}</div>`;
 }
 
 function ptPrintHtml(p) {
@@ -1543,6 +1619,155 @@ document.addEventListener('keydown', e => {
 $('#picker').addEventListener('mousedown', e => { const d = e.target.closest('[data-i]'); if (d) { e.preventDefault(); choose(+d.dataset.i); } });
 document.addEventListener('focusout', e => { if (e.target === P.input) setTimeout(() => { if (document.activeElement !== P.input) hidePicker(); }, 150); });
 window.addEventListener('scroll', e => { if (e.target !== $('#picker')) hidePicker(); }, true);
+
+// ===================== Bảo hành: tra theo IMEI/serial, SĐT, tên khách =====================
+function vBaoHanh(el) {
+  setTop('Bán hàng', 'Tra cứu bảo hành');
+  const now = today();
+  const conLai = r => Math.round((Date.parse(r.HetHan) - Date.parse(now)) / 864e5);
+  const refresh = listCard(el, {
+    id: 'baohanh', ph: 'Tìm IMEI / serial, SĐT, tên khách, tên máy…',
+    filters: [{ id: 'tt', options: [['', 'Tất cả hàng đã giao'], ['con', 'Còn bảo hành'], ['het', 'Hết / không bảo hành']] }, { id: 'ngay', type: 'dates' }],
+    filter: (r, f) => (!f.tt || (f.tt === 'con') === (!!r.HetHan && r.HetHan >= now)) && inRange(r.Ngay, f, 'ngay'),
+    cols: [
+      { t: 'Ngày giao', f: r => dmy(r.Ngay) },
+      { t: 'Khách hàng', cls: 'wrap', f: r => `<b>${esc(r.TenKH)}</b><span class="sub">${esc(r.SDT)}</span>` },
+      { t: 'Hàng hóa', cls: 'wrap', f: r => `${esc(r.TenHang)}<span class="sub">${esc(r.Model)}</span>` },
+      { t: 'IMEI / Serial', f: r => r.IMEI ? `<span class="code">${esc(r.IMEI)}</span>` : `<span class="muted">${money(r.SoLuong)} ${esc(r.DVT)} · không ghi mã</span>` },
+      { t: 'Bảo hành đến', f: r => r.HetHan ? dmy(r.HetHan) : '<span class="muted">—</span>' },
+      { t: 'Tình trạng', f: r => !r.HetHan ? badge('Không bảo hành', 'b-gray') : r.HetHan < now ? badge('Hết hạn', 'b-red') : badge('Còn ' + conLai(r) + ' ngày', conLai(r) <= 30 ? 'b-amber' : 'b-green') },
+      { t: 'Chứng từ', f: r => `${esc(r.SoPK)}${r.SoDH ? `<span class="sub">Đơn ${esc(r.SoDH)}</span>` : ''}` },
+    ],
+    data: () => S.baoHanh || [],
+    text: r => [r.IMEI, r.TenKH, r.SDT, digits(r.SDT), r.MaKH, r.TenHang, r.Model, r.SoPK, r.SoDH].join(' '),
+    open: run(r => openPK(S.phieuKho.find(p => p.SoPK === r.SoPK))),
+    foot: rows => `<span>${rows.length} dòng</span><span>Còn bảo hành <b class="green">${rows.filter(r => r.HetHan && r.HetHan >= now).length}</b></span>`,
+  });
+  el.insertAdjacentHTML('beforeend', '<p class="muted" style="margin-top:14px">Danh sách lấy từ các phiếu xuất kho / giao hàng. Ghi IMEI hoặc serial ở cột IMEI khi giao hàng để tra được từng máy. Hạn bảo hành = ngày giao + số tháng bảo hành của mặt hàng (để trống thì theo cửa hàng).</p>');
+  api('dsBaoHanh').then(rs => {
+    // mỗi IMEI một dòng; hàng không ghi IMEI giữ một dòng theo số lượng
+    S.baoHanh = rs.flatMap(r => r.IMEI ? r.IMEI.split(', ').map(x => Object.assign({}, r, { IMEI: x, SoLuong: 1 })) : [r]).sort(byDate);
+    if (S.view === 'baohanh') refresh();
+  }).catch(e => toast(errMsg(e), 'err'));
+}
+
+// ===================== Báo cáo doanh thu, sổ doanh thu theo mẫu S1a-HKD (Thông tư 152/2025/TT-BTC) =====================
+function downloadCsv(name, head, rows) {
+  // chuỗi bắt đầu bằng = + - @ thêm dấu ' để Excel không hiểu thành công thức
+  const cell = v => '"' + (typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : String(v ?? '')).replace(/"/g, '""') + '"';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + [head, ...rows].map(r => r.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  a.download = name;
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function vBaoCao(el) {
+  const t = today(), d0 = new Date(), y = d0.getFullYear(), mo = d0.getMonth();
+  const st = S.q.baocao || (S.q.baocao = { from: t.slice(0, 8) + '01', to: t, tab: 'ngay' });
+  const KY = {
+    thang: () => ({ from: iso(new Date(y, mo, 1)), to: t }), truoc: () => ({ from: iso(new Date(y, mo - 1, 1)), to: iso(new Date(y, mo, 0)) }),
+    quy: () => ({ from: iso(new Date(y, mo - mo % 3, 1)), to: t }), nam: () => ({ from: y + '-01-01', to: t }),
+  };
+  const dh = S.donHang.filter(d => d.TrangThai !== 'Hủy' && d.Ngay >= st.from && d.Ngay <= st.to);
+  const pt = S.thuTien.filter(p => p.Ngay >= st.from && p.Ngay <= st.to);
+  // Gộp đơn hàng (doanh thu) và phiếu thu (tiền đã thu) theo một khóa: ngày, nhân viên hoặc khách
+  const gop = (kDH, kPT, ten) => {
+    const m = {};
+    const row = k => m[k] || (m[k] = { k, ten: ten ? ten(k) : k, don: 0, ds: 0, thu: 0 });
+    dh.forEach(d => { const r = row(kDH(d)); r.don++; r.ds += +d.TongCong || 0; });
+    pt.forEach(p => { row(kPT(p)).thu += +p.SoTien || 0; });
+    return Object.values(m);
+  };
+  const TABS = {
+    ngay: ['Theo ngày', 'Ngày', () => gop(d => d.Ngay, p => p.Ngay).sort((a, b) => String(a.k).localeCompare(String(b.k)))],
+    nv: ['Theo nhân viên', 'Nhân viên', () => gop(d => d.NguoiTao || '—', p => p.NguoiTao || '—').sort((a, b) => b.ds - a.ds)],
+    kh: ['Theo khách hàng', 'Khách hàng', () => gop(d => d.MaKH, p => p.MaKH, ma => (S.khach.find(k => k.MaKH === ma) || { TenKH: ma }).TenKH).sort((a, b) => b.ds - a.ds)],
+    hang: ['Theo mặt hàng', 'Mặt hàng'],
+  };
+  let head, body, csv, empty = 'Không có đơn hàng hay phiếu thu trong kỳ.';
+  if (st.tab === 'hang') {
+    const key = st.from + '|' + st.to;
+    if (!st.hang || st.hang.key !== key) {
+      const h = st.hang = { key, data: null };
+      api('baoCaoHang', st.from, st.to).then(r => { h.data = r.topHang; }).catch(e => { h.data = []; toast(errMsg(e), 'err'); })
+        .then(() => { if (S.view === 'baocao' && st.hang === h) render(); });
+    }
+    const rs = st.hang.data || [];
+    if (!st.hang.data) empty = 'Đang tải…';
+    head = [['Mặt hàng'], ['Nhóm hàng'], ['Số lượng', 'num'], ['Doanh số (chưa VAT)', 'num']];
+    body = rs.map(r => [`<b>${esc(r.TenHang)}</b>`, esc(r.Nhom), money(r.SoLuong) + ' ' + esc(r.DVT), money(r.ThanhTien)]);
+    csv = rs.map(r => [r.TenHang, r.Nhom, r.SoLuong, r.ThanhTien]);
+  } else {
+    const rs = TABS[st.tab][2]();
+    head = [[TABS[st.tab][1]], ['Số đơn', 'num'], ['Doanh thu', 'num'], ['Đã thu', 'num']];
+    body = rs.map(r => [st.tab === 'ngay' ? dmy(r.k) : `<b>${esc(r.ten)}</b>`, r.don, money(r.ds), money(r.thu)]);
+    csv = rs.map(r => [st.tab === 'ngay' ? r.k : r.ten, r.don, r.ds, r.thu]);
+  }
+  setTop('Báo cáo', 'Doanh thu & sổ doanh thu', [
+    { t: 'In sổ doanh thu (S1a-HKD)', ic: 'print', cls: 'primary', fn: run(() => printHtml(soDoanhThuHtml(st, dh))) },
+    { t: 'Xuất CSV', ic: 'download', fn: () => downloadCsv(`bao-cao-${st.tab}-${st.from}_${st.to}.csv`, head.map(h => h[0]), csv) },
+  ]);
+  const dsTong = sum(dh, d => d.TongCong);
+  const stat = (l, v, cls = '') => `<div class="stat"><div class="l">${l}</div><div class="v ${cls}">${v}</div></div>`;
+  el.innerHTML = `<div class="card" style="margin-bottom:16px">
+    <div class="rpt-bar"><b>Kỳ báo cáo</b><input type="date" data-k="from" value="${esc(st.from)}" aria-label="Từ ngày"><span class="muted">→</span><input type="date" data-k="to" value="${esc(st.to)}" aria-label="Đến ngày">
+      ${[['thang', 'Tháng này'], ['truoc', 'Tháng trước'], ['quy', 'Quý này'], ['nam', 'Năm nay']].map(([k, l]) => `<button class="btn sm" data-ky="${k}">${l}</button>`).join('')}</div>
+    <div class="card-b" style="padding-top:0"><div class="stats" style="margin-top:0">
+      ${stat('Doanh thu (gồm thuế GTGT)', money(dsTong) + ' ₫')}${stat('Số đơn hàng', dh.length)}${stat('Trung bình mỗi đơn', money(dh.length ? dsTong / dh.length : 0) + ' ₫')}${stat('Tiền đã thu trong kỳ', money(sum(pt, p => p.SoTien)) + ' ₫', 'green')}</div>
+      <p class="muted" style="margin:10px 0 0">Doanh thu tính theo ngày lập đơn, không gồm đơn đã hủy. Sổ doanh thu in theo mẫu S1a-HKD (Thông tư 152/2025/TT-BTC) cho hộ kinh doanh, mỗi ngày một dòng; tên chủ hộ và mã số thuế điền ở Cài đặt.</p></div></div>
+    <div class="seg" role="tablist">${Object.keys(TABS).map(k => `<button data-tab="${k}" class="${st.tab === k ? 'on' : ''}">${TABS[k][0]}</button>`).join('')}</div>
+    <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr>${head.map(h => `<th class="${h[1] || ''}">${h[0]}</th>`).join('')}</tr></thead>
+      <tbody>${body.map(r => `<tr>${r.map((c, i) => `<td class="${head[i][1] || ''}">${c}</td>`).join('')}</tr>`).join('') || `<tr><td class="empty" colspan="${head.length}">${empty}</td></tr>`}</tbody></table></div></div>`;
+  el.onclick = e => {
+    const tb = e.target.closest('[data-tab]'), ky = e.target.closest('[data-ky]');
+    if (tb) { st.tab = tb.dataset.tab; render(); }
+    if (ky) { Object.assign(st, KY[ky.dataset.ky]()); render(); }
+  };
+  el.onchange = e => {
+    const k = e.target.dataset.k;
+    if (!k || !e.target.value) return;
+    st[k] = e.target.value;
+    if (st.from > st.to) st[k === 'from' ? 'to' : 'from'] = st[k];
+    render();
+  };
+}
+
+// Sổ doanh thu bán hàng hóa, dịch vụ: ngày – diễn giải – số tiền, mỗi ngày có đơn một dòng (mẫu cho phép ghi gộp theo ngày)
+function soDoanhThuHtml(st, dh) {
+  const c = S.congTy, t = today(), ngay = {};
+  dh.forEach(d => { const r = ngay[d.Ngay] || (ngay[d.Ngay] = { n: 0, tien: 0 }); r.n++; r.tien += +d.TongCong || 0; });
+  const dc = (c.diaChi || [])[0] || '';
+  return `<div class="p-page">
+    <div class="p-form"><div><div><b>HỘ, CÁ NHÂN KINH DOANH:</b> ${esc(c.chuHo || c.ten)}</div><div><b>Địa chỉ:</b> ${esc(dc)}</div><div><b>Mã số thuế:</b> ${esc(c.mst)}</div></div>
+      <div class="r"><b>Mẫu số S1a-HKD</b><br><i>(Kèm theo Thông tư số 152/2025/TT-BTC ngày 31 tháng 12 năm 2025 của Bộ trưởng Bộ Tài chính)</i></div></div>
+    <h1>SỔ DOANH THU BÁN HÀNG HÓA, DỊCH VỤ</h1>
+    <div style="text-align:center">Địa điểm kinh doanh: ${esc(dc)}<br>Kỳ kê khai: từ ngày ${dmy(st.from)} đến ngày ${dmy(st.to)}</div>
+    <div style="text-align:right"><i>Đơn vị tính: đồng</i></div>
+    <table class="p-lines"><thead><tr><th style="width:22%">Ngày tháng</th><th>Diễn giải</th><th style="width:26%">Số tiền</th></tr><tr><th>A</th><th>B</th><th>1</th></tr></thead>
+    <tbody>${Object.keys(ngay).sort().map(k => `<tr><td style="text-align:center">${dmy(k)}</td><td>Doanh thu bán hàng hóa, dịch vụ trong ngày (${ngay[k].n} đơn hàng)</td><td class="num">${money(ngay[k].tien)}</td></tr>`).join('')
+      || '<tr><td colspan="3" style="text-align:center">Không phát sinh doanh thu trong kỳ</td></tr>'}</tbody>
+    <tfoot><tr><td></td><td>Tổng cộng</td><td class="num">${money(sum(dh, d => d.TongCong))}</td></tr></tfoot></table>
+    <div class="p-sign"><div style="flex:0 0 320px;margin-left:auto"><i>Ngày ${t.slice(8)} tháng ${t.slice(5, 7)} năm ${t.slice(0, 4)}</i>NGƯỜI ĐẠI DIỆN HỘ KINH DOANH/<br>CÁ NHÂN KINH DOANH<i>(Ký, họ tên, đóng dấu)</i></div></div></div>`;
+}
+
+// ===================== Nhật ký thao tác (quản trị) =====================
+function vNhatKy(el) {
+  setTop('Hệ thống', 'Nhật ký thao tác');
+  const refresh = listCard(el, {
+    id: 'nhatky', ph: 'Tìm người dùng, thao tác, số chứng từ…',
+    filters: [{ id: 'ngay', type: 'dates' }],
+    filter: (r, f) => inRange(String(r.ThoiGian).slice(0, 10), f, 'ngay'),
+    cols: [
+      { t: 'Thời gian', f: r => `${dmy(r.ThoiGian)} ${esc(String(r.ThoiGian).slice(11, 16))}` }, { t: 'Người dùng', k: 'NguoiDung' },
+      { t: 'Thao tác', f: r => `<b>${esc(r.HanhDong)}</b>` }, { t: 'Đối tượng', k: 'DoiTuong', cls: 'code' },
+      { t: 'Chi tiết', cls: 'wrap', f: r => esc(String(r.ChiTiet ?? '').replace(/(\d{4,}) đ/g, (m, n) => money(+n) + ' đ')) },
+    ],
+    data: () => S.nhatKy || [], text: r => [r.ThoiGian, r.NguoiDung, r.HanhDong, r.DoiTuong, r.ChiTiet].join(' '), open: () => {},
+  });
+  el.insertAdjacentHTML('beforeend', '<p class="muted" style="margin-top:14px">500 thao tác gần nhất của cửa hàng đang làm việc: ai thêm, sửa, xóa, hủy chứng từ nào. Sổ đầy đủ nằm ở trang NhatKy trong Google Sheet.</p>');
+  api('dsNhatKy').then(r => { S.nhatKy = r; if (S.view === 'nhatky') refresh(); }).catch(e => toast(errMsg(e), 'err'));
+}
 
 // ===================== Tài khoản (quản trị) =====================
 function vTaiKhoan(el) {
@@ -1594,10 +1819,12 @@ function vCaiDat(el) {
       <div class="me-big"><div class="avatar">${esc(initials(S.user.ten))}</div><div><b>${esc(S.user.ten)}</b><span class="sub">${esc(S.user.u)} · ${isAdmin() ? 'Quản trị' : 'Nhân viên'}</span></div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px"><button class="btn" data-act="pass">${icon('key')}Đổi mật khẩu</button><button class="btn" data-act="out">${icon('logout')}Đăng xuất</button></div>
     </div></div>
-    <div class="card"><div class="card-h"><h3>Thông tin in trên chứng từ</h3></div><div class="card-b">
+    <div class="card"><div class="card-h"><h3>Thông tin cửa hàng</h3>${isAdmin() ? '<a class="more" data-act="shop">Sửa</a>' : ''}</div><div class="card-b">
       <b>${esc(c.ten)}</b><span class="sub">${esc(c.khauHieu)}</span>
       ${(c.diaChi || []).map(x => `<div>${esc(x)}</div>`).join('')}<div class="muted">${esc(c.lienHe)}</div>
-      <p class="muted" style="margin-bottom:0">Thuế GTGT mặc định ${esc(c.vatMacDinh)}% · Hình thức thu: ${esc((c.hinhThuc || []).join(', '))}. Muốn đổi thì sửa mục SHOPS trong tệp Code.gs.</p>
+      <p class="muted" style="margin-bottom:0">${c.mst ? 'MST ' + esc(c.mst) + ' · ' : ''}Thuế GTGT mặc định ${esc(c.vatMacDinh)}% · Bảo hành ${esc(c.baoHanhThang)} tháng · Hình thức thu: ${esc((c.hinhThuc || []).join(', '))}</p>
+      ${c.qrSoTK ? `<div class="qr-box"><img alt="Mã QR tài khoản nhận tiền" src="${esc(qrUrl(0, ''))}"><div>Mã QR chuyển khoản đang bật: in trên báo giá, đơn hàng và hiện khi thu tiền. <b>Quét thử một lần</b> bằng app ngân hàng để chắc tên chủ tài khoản hiện đúng.</div></div>`
+        : `<p class="muted" style="margin-bottom:0">Chưa bật mã QR chuyển khoản${isAdmin() ? ' – bấm Sửa, chọn ngân hàng và nhập số tài khoản.' : '.'}</p>`}
     </div></div>
   </div>
   ${ds.length > 1 ? `<details class="card adv"><summary>${icon('settings')}Nâng cao</summary><div class="card-b">
@@ -1607,13 +1834,40 @@ function vCaiDat(el) {
   </div></details>` : ''}`;
   el.onclick = run(async e => {
     const a = e.target.closest('[data-act]'), sh = e.target.closest('[data-shop]');
-    if (a) $(a.dataset.act === 'pass' ? '#btnPass' : '#btnOut').click();
+    if (a && a.dataset.act === 'shop') openCuaHang();
+    else if (a) $(a.dataset.act === 'pass' ? '#btnPass' : '#btnOut').click();
     if (sh && sh.dataset.shop !== shop.id) await switchShop(sh.dataset.shop);
   });
 }
 
+// Quản trị sửa thông tin của cửa hàng đang làm việc (lưu ở trang CaiDat trong Sheet)
+function openCuaHang() {
+  const c = S.congTy, lines = a => (a || []).join('\n');
+  modal({
+    title: 'Thông tin cửa hàng', wide: true,
+    body: formHtml([
+      ['tenNgan', 'Tên cửa hàng (hiện trên app)'], ['moTa', 'Mô tả ngắn'],
+      ['ten', 'Tên in trên chứng từ *', { full: true }], ['khauHieu', 'Khẩu hiệu / ngành nghề', { full: true }],
+      ['diaChi', 'Địa chỉ (mỗi dòng một địa chỉ)', { area: true }], ['lienHe', 'Điện thoại, email liên hệ', { full: true }],
+      ['chuHo', 'Chủ hộ / người đại diện (in trên sổ doanh thu)'], ['mst', 'Mã số thuế'],
+      ['vatMacDinh', 'Thuế GTGT mặc định (%)', { type: 'number' }], ['baoHanhThang', 'Bảo hành mặc định (tháng)', { type: 'number' }],
+      ['hinhThuc', 'Hình thức thu tiền (mỗi dòng một hình thức)', { area: true }],
+      ['qrNganHang', 'Mã QR chuyển khoản – ngân hàng', { options: [['', '— Không dùng mã QR —'], ...BANKS] }], ['qrSoTK', 'Số tài khoản nhận tiền', { ph: 'Viết liền, không dấu cách' }],
+      ['qrChuTK', 'Tên chủ tài khoản (không dấu)'], ['kyTen', 'Chức danh người ký báo giá'],
+      ['nganHang', 'Dòng thông tin thanh toán in trên chứng từ', { full: true }],
+      ['loiMo', 'Lời mở đầu báo giá', { area: true }], ['dieuKien', 'Điều kiện thương mại (mỗi dòng một ý)', { area: true }], ['gioiThieu', 'Giới thiệu cuối báo giá', { area: true }],
+    ], Object.assign({}, c, { tenNgan: S.cuaHang.ten, moTa: S.cuaHang.moTa, diaChi: lines(c.diaChi), hinhThuc: lines(c.hinhThuc), dieuKien: lines(c.dieuKien) })),
+    buttons: [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', save: true, fn: run(async m => {
+      const r = await api('luuCuaHang', formData(m));
+      S.congTy = r.congTy;
+      [S.cuaHang, S.dsCuaHang.find(x => x.id === S.cuaHang.id)].forEach(x => { if (x) Object.assign(x, { ten: r.ten, moTa: r.moTa }); });
+      applyShop(); closeModal(); render(); toast('Đã lưu thông tin cửa hàng.');
+    }) }],
+  });
+}
+
 // ===================== Phím tắt: F2 mới, F3 tìm, F8 lưu, Esc đóng =====================
-const VIEWS = { home: vHome, baogia: vBaoGia, donhang: vDonHang, congno: vCongNo, hang: vHang, kho: vKho, ton: vTon, khach: vKhach, taikhoan: vTaiKhoan, caidat: vCaiDat, doc: vDoc };
+const VIEWS = { home: vHome, baogia: vBaoGia, donhang: vDonHang, congno: vCongNo, hang: vHang, kho: vKho, ton: vTon, khach: vKhach, taikhoan: vTaiKhoan, caidat: vCaiDat, baohanh: vBaoHanh, baocao: vBaoCao, nhatky: vNhatKy, doc: vDoc };
 document.addEventListener('keydown', e => {
   if ($('#app').classList.contains('hidden')) return;
   const modalOpen = !$('#modal').classList.contains('hidden');
@@ -1630,7 +1884,7 @@ document.addEventListener('keydown', e => {
 // ===================== Khởi động =====================
 ['#artMark', '#formMark'].forEach(s => { $(s).innerHTML = LOGO_PHONE; });
 $('#btnPass').innerHTML = icon('key'); $('#btnOut').innerHTML = icon('logout'); $('#btnMenu').innerHTML = icon('menu');
-$('#artList').innerHTML = ['Báo giá chọn giá sỉ / lẻ, in PDF đúng mẫu công ty', 'Chốt đơn, giao hàng từng phần, tự trừ tồn kho', 'Ghi tiền cọc, thanh toán – biết ngay khách còn nợ', 'Bảng điều khiển doanh số, công nợ, hàng sắp hết']
+$('#artList').innerHTML = ['Báo giá chọn giá sỉ / lẻ, in PDF kèm mã QR chuyển khoản', 'Chốt đơn, giao hàng ghi IMEI, tự trừ kho, tra bảo hành', 'Ghi tiền cọc, thanh toán – biết ngay khách còn nợ', 'Báo cáo doanh thu, sổ doanh thu cho hộ kinh doanh']
   .map(t => `<li>${icon('check')}${t}</li>`).join('');
 (async () => {
   S.token = store.get('hqp_token');

@@ -27,7 +27,13 @@ class Sheet {
   getLastRow() { return this.rows.length; }
   getLastColumn() { return this.rows.reduce((m, r) => Math.max(m, r.length), 0); }
   getMaxRows() { return Math.max(1000, this.rows.length); }
-  getRange(r, c, nr = 1, nc = 1) { if (r < 1 || c < 1 || nr < 1 || nc < 1) throw new Error('Vùng ô không hợp lệ'); return new Range(this, r, c, nr, nc); }
+  getMaxColumns() { return this.maxCols || Math.max(26, this.getLastColumn()); }
+  insertColumnsAfter(after, n) { this.maxCols = this.getMaxColumns() + n; }
+  getRange(r, c, nr = 1, nc = 1) {
+    if (r < 1 || c < 1 || nr < 1 || nc < 1) throw new Error('Vùng ô không hợp lệ');
+    if (c + nc - 1 > this.getMaxColumns()) throw new Error('Cột nằm ngoài lưới của trang tính');
+    return new Range(this, r, c, nr, nc);
+  }
   getDataRange() { return this.getRange(1, 1, Math.max(1, this.getLastRow()), Math.max(1, this.getLastColumn())); }
   appendRow(v) { this.rows.push(v.map(strip)); return this; }
   deleteRows(start, n) { this.rows.splice(start - 1, n); }
@@ -38,12 +44,14 @@ class Sheet {
 const sheets = {};
 const ss = { getSheetByName: n => sheets[n] || null, insertSheet: n => (sheets[n] = new Sheet([])) };
 
-const cache = new Map();
+const cache = new Map(), props = new Map();
 const logs = [];
 const ctx = vm.createContext({
   console,
   SpreadsheetApp: { getActive: () => ss, getActiveSpreadsheet: () => ss },
-  CacheService: { getScriptCache: () => ({ get: k => (cache.has(k) ? cache.get(k) : null), put: (k, v) => cache.set(k, String(v)), remove: k => cache.delete(k) }) },
+  CacheService: { getScriptCache: () => ({ get: k => (cache.has(k) ? cache.get(k) : null), put: (k, v) => cache.set(k, String(v)), remove: k => cache.delete(k),
+    getAll: ks => Object.fromEntries(ks.filter(k => cache.has(k)).map(k => [k, cache.get(k)])) }) },
+  PropertiesService: { getScriptProperties: () => ({ getProperty: k => (props.has(k) ? props.get(k) : null), setProperty: (k, v) => { props.set(k, String(v)); } }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
   Logger: { log: (...a) => { logs.push(a.join(' ')); console.log('[Logger]', ...a); } },
   Utilities: {
@@ -92,7 +100,7 @@ const SHIM = `window.google = { script: { get run() {
   return make({});
 } } };`;
 
-module.exports = { ctx, sheets, logs };
+module.exports = { ctx, sheets, logs, cache, props };
 if (require.main === module) http.createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/rpc') {
     let body = '';
