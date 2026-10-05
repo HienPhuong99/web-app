@@ -1,9 +1,8 @@
 /**
- * Web app quản lý bán hàng cho 2 cửa hàng tách riêng dữ liệu: phuonghihi (iPhone, mặc định)
- * và Hoàng Quân Phát (PCCC, chỉ mở được trong Cài đặt → Nâng cao).
+ * Web app quản lý bán hàng cửa hàng phuonghihi (iPhone).
  * Khách hàng, hàng hóa, báo giá, đơn hàng, giao hàng – kho (IMEI, bảo hành), thu tiền – công nợ, báo cáo, nhật ký.
- * Dữ liệu nằm ở chính Google Sheet chứa script này: mỗi cửa hàng một bộ trang tính có tiền tố riêng,
- * riêng trang TaiKhoan và CaiDat dùng chung.
+ * Dữ liệu nằm ở chính Google Sheet chứa script này: mỗi cửa hàng một bộ trang tính có tiền tố riêng (SHOPS),
+ * riêng trang TaiKhoan và CaiDat dùng chung. Hiện chỉ có 1 cửa hàng; thêm cửa hàng thì thêm một mục vào SHOPS.
  */
 
 // ===== Cửa hàng: giá trị mặc định. Quản trị sửa được trong app (Cài đặt → Sửa thông tin cửa hàng), phần sửa lưu ở trang CaiDat =====
@@ -27,36 +26,6 @@ const SHOPS = {
       vatMacDinh: 0,
       baoHanhThang: 12,
       hinhThuc: ['Tiền mặt', 'Chuyển khoản', 'Thẻ tín dụng', 'VNPay', 'Trả góp'],
-    },
-  },
-  pccc: {
-    ten: 'Hoàng Quân Phát', moTa: 'Thiết bị phòng cháy chữa cháy', prefix: 'PCCC_', soBG: 'PCCC', icon: 'flame',
-    mau: { brand: '#d63b2f', brandD: '#b92f25', brand50: '#fdeeec', rgb: '214,59,47', grad: 'linear-gradient(120deg, #c62f25, #e34d2e 55%, #f59e0b)' },
-    congTy: {
-      ten: 'CÔNG TY TNHH MTV HOÀNG QUÂN PHÁT',
-      khauHieu: 'Tư Vấn - Thiết Kế - Thi Công Lắp Đặt - Kinh Doanh Phương Tiện - Thiết Bị PCCC',
-      diaChi: [
-        'Địa chỉ GPKD: Số 16, đường N4, Khu nhà ở TM DV Phú Mỹ, Khu 5, Phường Bình Dương, Tp Hồ Chí Minh',
-        'Địa chỉ VPDD: Số 262 Quốc lộ 1A, P. Tam Bình, Q. Thủ Đức, Tp. Hồ Chí Minh',
-      ],
-      lienHe: 'ĐT: 028.6656.6422 - 0888.357.114 - Email: hoangquanphat@gmail.com',
-      chuHo: '', mst: '',
-      loiMo: 'Công ty TNHH MTV Hoàng Quân Phát chân thành cảm ơn sự quan tâm của Quý khách hàng đối với sản phẩm của chúng tôi. Sau đây, chúng tôi xin gửi tới Quý khách bảng báo giá chi tiết như sau:',
-      gioiThieu: 'CÔNG TY TNHH MTV HOÀNG QUÂN PHÁT là đơn vị được Công an PCCC tỉnh Bình Dương cấp phép đủ điều kiện kinh doanh PCCC với các chức năng: Tư vấn thiết kế, Tư vấn giám sát, Thi công lắp đặt và Kinh doanh vật tư thiết bị PCCC theo quy định pháp luật.',
-      dieuKien: [
-        'Đơn giá chưa bao gồm thuế GTGT.',
-        'Báo giá chưa bao gồm chi phí vận chuyển và lắp đặt.',
-        'Khi chốt hàng vui lòng liên hệ lại để kiểm kho.',
-        'Thanh toán 50% khi đặt hàng và 50% khi có thông báo giao hàng.',
-        'Thời hạn bảo hành 12 tháng kể từ ngày giao hàng.',
-        'Thời hạn báo giá 15 ngày.',
-      ],
-      nganHang: 'Tài khoản: CÔNG TY TNHH MTV HOÀNG QUÂN PHÁT - Số TK: 6100201006846 - Agribank CN Thủ Đức',
-      qrNganHang: '970405', qrSoTK: '6100201006846', qrChuTK: 'CONG TY TNHH MTV HOANG QUAN PHAT', // 970405 = Agribank
-      kyTen: 'Giám đốc',
-      vatMacDinh: 8,
-      baoHanhThang: 12,
-      hinhThuc: ['Chuyển khoản', 'Tiền mặt'],
     },
   },
 };
@@ -98,11 +67,11 @@ function doGet() {
 }
 
 /**
- * Chạy trong trình soạn thảo Apps Script: tạo trang tính/cột còn thiếu và tài khoản admin. Chạy lại được.
- * Trang tính của bản cũ chưa có tiền tố (KhachHang, HangHoa…) được đổi tên thành PCCC_… để giữ dữ liệu.
+ * Chạy trong trình soạn thảo Apps Script: tạo trang tính/cột còn thiếu, xóa cửa hàng đã bỏ và tạo tài khoản admin. Chạy lại được.
  */
 function caiDat() {
   taoBang_(true);
+  xoaCuaHangDaBo_();
   PropertiesService.getScriptProperties().setProperty('schema', SCHEMA);
   if (readTable_('TaiKhoan').some(u => u.VaiTro === 'admin')) return Logger.log('Đã có tài khoản admin, không tạo thêm.');
   const pass = Utilities.getUuid().slice(0, 8);
@@ -121,7 +90,6 @@ function taoBang_(dayDu) {
       if (chung && shop !== SHOP_MAC_DINH) continue;
       const full = tableName_(name);
       let sh = ss.getSheetByName(full), moi = false;
-      if (!sh && shop === 'pccc' && !chung && ss.getSheetByName(name)) sh = ss.getSheetByName(name).setName(full);
       if (!sh) { sh = ss.insertSheet(full); moi = true; }
       const have = sh.getLastRow() ? headers_(sh) : [];
       const missing = cols.filter(c => have.indexOf(c) < 0);
@@ -136,6 +104,35 @@ function taoBang_(dayDu) {
     }
   }
   CUR_SHOP = cur;
+}
+
+// Cửa hàng đã bỏ khỏi app (id → tiền tố trang tính). caiDat dọn sạch phần còn sót của các cửa hàng này.
+const CUA_HANG_DA_BO = { pccc: 'PCCC_' };
+
+/**
+ * Xóa hẳn trang tính, cấu hình và quyền truy cập của cửa hàng đã bỏ. Không hoàn tác trong app
+ * (khôi phục bằng Tệp → Lịch sử phiên bản của Google Sheet). Chạy lại được. Trả về danh sách trang đã xóa.
+ */
+function xoaCuaHangDaBo_() {
+  const ss = SpreadsheetApp.getActive(), daXoa = [];
+  ss.getSheets().forEach(sh => {
+    const ten = sh.getName();
+    if (Object.keys(CUA_HANG_DA_BO).some(id => ten.indexOf(CUA_HANG_DA_BO[id]) === 0)) { ss.deleteSheet(sh); daXoa.push(ten); }
+  });
+  Object.keys(CUA_HANG_DA_BO).forEach(id => deleteWhere_('CaiDat', 'cuaHang.' + id));
+  // Tài khoản: bỏ cửa hàng cũ khỏi danh sách được vào; nhân viên chỉ được vào cửa hàng cũ thì khóa (kẻo tự rơi vào cửa hàng mặc định)
+  const sh = sheet_('TaiKhoan'), n = sh.getLastRow();
+  for (let r = 2; r <= n; r++) {
+    const o = rowObj_(sh, r);
+    const truoc = String(o.CuaHang || '').split(',').map(x => x.trim()).filter(Boolean), con = truoc.filter(x => SHOPS[x]);
+    if (con.length === truoc.length) continue;
+    o.CuaHang = con.join(',');
+    if (!con.length && o.VaiTro !== 'admin') { o.TrangThai = 'Khóa'; Logger.log('Đã khóa tài khoản ' + o.TenDangNhap + ' (chỉ được vào cửa hàng đã bỏ). Mở khóa và cấp cửa hàng nếu cần.'); }
+    writeRow_(sh, r, o);
+    thuHoiPhien_(String(o.TenDangNhap).toLowerCase());
+  }
+  if (daXoa.length) Logger.log('Đã xóa ' + daXoa.length + ' trang tính của cửa hàng đã bỏ: ' + daXoa.join(', '));
+  return daXoa;
 }
 
 // Bản code mới có thêm bảng/cột (SCHEMA đổi): tự thêm vào Sheet, không cần chạy lại caiDat

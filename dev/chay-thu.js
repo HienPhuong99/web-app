@@ -40,9 +40,11 @@ class Sheet {
   setFrozenRows() {}
   setName(n) { for (const k in sheets) if (sheets[k] === this) delete sheets[k]; sheets[n] = this; return this; }
   hideSheet() { this.hidden = true; return this; }
+  getName() { return Object.keys(sheets).find(k => sheets[k] === this); }
 }
 const sheets = {};
-const ss = { getSheetByName: n => sheets[n] || null, insertSheet: n => (sheets[n] = new Sheet([])) };
+const ss = { getSheetByName: n => sheets[n] || null, insertSheet: n => (sheets[n] = new Sheet([])), getSheets: () => Object.values(sheets),
+  deleteSheet: sh => { for (const k in sheets) if (sheets[k] === sh) delete sheets[k]; } };
 
 const cache = new Map(), props = new Map();
 const logs = [];
@@ -77,16 +79,6 @@ const seed = file ? JSON.parse(fs.readFileSync(file, 'utf8')) : {
     ['HH0001', 'iPhone 16 Pro Max 256GB - Titan Đen', 'IPHONE-16-PRO-MAX-TITAN-DEN-256GB', 'iPhone 16 Series', 'iPhone 16 Pro Max', 'Máy', 'Apple - chính hãng', '', 28200000, '', ''],
     ['HH0002', 'iPhone 15 128GB - Đen', 'IPHONE-15-DEN-128GB', 'iPhone 15 Series', 'iPhone 15', 'Máy', 'Apple - chính hãng', '', 11300000, '', ''],
   ],
-  PCCC_KhachHang: [KH,
-    ['KH00001', 'Công ty TNHH Mẫu Một', 'Anh Nam', '0900000001', '12 Đường Số 1, TP.HCM', '0300000001', '', 'Khách mẫu', '2026-08-02', 'Mẫu'],
-    ['KH00002', 'Chị Lan', '', '0900000002 / 0900000003', 'Thủ Đức, TP.HCM', '', '', '', '2026-09-10', 'Mẫu'],
-  ],
-  PCCC_HangHoa: [HH.filter(c => c !== 'TonToiThieu'), // thiếu cột như bản cũ: caiDat phải tự thêm
-    ['HH0001', 'Bình chữa cháy bột ABC 4kg', 'MFZL4', 'Bình chữa cháy', 'BÌNH CHỮA CHÁY VICTORY (CÓ KIỂM ĐỊNH)', 'Bình', 'Victory/VN', 345000, 445000, ''],
-    ['HH0002', 'Bình chữa cháy xách tay CO2 3kg', 'MT3', 'Bình chữa cháy', 'BÌNH CHỮA CHÁY VICTORY (CÓ KIỂM ĐỊNH)', 'Bình', 'Victory/VN', 435000, 555000, ''],
-    ['HH0003', 'Kệ đựng 2 bình chữa cháy (Tôn 0,6mm)', '', 'Tủ + kệ + bảo hộ', 'TỦ + KỆ PCCC', 'Cái', 'Việt Nam', 85000, 120000, ''],
-    ['HH0004', 'Đầu báo khói địa chỉ', 'QA01', 'Báo cháy Horing', 'HÀNG BÁO CHÁY ĐỊA CHỈ', 'Cái', 'Horing/Taiwan', '', '', 'Chưa có giá'],
-  ],
 };
 for (const [name, rows] of Object.entries(seed)) sheets[name] = new Sheet(rows.map(r => r.slice()));
 ctx.caiDat();
@@ -100,7 +92,7 @@ const SHIM = `window.google = { script: { get run() {
   return make({});
 } } };`;
 
-module.exports = { ctx, sheets, logs, cache, props };
+module.exports = { ctx, sheets, logs, cache, props, Sheet };
 if (require.main === module) http.createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/rpc') {
     let body = '';

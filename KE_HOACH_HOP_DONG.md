@@ -2,6 +2,20 @@
 
 > Bản nháp để bạn duyệt. **Chưa có dòng code nào được sửa.** Sau khi bạn chốt các mục ở phần 8, tôi mới bắt tay làm theo từng giai đoạn ở phần 5.
 
+## 0. Đã chốt với chủ app (05/10/2026)
+
+| Mục | Quyết định |
+|---|---|
+| Cách sinh file | **Google Docs mẫu**. Bộ mẫu mặc định do app **tự tạo** (không phải soạn tay), sửa lại trong Docs thoải mái |
+| Cửa hàng | **Bỏ hẳn cửa hàng PCCC và toàn bộ dữ liệu của nó**; chỉ còn phuonghihi (làm ở GĐ0) |
+| Loại hợp đồng | Mua bán, nguyên tắc **+ các loại cho ngành điện thoại**: đại lý/phân phối, thu cũ đổi mới, dịch vụ sửa chữa – bảo hành |
+| Bên A / bên B | Khách là bên A, cửa hàng là bên B |
+| Đánh số | Tùy tôi: dùng `001-2026/HD` (đồng bộ các chứng từ khác) |
+| Nhắc hạn | Chưa trả lời: làm trong app trước, email nhắc là tùy chọn ở GĐ5 |
+| Quy trình | Xong giai đoạn nào **test và commit** giai đoạn đó; việc gì tự làm được thì làm (kể cả tự tạo mẫu, kiểm thử trình duyệt, script triển khai) |
+
+> Mọi chỗ trong tài liệu này nhắc tới PCCC/2 cửa hàng đã được thay bằng quyết định trên.
+
 ## 1. Video nói gì (Optimatevn – "Tạo hợp đồng mua bán, HĐ kinh tế tự động")
 
 Video 60 giây, quay màn hình một file Google Sheet có thêm menu **Hợp đồng** (Apps Script). Ý tưởng gồm 6 phần:

@@ -1,34 +1,51 @@
 // Kiểm tra nhanh logic máy chủ (Code.gs) trên dữ liệu mẫu:  node dev/kiem-tra.js
 const assert = require('assert');
-const { ctx: G, sheets, logs, cache, props } = require('./chay-thu');
+const { ctx: G, sheets, logs, cache, props, Sheet } = require('./chay-thu');
+const vm = require('vm');
 const adminPass = logs.join('\n').match(/mật khẩu: (\S+)/)[1];
 const today = G.now_().slice(0, 10);
 const year = today.slice(0, 4);
 const plain = x => JSON.parse(JSON.stringify(x)); // đối tượng tạo trong vm khác prototype
 const rowsOf = (name, key) => sheets[name].rows.filter(r => r[0] === key);
 
+// Cửa hàng thứ hai chỉ dựng trong bài test này (app thật chỉ còn phuonghihi): kiểm tra mã dùng chung nhiều cửa hàng vẫn tách dữ liệu đúng
+vm.runInContext(`SHOPS.demo = Object.assign({}, SHOPS.phone, { ten: 'Cửa hàng thử', moTa: 'Cửa hàng thứ hai để kiểm tra', prefix: 'DM_', soBG: 'DM',
+  congTy: Object.assign({}, SHOPS.phone.congTy, { ten: 'CÔNG TY THỬ', vatMacDinh: 8, qrNganHang: '970405', qrSoTK: '6100201006846', qrChuTK: 'CONG TY THU', hinhThuc: ['Chuyển khoản', 'Tiền mặt'] }) });`, G);
+const HH = ['MaHH', 'TenHang', 'Model', 'NhomHang', 'PhanLoai', 'DVT', 'XuatXu', 'GiaSi', 'GiaLe', 'GhiChu']; // thiếu cột TonToiThieu như bản cũ: caiDat phải tự thêm
+const KH = ['MaKH', 'TenKH', 'NguoiLienHe', 'SDT', 'DiaChi', 'MST', 'Email', 'GhiChu', 'NgayTao', 'NguoiTao'];
+sheets.DM_KhachHang = new Sheet([KH,
+  ['KH00001', 'Công ty TNHH Mẫu Một', 'Anh Nam', '0900000001', '12 Đường Số 1, TP.HCM', '0300000001', '', 'Khách mẫu', '2026-08-02', 'Mẫu'],
+  ['KH00002', 'Chị Lan', '', '0900000002 / 0900000003', 'Thủ Đức, TP.HCM', '', '', '', '2026-09-10', 'Mẫu']]);
+sheets.DM_HangHoa = new Sheet([HH,
+  ['HH0001', 'Bình chữa cháy bột ABC 4kg', 'MFZL4', 'Bình chữa cháy', 'BÌNH CHỮA CHÁY', 'Bình', 'VN', 345000, 445000, ''],
+  ['HH0002', 'Bình chữa cháy xách tay CO2 3kg', 'MT3', 'Bình chữa cháy', 'BÌNH CHỮA CHÁY', 'Bình', 'VN', 435000, 555000, ''],
+  ['HH0003', 'Kệ đựng 2 bình chữa cháy', '', 'Tủ + kệ', 'TỦ + KỆ', 'Cái', 'Việt Nam', 85000, 120000, ''],
+  ['HH0004', 'Đầu báo khói địa chỉ', 'QA01', 'Báo cháy', 'BÁO CHÁY', 'Cái', 'TQ', '', '', 'Chưa có giá']]);
+G.caiDat();
+sheets.TaiKhoan.rows[1][sheets.TaiKhoan.rows[0].indexOf('CuaHang')] = 'phone,demo'; // quản trị được vào cả 2 cửa hàng
+
 // caiDat: mỗi cửa hàng một bộ trang tính, trang PCCC bị ẩn, cột thiếu được thêm
-assert.ok(['PS_DonHang', 'PS_ThuTien', 'PCCC_DonHang', 'PCCC_PhieuKhoCT', 'TaiKhoan'].every(n => sheets[n]));
-assert.ok(sheets.PCCC_HangHoa.hidden && !sheets.PS_HangHoa.hidden);
-assert.ok(sheets.PCCC_HangHoa.rows[0].includes('TonToiThieu'));
+assert.ok(['PS_DonHang', 'PS_ThuTien', 'DM_DonHang', 'DM_PhieuKhoCT', 'TaiKhoan'].every(n => sheets[n]));
+assert.ok(sheets.DM_HangHoa.hidden && !sheets.PS_HangHoa.hidden);
+assert.ok(sheets.DM_HangHoa.rows[0].includes('TonToiThieu'));
 
 // Đăng nhập: không phân biệt hoa thường; luôn mở cửa hàng mặc định (phone) trước
 assert.throws(() => G.dangNhap('admin', 'sai-mat-khau'), /Sai tên đăng nhập/);
 const login = G.dangNhap(' ADMIN ', adminPass), admin = login.token;
-assert.deepStrictEqual([login.user.shop, plain(login.user.shops)], ['phone', ['phone', 'pccc']]);
+assert.deepStrictEqual([login.user.shop, plain(login.user.shops)], ['phone', ['phone', 'demo']]);
 let d = G.taiDuLieu(admin);
 assert.deepStrictEqual([d.cuaHang.id, d.khach.length, d.hang.length, d.congTy.vatMacDinh], ['phone', 1, 2, 0]);
 
 // Chuyển sang PCCC trong Cài đặt: dữ liệu của cửa hàng kia
-d = G.chonCuaHang(admin, 'pccc');
-assert.deepStrictEqual([d.cuaHang.id, d.khach.length, d.hang.length, d.congTy.vatMacDinh], ['pccc', 2, 4, 8]);
+d = G.chonCuaHang(admin, 'demo');
+assert.deepStrictEqual([d.cuaHang.id, d.khach.length, d.hang.length, d.congTy.vatMacDinh], ['demo', 2, 4, 8]);
 assert.throws(() => G.chonCuaHang(admin, 'khong-co'), /không được vào/);
 
 // Khách hàng: mã tự sinh, sửa không đổi mã/ngày tạo, chuỗi "=..." không thành công thức
 const kh = G.luuKhach(admin, { TenKH: 'Khách thử', SDT: ' 0900000009 ' });
 assert.deepStrictEqual([kh.MaKH, kh.SDT], ['KH00003', '0900000009']);
 assert.strictEqual(G.luuKhach(admin, { MaKH: 'KH00003', TenKH: 'Khách thử (sửa)', NgayTao: '2000-01-01' }).NgayTao, kh.NgayTao);
-assert.strictEqual(G.toRow_(sheets.PCCC_KhachHang, { TenKH: '=IMPORTXML("x")' })[1], "'=IMPORTXML(\"x\")");
+assert.strictEqual(G.toRow_(sheets.DM_KhachHang, { TenKH: '=IMPORTXML("x")' })[1], "'=IMPORTXML(\"x\")");
 
 // Báo giá: số tự tăng theo năm, tiền luôn tính lại ở máy chủ, bỏ dòng trống
 const bg = G.luuChungTu(admin, 'BG', { Ngay: today, MaKH: 'KH00002', TenKH: 'Chị Lan', VAT: 8, lines: [
@@ -36,9 +53,9 @@ const bg = G.luuChungTu(admin, 'BG', { Ngay: today, MaKH: 'KH00002', TenKH: 'Ch�
   { TenHang: '   ' },
   { TenHang: 'Công lắp đặt', SoLuong: 1, LoaiGia: 'Giá tùy chọn', DonGia: 500000 },
 ] }).doc;
-assert.strictEqual(bg.SoBG, `001-${year}/PCCC`);
+assert.strictEqual(bg.SoBG, `001-${year}/DM`);
 assert.deepStrictEqual([bg.lines.length, bg.TienHang, bg.TienVAT, bg.TongCong], [2, 3950000, 316000, 4266000]);
-assert.strictEqual(G.luuChungTu(admin, 'BG', { Ngay: '2099-01-02', TenKH: 'A', lines: [{ TenHang: 'B', SoLuong: 1, DonGia: 1 }] }).doc.SoBG, '001-2099/PCCC');
+assert.strictEqual(G.luuChungTu(admin, 'BG', { Ngay: '2099-01-02', TenKH: 'A', lines: [{ TenHang: 'B', SoLuong: 1, DonGia: 1 }] }).doc.SoBG, '001-2099/DM');
 assert.throws(() => G.luuChungTu(admin, 'BG', { TenKH: 'A', lines: [{ TenHang: '' }] }), /Chưa có dòng hàng/);
 
 // Chốt đơn từ báo giá: phải có mã khách; đơn mới ở trạng thái chờ giao
@@ -79,7 +96,7 @@ assert.strictEqual(G.findObj_('DonHang', dh.SoDH).TrangThai, 'Giao một phần'
 // Sửa chứng từ: giữ số và người lập, thay toàn bộ dòng, không đụng chứng từ khác
 const sua = G.luuChungTu(admin, 'BG', Object.assign({}, bg, { NguoiTao: 'ai đó', lines: [{ TenHang: 'Bình CO2 3kg', SoLuong: 2, DonGia: 435000 }] })).doc;
 assert.deepStrictEqual([sua.SoBG, sua.NguoiTao], [bg.SoBG, bg.NguoiTao]);
-assert.deepStrictEqual([rowsOf('PCCC_BaoGiaCT', bg.SoBG).length, rowsOf('PCCC_DonHangCT', dh.SoDH).length], [1, 2]);
+assert.deepStrictEqual([rowsOf('DM_BaoGiaCT', bg.SoBG).length, rowsOf('DM_DonHangCT', dh.SoDH).length], [1, 2]);
 assert.strictEqual(G.taiDuLieu(admin).thongKe.topHang[0].TenHang, 'Bình chữa cháy bột ABC 4kg');
 
 // Hai cửa hàng tách riêng: số chứng từ, mã khách, tồn kho đếm lại từ đầu; PCCC không bị ảnh hưởng
@@ -91,7 +108,7 @@ assert.strictEqual(G.luuKhach(admin, { TenKH: 'Chị Hoa' }).MaKH, 'KH00002');
 assert.strictEqual(G.luuChungTu(admin, 'NK', { Ngay: today, DoiTac: 'Tồn đầu kỳ', lines: [{ MaHH: 'HH0001', TenHang: 'iPhone', SoLuong: 3 }] }).doc.SoPK, `001-${year}/NK`);
 d = G.taiDuLieu(admin);
 assert.deepStrictEqual([d.khach.length, d.baoGia.length, d.donHang.length, plain(d.ton)], [2, 1, 0, { HH0001: { nhap: 3, xuat: 0 } }]);
-assert.deepStrictEqual([sheets.PCCC_KhachHang.rows.length, sheets.PS_BaoGia.rows.length, sheets.PCCC_BaoGia.rows.length], [4, 2, 3]);
+assert.deepStrictEqual([sheets.DM_KhachHang.rows.length, sheets.PS_BaoGia.rows.length, sheets.DM_BaoGia.rows.length], [4, 2, 3]);
 
 // Phân quyền: nhân viên không sửa bảng giá, không xóa; phải còn 1 quản trị; phải chọn ít nhất 1 cửa hàng
 assert.throws(() => G.luuTaiKhoan(admin, { TenDangNhap: 'x.y', MatKhau: '123456', CuaHang: '', moi: true }), /ít nhất 1 cửa hàng/);
@@ -99,19 +116,19 @@ G.luuTaiKhoan(admin, { TenDangNhap: 'Lan.Nguyen', HoTen: 'Lan', VaiTro: 'nhanvie
 assert.throws(() => G.luuTaiKhoan(admin, { TenDangNhap: 'lan.nguyen', MatKhau: 'khac-123', CuaHang: 'phone', moi: true }), /đã có/);
 const lanLogin = G.dangNhap('lan.nguyen', 'lan-123'), lan = lanLogin.token;
 assert.deepStrictEqual(plain(lanLogin.user.shops), ['phone']);
-assert.throws(() => G.chonCuaHang(lan, 'pccc'), /không được vào/);
-assert.ok(!JSON.stringify(G.taiDuLieu(lan)).includes('Hoàng Quân Phát')); // nhân viên phone không thấy gì của PCCC
+assert.throws(() => G.chonCuaHang(lan, 'demo'), /không được vào/);
+assert.ok(!JSON.stringify(G.taiDuLieu(lan)).includes('Cửa hàng thử')); // nhân viên phone không thấy gì của PCCC
 assert.throws(() => G.luuHang(lan, { TenHang: 'X' }), /quản trị/);
 assert.throws(() => G.xoaChungTu(lan, 'BG', psBg.SoBG), /quản trị/);
 assert.throws(() => G.xoaThuTien(lan, 'x'), /quản trị/);
 assert.throws(() => G.dsTaiKhoan(lan), /quản trị/);
 assert.strictEqual(G.luuThuTien(lan, { Ngay: today, MaKH: 'KH00001', SoTien: 100000 }).NguoiTao, 'Lan');
-assert.throws(() => G.luuTaiKhoan(admin, { TenDangNhap: 'admin', HoTen: 'Quản trị', VaiTro: 'nhanvien', CuaHang: 'phone,pccc' }), /ít nhất 1 tài khoản quản trị/);
+assert.throws(() => G.luuTaiKhoan(admin, { TenDangNhap: 'admin', HoTen: 'Quản trị', VaiTro: 'nhanvien', CuaHang: 'phone,demo' }), /ít nhất 1 tài khoản quản trị/);
 assert.ok(G.dsTaiKhoan(admin).every(t => !('MatKhau' in t) && !('Muoi' in t)));
-assert.strictEqual(G.dsTaiKhoan(admin).find(t => t.TenDangNhap === 'admin').CuaHang, 'phone,pccc');
+assert.strictEqual(G.dsTaiKhoan(admin).find(t => t.TenDangNhap === 'admin').CuaHang, 'phone,demo');
 
 // Bảng/cột thêm ở bản mới: caiDat tạo đủ; Sheet của bản cũ tự được nâng cấp ở lần gọi đầu, không cần chạy lại caiDat
-assert.ok(['CaiDat', 'PS_NhatKy', 'PCCC_NhatKy'].every(n => sheets[n]) && sheets.PCCC_NhatKy.hidden && !sheets.CaiDat.hidden);
+assert.ok(['CaiDat', 'PS_NhatKy', 'DM_NhatKy'].every(n => sheets[n]) && sheets.DM_NhatKy.hidden && !sheets.CaiDat.hidden);
 assert.ok(sheets.PS_PhieuKhoCT.rows[0].includes('IMEI') && sheets.PS_HangHoa.rows[0].includes('BaoHanh'));
 delete sheets.PS_NhatKy; sheets.PS_PhieuKhoCT.rows.forEach(r => { r.length = 7; }); sheets.PS_PhieuKhoCT.maxCols = 7; // giả lập Sheet bản cũ, lưới vừa khít 7 cột
 props.delete('schema'); cache.delete('schema');
@@ -132,9 +149,9 @@ const ch = G.luuCuaHang(admin, { tenNgan: 'Táo Đỏ', moTa: 'iPhone cũ mới'
 assert.deepStrictEqual([ch.ten, plain(ch.congTy.diaChi), ch.congTy.qrSoTK, ch.congTy.baoHanhThang, 'la' in ch.congTy],
   ['Táo Đỏ', ['Số 1 Lê Lợi', 'Số 2 Hai Bà Trưng'], '0123456789', 6, false]);
 d = G.taiDuLieu(admin);
-assert.deepStrictEqual([d.cuaHang.ten, d.congTy.ten, d.congTy.mst, d.congTy.kyTen, d.dsCuaHang.map(x => x.ten).join()], ['Táo Đỏ', 'CỬA HÀNG TÁO ĐỎ', '0312345678', '', 'Táo Đỏ,Hoàng Quân Phát']);
+assert.deepStrictEqual([d.cuaHang.ten, d.congTy.ten, d.congTy.mst, d.congTy.kyTen, d.dsCuaHang.map(x => x.ten).join()], ['Táo Đỏ', 'CỬA HÀNG TÁO ĐỎ', '0312345678', '', 'Táo Đỏ,Cửa hàng thử']);
 assert.strictEqual(G.thongTinDangNhap().ten, 'Táo Đỏ');
-assert.strictEqual(G.chonCuaHang(admin, 'pccc').congTy.qrSoTK, '6100201006846'); // cửa hàng kia giữ nguyên
+assert.strictEqual(G.chonCuaHang(admin, 'demo').congTy.qrSoTK, '6100201006846'); // cửa hàng kia giữ nguyên
 G.chonCuaHang(admin, 'phone');
 
 // IMEI/serial khi giao hàng: số mã = số lượng, không lặp, không bán trùng; khách trả máy (nhập lại kho) thì bán lại được
@@ -180,7 +197,7 @@ assert.throws(() => G.dsNhatKy(lan), /quản trị/);
 G.luuChungTu(admin, 'DH', Object.assign({}, dhP, { TrangThai: 'Hủy' }));
 assert.strictEqual(plain(G.dsNhatKy(admin))[0].HanhDong, 'Hủy đơn hàng');
 G.luuChungTu(admin, 'DH', Object.assign({}, dhP, { TrangThai: '' }));
-assert.ok(!sheets.PCCC_NhatKy.rows.some(r => /Anh Minh/.test(r[4])));
+assert.ok(!sheets.DM_NhatKy.rows.some(r => /Anh Minh/.test(r[4])));
 
 // Khóa tài khoản / quản trị đặt lại mật khẩu: phiên đang đăng nhập hết hiệu lực ngay; chỉ đổi tên thì không
 const tkLan = { TenDangNhap: 'lan.nguyen', HoTen: 'Lan', VaiTro: 'nhanvien', CuaHang: 'phone' };
@@ -194,7 +211,7 @@ G.luuTaiKhoan(admin, Object.assign({}, tkLan, { HoTen: 'Lan N.' }));
 assert.strictEqual(G.taiDuLieu(lan2).user.u, 'lan.nguyen');
 G.luuTaiKhoan(admin, Object.assign({ MatKhau: 'lan-789' }, tkLan));
 assert.throws(() => G.taiDuLieu(lan2), /HET_PHIEN/);
-G.luuTaiKhoan(admin, { TenDangNhap: 'admin', HoTen: 'Quản trị', VaiTro: 'admin', CuaHang: 'phone,pccc', MatKhau: adminPass }); // quản trị tự đặt lại mật khẩu: giữ phiên của mình
+G.luuTaiKhoan(admin, { TenDangNhap: 'admin', HoTen: 'Quản trị', VaiTro: 'admin', CuaHang: 'phone,demo', MatKhau: adminPass }); // quản trị tự đặt lại mật khẩu: giữ phiên của mình
 assert.strictEqual(G.taiDuLieu(admin).user.u, 'admin');
 
 // Tự đổi mật khẩu: thiết bị đang dùng giữ phiên, thiết bị khác phải đăng nhập lại; khóa tạm sau 5 lần sai; đăng xuất
@@ -208,10 +225,25 @@ assert.throws(() => G.dangNhap('lan.nguyen', 'lan-456'), /quá 5 lần/);
 G.dangXuat(admin);
 assert.throws(() => G.taiDuLieu(admin), /HET_PHIEN/);
 
-// Nâng cấp từ bản 1 cửa hàng: trang tính cũ không tiền tố được đổi tên thành PCCC_…, giữ dữ liệu
-sheets.KhachHang = sheets.PCCC_KhachHang; delete sheets.PCCC_KhachHang;
-G.caiDat();
-assert.ok(!sheets.KhachHang && sheets.PCCC_KhachHang.rows.length === 4);
+// Bỏ cửa hàng PCCC: trang tính còn sót không làm app hỏng; caiDat xóa trang PCCC_…, cấu hình, bỏ quyền; nhân viên chỉ vào PCCC thì bị khóa
+const tk = sheets.TaiKhoan, addTk = o => tk.appendRow(G.toRow_(tk, Object.assign({ HoTen: o.TenDangNhap, MatKhau: 'x', Muoi: 'y', TrangThai: 'Hoạt động', NgayTao: today }, o)));
+['PCCC_KhachHang', 'PCCC_HangHoa', 'PCCC_DonHang', 'PCCC_NhatKy'].forEach(n => { sheets[n] = new Sheet([['Ma'], ['x']]); });
+sheets.CaiDat.appendRow(['cuaHang.pccc', '{"ten":"Hoàng Quân Phát"}']);
+addTk({ TenDangNhap: 'cu.pccc', VaiTro: 'nhanvien', CuaHang: 'pccc' });
+addTk({ TenDangNhap: 'cu.hai', VaiTro: 'nhanvien', CuaHang: 'phone,pccc' });
+addTk({ TenDangNhap: 'cu.admin', VaiTro: 'admin', CuaHang: 'pccc' });
+const admin2 = G.dangNhap('admin', adminPass).token;
+assert.strictEqual(G.taiDuLieu(admin2).cuaHang.id, 'phone'); // trang cũ còn nằm đó: app vẫn chạy
+const sauXoa = plain(G.xoaCuaHangDaBo_());
+assert.deepStrictEqual(sauXoa.sort(), ['PCCC_DonHang', 'PCCC_KhachHang', 'PCCC_HangHoa', 'PCCC_NhatKy'].sort());
+assert.ok(!Object.keys(sheets).some(n => n.startsWith('PCCC_')) && sheets.PS_HangHoa && sheets.DM_HangHoa); // trang cửa hàng khác còn nguyên
+assert.deepStrictEqual([sheets.CaiDat.rows.some(r => r[0] === 'cuaHang.pccc'), sheets.CaiDat.rows.some(r => r[0] === 'cuaHang.phone')], [false, true]);
+const tkCu = Object.fromEntries(G.readTable_('TaiKhoan').map(t => [t.TenDangNhap, t]));
+assert.deepStrictEqual([tkCu['cu.pccc'].CuaHang, tkCu['cu.pccc'].TrangThai], ['', 'Khóa']);
+assert.deepStrictEqual([tkCu['cu.hai'].CuaHang, tkCu['cu.hai'].TrangThai], ['phone', 'Hoạt động']);
+assert.deepStrictEqual([tkCu['cu.admin'].CuaHang, tkCu['cu.admin'].TrangThai], ['', 'Hoạt động']); // quản trị trống = vào mọi cửa hàng còn lại
+assert.strictEqual(G.taiDuLieu(admin2).user.u, 'admin'); // tài khoản không bị đổi thì giữ nguyên phiên
+assert.deepStrictEqual(plain(G.xoaCuaHangDaBo_()), []); // chạy lại không làm gì thêm
 
 require('./kiem-tra-html'); // giao diện: cú pháp, và các chỗ Apps Script sẽ cắt nhầm khi xóa chú thích
 console.log('OK - tất cả kiểm tra đều đạt');

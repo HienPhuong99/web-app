@@ -1,13 +1,8 @@
-# Web app quản lý bán hàng – 2 cửa hàng
+# Web app quản lý bán hàng – phuonghihi (iPhone chính hãng)
 
-Một app, hai cửa hàng tách riêng dữ liệu:
+Quản lý khách hàng, bảng giá, báo giá, đơn hàng, kho (ghi IMEI/serial, tra bảo hành), công nợ, báo cáo doanh thu, nhật ký thao tác, số chứng từ, màu giao diện, logo và mẫu in. Hàng hóa ban đầu là 198 phiên bản iPhone (dung lượng × màu) lấy từ phone-shop.up.railway.app. Chạy trên Google Apps Script, dữ liệu nằm trong 1 Google Sheet. Miễn phí, không cần máy chủ.
 
-| Cửa hàng | Hàng hóa | Hiện khi |
-|---|---|---|
-| **phuonghihi** – iPhone chính hãng | 198 phiên bản iPhone (dung lượng × màu) lấy từ phone-shop.up.railway.app | **Mặc định** khi đăng nhập |
-| **Hoàng Quân Phát** – thiết bị PCCC | 347 mặt hàng + 165 khách từ 2 file cũ | Chỉ vào được ở **Cài đặt → Nâng cao**, với tài khoản được cấp quyền |
-
-Mỗi cửa hàng có khách hàng, bảng giá, báo giá, đơn hàng, kho (ghi IMEI/serial, tra bảo hành), công nợ, báo cáo doanh thu, nhật ký thao tác, số chứng từ, màu giao diện, logo và mẫu in riêng. Tài khoản đăng nhập dùng chung; quản trị chọn mỗi tài khoản được vào cửa hàng nào. Chạy trên Google Apps Script, dữ liệu nằm trong 1 Google Sheet. Miễn phí, không cần máy chủ.
+> **Đã bỏ cửa hàng Hoàng Quân Phát (PCCC).** Bản này chỉ còn phuonghihi; hàm `caiDat` tự xóa các trang `PCCC_…` và quyền vào cửa hàng đó (xem phần *Dọn dữ liệu PCCC cũ*). Mã nguồn vẫn hỗ trợ nhiều cửa hàng nếu sau này cần thêm: thêm một mục vào `SHOPS` ở đầu `Code.gs`.
 
 **Bản đang chạy** (cài ngày 30/09/2026): link ngắn <https://sites.google.com/view/phuonghihi> (Google Sites nhúng web app) · [link web app gốc](https://script.google.com/macros/s/AKfycbx66egogcD-sQxv48gLIjCJqeIIEeD_jwkIdmSYAKRsrHKjF_2hV1SMfa-yHRMTt02Z/exec) · dữ liệu: [Google Sheet "Quản lý bán hàng - dữ liệu app"](https://docs.google.com/spreadsheets/d/18LVeevKd0Gp9E_9-TORmBIpI-sMsEdJqz7ZofsyCOpc/edit).
 
@@ -16,40 +11,44 @@ Mỗi cửa hàng có khách hàng, bảng giá, báo giá, đơn hàng, kho (gh
 | `apps-script/Code.gs` | Phần máy chủ (dán vào Apps Script) |
 | `apps-script/Index.html` | Giao diện (dán vào Apps Script) |
 | `apps-script/appsscript.json`, `.clasp.json` | Cấu hình dự án (múi giờ VN, web app) và mã dự án Apps Script cho `clasp` |
-| `du-lieu/DuLieu.xlsx` | Dữ liệu ban đầu của cả 2 cửa hàng. **Có thông tin khách PCCC, đừng chia sẻ công khai.** |
+| `du-lieu/DuLieu.xlsx` | Dữ liệu ban đầu (chỉ dùng khi lập Sheet mới). **File cũ còn dữ liệu khách PCCC: nên xóa các trang `PCCC_…` hoặc bỏ file này, đừng chia sẻ công khai.** |
 | `dev/` | Chạy thử trên máy, không cần khi dùng thật |
 
 ## Cài đặt (làm 1 lần, khoảng 10 phút)
 
 1. **Tạo Google Sheet**: mở <https://sheets.new> bằng tài khoản Google sẽ giữ dữ liệu.
 2. **Nạp dữ liệu**: Tệp → Nhập (*File → Import*) → Tải lên → chọn `du-lieu/DuLieu.xlsx` → Vị trí nhập: **Thay thế bảng tính** (*Replace spreadsheet*) → Nhập dữ liệu.
-   Sheet có trang `TaiKhoan` (dùng chung), 9 trang `PS_…` (phuonghihi) và 9 trang `PCCC_…`. Không đổi tên trang và dòng tiêu đề. Các trang `CaiDat`, `…_NhatKy` và cột mới (IMEI, BaoHanh) do `caiDat` ở bước 4 tự thêm.
-   *Đã cài bản trước (1 cửa hàng)?* Dán code mới rồi chạy `caiDat` (bước 4): các trang cũ tự đổi tên thành `PCCC_…`, giữ nguyên dữ liệu; cửa hàng phuonghihi khi đó còn trống. Muốn có sẵn 198 iPhone thì làm lại từ bước 1 với file mới.
+   Sheet có trang `TaiKhoan` (dùng chung) và các trang `PS_…` (phuonghihi); file cũ còn thêm các trang `PCCC_…` sẽ bị `caiDat` xóa ở bước 4. Không đổi tên trang và dòng tiêu đề. Các trang `CaiDat`, `…_NhatKy` và cột mới (IMEI, BaoHanh) do `caiDat` ở bước 4 tự thêm.
+   *Đã cài bản trước?* Chỉ cần dán code mới rồi chạy `caiDat` (bước 4), dữ liệu phuonghihi giữ nguyên.
 3. **Dán code**: Tiện ích mở rộng → Apps Script (*Extensions → Apps Script*).
    - Xóa hết nội dung `Code.gs` có sẵn, dán toàn bộ `apps-script/Code.gs`.
    - Bấm **+** cạnh "Tệp" → HTML → đặt tên đúng là `Index` → xóa nội dung có sẵn, dán toàn bộ `apps-script/Index.html`.
    - Bấm Lưu (Ctrl+S).
-4. **Chạy `caiDat`**: trên thanh công cụ chọn hàm `caiDat` → **Chạy**. Hàm này tạo trang/cột còn thiếu, **ẩn các trang PCCC_…** (mở file Sheet chỉ thấy phuonghihi; muốn xem: Xem → Trang tính bị ẩn) và tạo tài khoản quản trị được vào cả 2 cửa hàng.
+4. **Chạy `caiDat`**: trên thanh công cụ chọn hàm `caiDat` → **Chạy**. Hàm này tạo trang/cột còn thiếu, **xóa cửa hàng PCCC cũ** (trang `PCCC_…`, cấu hình, quyền vào) và tạo tài khoản quản trị nếu chưa có.
    Lần đầu Google hỏi quyền: Xem lại quyền → chọn tài khoản → Nâng cao → Đi tới … (không an toàn) → Cho phép. (Đây là script của chính bạn nên Google chưa "xác minh".)
    Xem **Nhật ký thực thi** bên dưới: có dòng `Tài khoản quản trị: admin / mật khẩu: ...`.
 5. **Triển khai**: Triển khai → Tùy chọn triển khai mới (*Deploy → New deployment*) → biểu tượng ⚙ → **Ứng dụng web**:
    - Thực thi với tư cách (*Execute as*): **Tôi**
    - Người có quyền truy cập (*Who has access*): **Bất kỳ ai** (*Anyone*) – ai có link chỉ thấy trang đăng nhập phuonghihi.
    - Bấm Triển khai → sao chép **URL ứng dụng web**.
-6. Mở link → đăng nhập `admin` → **Cài đặt → Đổi mật khẩu** → menu **Tài khoản** → tạo tài khoản nhân viên, tích chọn cửa hàng được vào (mặc định chỉ phuonghihi).
+6. Mở link → đăng nhập `admin` → **Cài đặt → Đổi mật khẩu** → menu **Tài khoản** → tạo tài khoản nhân viên.
 
-## Chuyển sang cửa hàng PCCC
+## Dọn dữ liệu PCCC cũ
 
-**Cài đặt → Nâng cao → Cửa hàng đang làm việc → Hoàng Quân Phát.** Giao diện đổi sang màu đỏ, logo và dữ liệu PCCC. Mục Nâng cao chỉ hiện với tài khoản được vào từ 2 cửa hàng trở lên; nhân viên chỉ có quyền phuonghihi không thấy mục này và không nhận được dữ liệu nào của PCCC. Lần đăng nhập sau luôn mở lại phuonghihi.
+`caiDat` làm các việc sau, **không hoàn tác được trong app** (nếu lỡ, khôi phục bằng Tệp → Lịch sử phiên bản của Google Sheet):
+- Xóa mọi trang tính có tên bắt đầu bằng `PCCC_` (khách hàng, hàng hóa, báo giá, đơn hàng, kho, thu tiền, nhật ký của PCCC) và dòng cấu hình `cuaHang.pccc` ở trang `CaiDat`.
+- Gỡ PCCC khỏi cột `CuaHang` của các tài khoản. **Nhân viên chỉ được vào PCCC bị khóa** (để không tự rơi vào phuonghihi); muốn dùng lại: menu Tài khoản → mở khóa. Quản trị không bị ảnh hưởng.
+- Chạy lại nhiều lần được; khi không còn gì để xóa thì không làm gì.
+Nhật ký thực thi in rõ đã xóa những trang nào và khóa tài khoản nào.
 
 ## Sửa code sau này
 
 Dán code mới vào Apps Script → Lưu → Triển khai → Quản lý các lần triển khai (*Manage deployments*) → ✏ → Phiên bản: **Phiên bản mới** → Triển khai. Link giữ nguyên. Bản mới có thêm bảng/cột thì app **tự thêm vào Sheet** ở lần mở đầu tiên (không mất dữ liệu, không cần chạy lại `caiDat`; lần mở đó chậm hơn vài giây).
 Máy này đã cài sẵn **clasp** (công cụ dòng lệnh của Google, đã đăng nhập), nên trong thư mục `D:\web-app` chỉ cần 2 lệnh: `clasp push` (thay bước dán code) rồi `clasp create-deployment -i AKfycbx66egogcD-sQxv48gLIjCJqeIIEeD_jwkIdmSYAKRsrHKjF_2hV1SMfa-yHRMTt02Z` (thay bước triển khai lại, link giữ nguyên).
 
-Tên cửa hàng, thông tin in trên chứng từ, mã số thuế, VAT mặc định (phuonghihi 0% vì giá đã gồm VAT, PCCC 8%), thời hạn bảo hành, hình thức thu tiền, tài khoản nhận chuyển khoản: quản trị sửa ngay trong app ở **Cài đặt → Thông tin cửa hàng → Sửa** (lưu ở trang `CaiDat`). Giá trị mặc định và màu giao diện nằm ở đầu tệp `Code.gs`, mục `SHOPS`.
+Tên cửa hàng, thông tin in trên chứng từ, mã số thuế, VAT mặc định (0% vì giá iPhone đã gồm VAT), thời hạn bảo hành, hình thức thu tiền, tài khoản nhận chuyển khoản: quản trị sửa ngay trong app ở **Cài đặt → Thông tin cửa hàng → Sửa** (lưu ở trang `CaiDat`). Giá trị mặc định và màu giao diện nằm ở đầu tệp `Code.gs`, mục `SHOPS`.
 
-## Quy trình làm việc (giống nhau ở 2 cửa hàng)
+## Quy trình làm việc
 
 **Báo giá → Chốt thành đơn hàng → Giao hàng (tự trừ kho) → Thu tiền (tự tính công nợ)**
 
@@ -68,7 +67,7 @@ Tên cửa hàng, thông tin in trên chứng từ, mã số thuế, VAT mặc �
 
 | | Nhân viên | Quản trị |
 |---|---|---|
-| Xem, thêm/sửa khách hàng, báo giá, đơn hàng, phiếu kho, phiếu thu (ở cửa hàng được vào) | ✓ | ✓ |
+| Xem, thêm/sửa khách hàng, báo giá, đơn hàng, phiếu kho, phiếu thu | ✓ | ✓ |
 | Thêm/sửa bảng giá hàng hóa | | ✓ |
 | Xóa chứng từ, khách hàng, mặt hàng | | ✓ |
 | Quản lý tài khoản, cấp quyền cửa hàng | | ✓ |
@@ -84,11 +83,11 @@ Khóa tài khoản, đổi quyền hoặc đặt lại mật khẩu có hiệu l
 - **Tồn kho** trên website được ghi thành phiếu nhập `001-2026/NK` "Tồn đầu kỳ (theo website phuonghihi)" – 5.075 máy. Nếu số này chỉ là dữ liệu mẫu của website: vào *Nhập – xuất kho*, mở phiếu đó, bấm *Xóa* (tài khoản quản trị) là tồn về 0.
 - Chưa có khách hàng.
 
-**Hoàng Quân Phát (PCCC)**: như bản trước – 165 khách (từ sheet lead tháng 6–9, đã tách SĐT, gộp khách trùng) và 347 mặt hàng từ "BÁO GIÁ SỈ LẺ 2025" (chỉ giá sỉ/lẻ). 23 mặt hàng có giá rác do công thức đã được xóa giá, ghi "Chưa có giá"; tổng 94 mặt hàng chưa có giá – lọc **Chưa có giá** trong Hàng hóa để bổ sung. Tồn kho, đơn hàng, công nợ bắt đầu từ 0 (nhập tồn đầu kỳ bằng một phiếu Nhập kho; nợ cũ bằng một đơn "Công nợ đầu kỳ", VAT 0, rồi Giao hàng → Lưu).
 
 ## Chạy thử trên máy (không bắt buộc)
 
-Cần Node.js. `node dev/chay-thu.js` rồi mở <http://localhost:5178> (mật khẩu admin in ra màn hình, dữ liệu mẫu 2 cửa hàng, mất khi tắt).
+Cần Node.js. `node dev/chay-thu.js` rồi mở <http://localhost:5178> (mật khẩu admin in ra màn hình, dữ liệu mẫu, mất khi tắt).
 **Trước khi triển khai một bản mới, thử trên Google thật:** trong trình soạn thảo Apps Script bấm Triển khai → *Thử nghiệm các lần triển khai* (*Test deployments*) → mở link có đuôi `/dev`. Link này chỉ chủ tài khoản mở được và chạy đúng code vừa đẩy lên, trên dữ liệu thật. Lý do: Apps Script tự xóa chú thích trong `Index.html` khi phục vụ trang và cắt nhầm mọi thứ sau `//` nằm trong chuỗi `` `...` `` (ví dụ `` `https://...` ``), làm trang trắng – lỗi này chạy thử trên máy không thấy. `node dev/kiem-tra-html.js` bắt lỗi đó trước khi đẩy.
 
-`node dev/kiem-tra.js` kiểm tra giao diện (lệnh trên) và phần máy chủ: đăng nhập, thu hồi phiên, phân quyền cửa hàng, tách dữ liệu 2 cửa hàng, đánh số chứng từ, tính tiền, giao hàng từng phần, IMEI và hạn bảo hành, tồn kho, công nợ, báo cáo, nhật ký, sửa thông tin cửa hàng, tự nâng cấp từ bản cũ.
+`node dev/kiem-tra.js` kiểm tra giao diện (lệnh trên) và phần máy chủ: đăng nhập, thu hồi phiên, phân quyền, tách dữ liệu giữa các cửa hàng (bằng một cửa hàng thử dựng trong test), dọn dữ liệu PCCC cũ, đánh số chứng từ, tính tiền, giao hàng từng phần, IMEI và hạn bảo hành, tồn kho, công nợ, báo cáo, nhật ký, sửa thông tin cửa hàng, tự nâng cấp từ bản cũ.
+`NODE_PATH=$(npm root -g) node dev/kiem-trinh-duyet.js` mở giao diện trong Chromium không giao diện, đăng nhập và thử từng màn hình (cần Playwright).
