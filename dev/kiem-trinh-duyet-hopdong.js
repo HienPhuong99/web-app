@@ -92,6 +92,50 @@ module.exports = BUOC => {
     await shot(page, 'hd-3-danh-sach');
   }]);
 
+  BUOC.push(['Hợp đồng: tạo file Google Docs, file cũ khi sửa, tải PDF', async page => {
+    await page.evaluate(() => go('hopdong'));
+    await page.locator('tbody tr[data-i]', { hasText: 'Anh Minh' }).first().click();
+    await page.waitForSelector('text=Chưa tạo file');
+    await page.click('[data-act="taofile"]');
+    await page.waitForSelector('text=/Đã tạo \\d{4}-/');
+    assert.ok(await page.locator('#toast', { hasText: 'Đã tạo file hợp đồng' }).count() >= 1);
+    assert.ok(await page.locator('a:has-text("Mở Google Docs")').count() === 1, 'Quản trị thấy nút mở Google Docs');
+    await shot(page, 'hd-5-co-file');
+    await page.fill('input[data-h="DiaChi"]', 'Địa chỉ mới 99');
+    await nut(page, 'Lưu').click();
+    await page.waitForSelector('text=Đã cũ: hợp đồng đã sửa sau lần tạo file');
+    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 10000 }), page.click('[data-act="pdf"]')]);
+    assert.match(dl.suggestedFilename(), /^Hợp đồng .*\.pdf$/, 'tên tải về: ' + dl.suggestedFilename());
+    await page.waitForSelector('text=/Đã tạo \\d{4}-/'); // tải PDF đã tạo lại file cho khớp nội dung mới
+    assert.strictEqual(await page.evaluate(() => S.hd.FileCu), '');
+    await page.evaluate(() => go('hopdong'));
+    assert.ok(await page.locator('tbody tr', { hasText: 'có file' }).count() >= 1);
+  }]);
+
+  BUOC.push(['Cài đặt: mẫu hợp đồng, danh sách biến, ngân hàng lấy từ máy chủ', async page => {
+    await page.click('#nav a[data-go="caidat"]');
+    await page.waitForSelector('text=Mẫu hợp đồng (Google Docs)');
+    assert.strictEqual(await page.locator('.card:has-text("Mẫu hợp đồng (Google Docs)") table.mini tr').count(), 5);
+    await shot(page, 'hd-6-cai-dat-mau');
+    await page.click('[data-act="mau-bien"]');
+    await page.waitForSelector('code:has-text("{{TENDOANHNGHIEP}}")');
+    assert.ok(await page.locator('#modal code').count() > 25);
+    await page.keyboard.press('Escape');
+    await page.click('[data-act="mau-them"]');
+    await page.fill('#modal [name=LoaiHD]', 'Hợp đồng thử');
+    await page.fill('#modal [name=LinkMau]', 'abc');
+    await page.click('#modal [data-save]');
+    await page.waitForSelector('#toast .err');
+    assert.match(await page.locator('#toast .err').first().textContent(), /Dán link/i);
+    await page.keyboard.press('Escape');
+    await page.click('[data-act="mau-macdinh"]');
+    await page.waitForSelector('text=Đã đủ mẫu mặc định');
+    await page.click('[data-act="shop"]');
+    await page.waitForSelector('#modal select[name=qrNganHang]');
+    assert.ok(await page.locator('#modal select[name=qrNganHang] option').count() > 30, 'Danh sách ngân hàng phải lấy được từ máy chủ');
+    await page.keyboard.press('Escape');
+  }]);
+
   BUOC.push(['Hợp đồng: màn hình điện thoại không tràn ngang', async page => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => newHD());

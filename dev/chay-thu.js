@@ -46,11 +46,102 @@ const sheets = {};
 const ss = { getSheetByName: n => sheets[n] || null, insertSheet: n => (sheets[n] = new Sheet([])), getSheets: () => Object.values(sheets),
   deleteSheet: sh => { for (const k in sheets) if (sheets[k] === sh) delete sheets[k]; } };
 
+// ---- Giả lập DocumentApp / DriveApp (chỉ phần Code.gs dùng). Kho này nằm trong bộ nhớ; test đọc lại qua `drive`.
+// Lưu ý: không thay được lần thử trên Google thật (xem HUONG_DAN.md, phần "Trước khi triển khai một bản mới").
+const drive = { files: new Map(), folders: new Map(), seq: 0, thieuQuyen: false };
+const newId = pre => pre + String(++drive.seq).padStart(24, '0');
+const ENUM = n => Object.fromEntries(n.map(k => [k, k]));
+class MPara {
+  constructor(text, parent) { Object.assign(this, { text: String(text), parent, heading: 'NORMAL', align: 'LEFT', bold: false, removed: false }); }
+  getType() { return 'PARAGRAPH'; } asParagraph() { return this; } getText() { return this.text; } setText(t) { this.text = String(t); return this; }
+  getParent() { return this.parent; } removeFromParent() { this.removed = true; this.parent.children.splice(this.parent.children.indexOf(this), 1); return this; }
+  setHeading(h) { this.heading = h; return this; } setAlignment(a) { this.align = a; return this; }
+  setSpacingAfter() { return this; } setSpacingBefore() { return this; } setLineSpacing() { return this; } setIndentFirstLine() { return this; } setIndentStart() { return this; }
+  editAsText() { return new MText(this); }
+}
+class MText { // sửa chữ trong một đoạn
+  constructor(p) { this.p = p; }
+  getText() { return this.p.text; } getParent() { return this.p; }
+  setBold(a, b, c) { if (typeof a === 'boolean') this.p.bold = a; else if (c && a === 0 && b >= this.p.text.length - 1) this.p.bold = true; return this; }
+  setItalic() { return this; } setFontSize() { return this; } setUnderline() { return this; }
+  asText() { return this; }
+  deleteText(a, b) { this.p.text = this.p.text.slice(0, a) + this.p.text.slice(b + 1); return this; }
+  insertText(o, t) { this.p.text = this.p.text.slice(0, o) + t + this.p.text.slice(o); return this; }
+}
+class MCell { constructor(text, table) { this.para = new MPara(text, this); this.table = table; } getChild() { return this.para; } getText() { return this.para.text; } editAsText() { return this.para.editAsText(); } }
+class MTable {
+  constructor(cells, parent) { this.parent = parent; this.rows = cells.map(r => r.map(t => new MCell(t, this))); this.borderWidth = 1; }
+  getType() { return 'TABLE'; } getParent() { return this.parent; } setBorderWidth(w) { this.borderWidth = w; return this; } setColumnWidth() { return this; } setAttributes() { return this; }
+  getNumRows() { return this.rows.length; } getCell(r, c) { return this.rows[r][c]; }
+  getRow(r) { const row = this.rows[r]; return { editAsText: () => ({ setBold: b => { row.forEach(c => { c.para.bold = b; }); return this; } }) }; }
+  paras() { return this.rows.flat().map(c => c.para); }
+}
+const javaRepl = (repl, m) => repl.replace(/\\(.)|\$(\d)/g, (_, lit, g) => (lit !== undefined ? lit : m[+g] === undefined ? '' : m[+g])); // "\" thoát ký tự, "$1" là nhóm bắt như Java
+class MBody {
+  constructor(doc) { this.doc = doc; this.children = [new MPara('', this)]; }
+  appendParagraph(t) { const p = new MPara(t, this); this.children.push(p); return p; }
+  appendTable(cells) { const t = new MTable(cells, this); this.children.push(t); return t; }
+  insertTable(i, cells) { const t = new MTable(cells, this); this.children.splice(i, 0, t); return t; }
+  getChildIndex(el) { const i = this.children.indexOf(el); if (i < 0) throw new Error('Phần tử không phải con trực tiếp của body'); return i; }
+  getNumChildren() { return this.children.length; } getChild(i) { return this.children[i]; }
+  setMarginTop() {} setMarginBottom() {} setMarginLeft() {} setMarginRight() {} setAttributes() { return this; }
+  allParas() { return this.children.flatMap(c => (c instanceof MTable ? c.paras() : [c])); }
+  getText() { return this.allParas().map(p => p.text).join('\n'); }
+  findText(pattern, from) { // from = RangeElement trước đó: tìm tiếp phía sau nó
+    const ps = this.allParas(); let i = 0, off = 0;
+    if (from) { i = ps.indexOf(from.getElement().p); off = from.getEndOffsetInclusive() + 1; }
+    for (; i < ps.length; i++, off = 0) {
+      const re = new RegExp(pattern, 'g'); re.lastIndex = off; const m = re.exec(ps[i].text);
+      if (m) return { getElement: () => new MText(ps[i]), getStartOffset: () => m.index, getEndOffsetInclusive: () => m.index + m[0].length - 1 };
+    }
+    return null;
+  }
+  replaceText(pattern, repl) { const re = new RegExp(pattern, 'g'); this.allParas().forEach(p => { p.text = p.text.replace(re, (...a) => javaRepl(String(repl), a)); }); return this; }
+}
+class MDoc {
+  constructor(id) { this.id = id; this.body = new MBody(this); }
+  getId() { return this.id; } getUrl() { return 'https://docs.google.com/document/d/' + this.id + '/edit'; } getName() { return drive.files.get(this.id).name; }
+  getBody() { return this.body; } saveAndClose() {}
+}
+const docs = new Map();
+const quyen = ten => { if (drive.thieuQuyen) throw new Error('You do not have permission to call ' + ten + '. Required permissions: https://www.googleapis.com/auth/drive'); };
+class MFolder { constructor(f) { this.f = f; } getId() { return this.f.id; } getName() { return this.f.name; } isTrashed() { return !!this.f.trashed; } }
+class MFile {
+  constructor(f) { this.f = f; }
+  getId() { return this.f.id; } getName() { return this.f.name; } getUrl() { return 'https://docs.google.com/document/d/' + this.f.id + '/edit'; }
+  getMimeType() { return this.f.mime; } isTrashed() { return !!this.f.trashed; } setTrashed(b) { this.f.trashed = !!b; return this; }
+  moveTo(folder) { this.f.folder = folder.getId(); return this; }
+  makeCopy(name, folder) {
+    const id = newId('F'), src = docs.get(this.f.id), d = new MDoc(id);
+    d.body.children = src.body.children.map(c => (c instanceof MTable ? Object.assign(new MTable(c.rows.map(r => r.map(x => x.getText())), d.body), { borderWidth: c.borderWidth })
+      : Object.assign(new MPara(c.text, d.body), { heading: c.heading, align: c.align, bold: c.bold })));
+    docs.set(id, d); drive.files.set(id, { id, name, mime: this.f.mime, folder: folder ? folder.getId() : 'root' });
+    return new MFile(drive.files.get(id));
+  }
+  getAs(mime) {
+    const text = '%PDF-1.4\n' + docs.get(this.f.id).body.getText();
+    return { getName: () => this.f.name + '.pdf', getContentType: () => mime, getBytes: () => [...Buffer.from(text, 'utf8')].map(b => (b > 127 ? b - 256 : b)) };
+  }
+}
+const DocumentApp = {
+  HorizontalAlignment: ENUM(['LEFT', 'CENTER', 'RIGHT', 'JUSTIFY']), ParagraphHeading: ENUM(['NORMAL', 'HEADING1', 'HEADING2']),
+  Attribute: ENUM(['FONT_FAMILY', 'FONT_SIZE']), ElementType: ENUM(['PARAGRAPH', 'TABLE']),
+  create(name) { quyen('DocumentApp.create'); const id = newId('D'), d = new MDoc(id); docs.set(id, d); drive.files.set(id, { id, name, mime: 'application/vnd.google-apps.document', folder: 'root' }); return d; },
+  openById(id) { quyen('DocumentApp.openById'); if (!docs.has(id)) throw new Error('Không mở được tài liệu ' + id); return docs.get(id); },
+};
+const DriveApp = {
+  getFileById(id) { quyen('DriveApp.getFileById'); const f = drive.files.get(id); if (!f) throw new Error('Exception: Unexpected error while getting the method or property getFileById on object DriveApp.'); return new MFile(f); },
+  getFolderById(id) { const f = drive.folders.get(id); if (!f) throw new Error('Không tìm thấy thư mục ' + id); return new MFolder(f); },
+  getFoldersByName(name) { quyen('DriveApp.getFoldersByName'); const l = [...drive.folders.values()].filter(f => f.name === name && !f.trashed); return { hasNext: () => l.length > 0, next: () => new MFolder(l.shift()) }; },
+  createFolder(name) { quyen('DriveApp.createFolder'); const f = { id: newId('R'), name }; drive.folders.set(f.id, f); return new MFolder(f); },
+};
+
 const cache = new Map(), props = new Map();
 const logs = [];
 const ctx = vm.createContext({
   console,
   SpreadsheetApp: { getActive: () => ss, getActiveSpreadsheet: () => ss },
+  DocumentApp, DriveApp, MimeType: { PDF: 'application/pdf', GOOGLE_DOCS: 'application/vnd.google-apps.document' },
   CacheService: { getScriptCache: () => ({ get: k => (cache.has(k) ? cache.get(k) : null), put: (k, v) => cache.set(k, String(v)), remove: k => cache.delete(k),
     getAll: ks => Object.fromEntries(ks.filter(k => cache.has(k)).map(k => [k, cache.get(k)])) }) },
   PropertiesService: { getScriptProperties: () => ({ getProperty: k => (props.has(k) ? props.get(k) : null), setProperty: (k, v) => { props.set(k, String(v)); } }) },
@@ -67,7 +158,9 @@ const ctx = vm.createContext({
     },
   },
 });
-vm.runInContext(fs.readFileSync(path.join(ROOT, 'Code.gs'), 'utf8'), ctx, { filename: 'Code.gs' });
+// Apps Script gộp mọi file .gs vào một phạm vi chung: nạp lần lượt như vậy (Code.gs trước)
+fs.readdirSync(ROOT).filter(f => f.endsWith('.gs')).sort((a, b) => (a === 'Code.gs' ? -1 : b === 'Code.gs' ? 1 : a.localeCompare(b)))
+  .forEach(f => vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f }));
 
 // ---- Dữ liệu
 const file = process.argv[2];
@@ -92,7 +185,7 @@ const SHIM = `window.google = { script: { get run() {
   return make({});
 } } };`;
 
-module.exports = { ctx, sheets, logs, cache, props, Sheet };
+module.exports = { ctx, sheets, logs, cache, props, Sheet, drive, docs };
 if (require.main === module) http.createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/rpc') {
     let body = '';

@@ -325,7 +325,7 @@ table.lines { width: 100%; border-collapse: collapse; min-width: 1040px; }
 
 <script>
 // ===================== Trạng thái & tiện ích =====================
-const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], hopDong: [], mauHD: [], loaiHD: [], hd: null, ton: {},
+const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], hopDong: [], mauHD: [], loaiHD: [], nganHang: [], hd: null, ton: {},
   thongKe: { topHang: [], theoNhom: [] }, taiKhoan: null, baoHanh: null, nhatKy: null, view: 'home', loai: '', doc: null, extra: {}, dirty: false, q: {}, onNew: null };
 const D = { thuDH: {}, thuKH: {}, muaKH: {}, noKH: {}, dhBG: {} }; // số liệu suy ra: đã thu, công nợ, báo giá đã chốt
 const LG = { si: 'Giá sỉ', le: 'Giá lẻ', tuy: 'Giá tùy chọn' };
@@ -422,13 +422,6 @@ const LOGO_PHONE = '<svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><re
 const markHtml = ic => ic === 'phone' ? LOGO_PHONE : icon(ic || 'box');
 const icon = n => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
 
-// Ngân hàng nhận chuyển khoản qua mã VietQR: [mã BIN, tên] (theo danh sách của vietqr.io)
-const BANKS = [['970436', 'Vietcombank'], ['970415', 'VietinBank'], ['970418', 'BIDV'], ['970405', 'Agribank'], ['970407', 'Techcombank'], ['970422', 'MB Bank'],
-  ['970416', 'ACB'], ['970432', 'VPBank'], ['970423', 'TPBank'], ['970403', 'Sacombank'], ['970437', 'HDBank'], ['970441', 'VIB'], ['970443', 'SHB'],
-  ['970431', 'Eximbank'], ['970426', 'MSB'], ['970448', 'OCB'], ['970440', 'SeABank'], ['970449', 'LPBank'], ['970428', 'Nam A Bank'], ['970409', 'Bac A Bank'],
-  ['970425', 'ABBank'], ['970427', 'VietABank'], ['970412', 'PVcomBank'], ['970429', 'SCB'], ['970419', 'NCB'], ['970452', 'KienlongBank'], ['970400', 'Saigonbank'],
-  ['970438', 'BaoViet Bank'], ['970433', 'VietBank'], ['970430', 'PGBank'], ['970454', 'Viet Capital Bank'], ['970414', 'MBV'], ['970446', 'Co-opBank'],
-  ['970424', 'Shinhan Bank'], ['970457', 'Woori Bank'], ['422589', 'CIMB'], ['668888', 'KBank'], ['546034', 'CAKE'], ['546035', 'Ubank'], ['963388', 'Timo']];
 // Ảnh mã VietQR: khách quét bằng app ngân hàng là có sẵn số tài khoản, số tiền, nội dung. Chưa khai tài khoản thì trả về ''.
 // ponytail: ảnh do dịch vụ Quick Link của vietqr.io tạo (số TK + số tiền đi qua máy chủ đó); muốn không phụ thuộc thì tự sinh chuỗi EMVCo + thư viện QR.
 function qrUrl(soTien, noiDung, kieu) {
@@ -1001,7 +994,7 @@ function openKhach(kh, onPicked) {
       ['SDT', 'Điện thoại', { ph: 'Nhiều số cách nhau bằng dấu /' }], ['DiaChi', 'Địa chỉ', { full: true }], ['MST', 'Mã số thuế'], ['Email', 'Email'],
       ['NguoiDaiDien', 'Người đại diện (ký hợp đồng)'], ['ChucVu', 'Chức vụ'], ['VanPhongGD', 'Văn phòng giao dịch', { full: true }], ['SoTK', 'Số tài khoản'], ['NganHang', 'Ngân hàng', { list: 'dl-nh' }],
       ['GhiChu', 'Ghi chú', { area: true }],
-    ], kh) + datalist('dl-nh', BANKS.map(b => b[1])) + extra,
+    ], kh) + datalist('dl-nh', S.nganHang.map(b => b[1])) + extra,
     buttons: [
       { t: 'Lưu (F8)', ic: 'save', cls: 'primary', save: true, fn: run(async m => {
         const d = formData(m);
@@ -1657,7 +1650,7 @@ function vHopDong(el) {
     filter: (r, f) => (!f.loai || r.LoaiHD === f.loai) && inRange(r.Ngay, f, 'ngay')
       && (!f.tt || (f.tt === 'sap' ? !!(hanHD(r) || {}).sap : f.tt === 'het' ? !!(hanHD(r) || {}).het : r.TrangThai === f.tt)),
     cols: [
-      { t: 'Số hợp đồng', f: r => `<span class="code">${esc(r.SoHD)}</span><span class="sub">Ký ${dmy(r.Ngay)}</span>` },
+      { t: 'Số hợp đồng', f: r => `<span class="code">${esc(r.SoHD)}</span><span class="sub">Ký ${dmy(r.Ngay)}${r.FileId ? ' · có file' : ''}</span>` },
       { t: 'Khách hàng (bên A)', cls: 'wrap', f: r => `<b>${esc(r.TenDN)}</b><span class="sub">${esc([r.NguoiDaiDien, r.SDT].filter(Boolean).join(' · '))}</span>` },
       { t: 'Loại hợp đồng', cls: 'wrap', k: 'LoaiHD' },
       { t: 'Giá trị', cls: 'num', f: r => +r.TongCong ? `<b>${money(r.TongCong)}</b>` : '<span class="muted">—</span>' },
@@ -1707,8 +1700,16 @@ function vHD(el) {
   const fld = (label, html, cls = '') => `<label class="field ${cls}"><span class="lb">${label}</span>${html}</label>`;
   const inp = (k, attrs = '') => `<input data-h="${k}" value="${esc(d[k])}" ${attrs}>`;
   const sel = (k, opts) => `<select data-h="${k}">${opts.map(o => { const [v, t] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(v)}"${String(v) === String(d[k] ?? '') ? ' selected' : ''}>${esc(t)}</option>`; }).join('')}</select>`;
-  const t = hdTotal();
-  el.innerHTML = `
+  const t = hdTotal(), coFile = !!d.FileId, cu = d.FileCu === '1';
+  const fileCard = saved ? `<div class="card" style="margin-bottom:16px"><div class="card-b" style="display:flex;gap:10px 14px;align-items:center;flex-wrap:wrap">
+    <b>File hợp đồng (Google Docs)</b>
+    ${coFile ? (cu ? badge('Đã cũ: hợp đồng đã sửa sau lần tạo file', 'b-amber') : badge('Đã tạo ' + (d.NgayFile || ''), 'b-green')) : badge('Chưa tạo file', 'b-gray')}
+    <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn sm" data-act="taofile">${icon('refresh')}${coFile ? 'Tạo lại file' : 'Tạo file hợp đồng'}</button>
+      <button class="btn sm primary" data-act="pdf">${icon('download')}Tải PDF</button>
+      ${coFile && isAdmin() && d.LinkFile ? `<a class="btn sm" href="${esc(d.LinkFile)}" target="_blank" rel="noopener" title="Chỉ mở được bằng tài khoản Google của chủ file">${icon('file')}Mở Google Docs</a>` : ''}
+    </span></div></div>` : `<p class="muted" style="margin:0 0 12px">Lưu hợp đồng xong sẽ có nút tạo file Google Docs từ mẫu và tải PDF.</p>`;
+  el.innerHTML = fileCard + `
   <div class="card"><div class="card-h"><h3>1. Loại hợp đồng và thông tin chung</h3></div><div class="doc-head">
     ${fld('Số hợp đồng', `<input value="${esc(d.SoHD)}" readonly placeholder="Tự sinh khi lưu">`)}
     ${fld('Loại hợp đồng *', sel('LoaiHD', loaiHDAll(d.LoaiHD)))}
@@ -1728,7 +1729,7 @@ function vHD(el) {
     ${fld('Chức vụ', inp('ChucVu'))}
     ${fld('Số điện thoại', inp('SDT'))}
     ${fld('Số tài khoản', inp('SoTK'))}
-    ${fld('Ngân hàng', inp('NganHang', 'list="dl-nh"'))}${datalist('dl-nh', BANKS.map(b => b[1]))}
+    ${fld('Ngân hàng', inp('NganHang', 'list="dl-nh"'))}${datalist('dl-nh', S.nganHang.map(b => b[1]))}
   </div></div>
   <div class="card" style="margin-top:16px"><div class="card-h"><h3>3. Bảng hàng hóa</h3>${khoa ? '<span class="muted" style="margin-left:auto;font-size:12.5px">Hợp đồng đã hiệu lực: chỉ quản trị sửa hàng và số tiền</span>' : ''}</div>
     <div class="lines-wrap"><table class="lines" style="min-width:720px"><thead><tr><th style="width:40px">#</th><th>Hàng hóa, dịch vụ</th><th style="width:90px">ĐVT</th><th class="num" style="width:90px">SL</th><th class="num" style="width:130px">Đơn giá</th><th class="num" style="width:140px">Thành tiền</th><th style="width:44px"></th></tr></thead><tbody></tbody></table></div>
@@ -1746,6 +1747,8 @@ function vHD(el) {
     if (!a) return;
     const b = S.hd;
     if (a.dataset.act === 'newkh') openKhach(null, pickHDKhach);
+    else if (a.dataset.act === 'taofile') await taoFileHD();
+    else if (a.dataset.act === 'pdf') await taiPdfHD();
     else if (a.dataset.act === 'addline') { b.lines.push(blankHDLine()); drawHDLines(el); focusCell(el, b.lines.length - 1, 'TenHang'); }
     else if (a.dataset.act === 'rm') { b.lines.splice(+a.dataset.i, 1); hdTail(); drawHDLines(el); drawHDTotals(el); setDirty(true); }
   });
@@ -1853,6 +1856,30 @@ async function saveHD() {
     render();
     toast(`Đã lưu hợp đồng ${head.SoHD}.`);
   } finally { saving = false; }
+}
+
+// Tạo (hoặc tạo lại) file Google Docs từ mẫu; chưa lưu thì lưu trước
+async function taoFileHD(khongHoi) {
+  if (!S.hd.SoHD || S.dirty) { await saveHD(); if (!S.hd.SoHD || S.dirty) return; }
+  if (S.hd.FileId && !khongHoi && S.hd.FileCu !== '1' && !confirm('Tạo lại sẽ thay file hiện có (file cũ chuyển vào thùng rác Google Drive). Tiếp tục?')) return;
+  const r = await api('taoFileHopDong', S.hd.SoHD);
+  const head = Object.assign({}, r.doc); delete head.lines;
+  upsertLocal('hopDong', 'SoHD', head);
+  Object.assign(S.hd, { FileId: head.FileId, LinkFile: head.LinkFile, NgayFile: head.NgayFile, FileCu: head.FileCu });
+  render();
+  toast('Đã tạo file hợp đồng ' + head.SoHD + '.');
+  if (r.conSot.length) toast('Mẫu còn biến chưa nhận ra, giữ nguyên trong file: ' + r.conSot.join(', ') + '. Sửa file mẫu rồi tạo lại.', 'err');
+}
+// Tải PDF luôn khớp nội dung mới nhất: chưa có file hoặc file đã cũ thì tạo lại trước
+async function taiPdfHD() {
+  if (!S.hd.SoHD || S.dirty) { await saveHD(); if (!S.hd.SoHD || S.dirty) return; }
+  if (!S.hd.FileId || S.hd.FileCu === '1') await taoFileHD(true);
+  const r = await api('taiPdfHopDong', S.hd.SoHD);
+  const url = URL.createObjectURL(new Blob([Uint8Array.from(atob(r.base64), c => c.charCodeAt(0))], { type: 'application/pdf' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = r.ten; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  toast('Đã tải ' + r.ten);
 }
 
 async function delHD() {
@@ -2071,6 +2098,7 @@ function vCaiDat(el) {
         : `<p class="muted" style="margin-bottom:0">Chưa bật mã QR chuyển khoản${isAdmin() ? ' – bấm Sửa, chọn ngân hàng và nhập số tài khoản.' : '.'}</p>`}
     </div></div>
   </div>
+  ${isAdmin() ? mauHDCard() : ''}
   ${ds.length > 1 ? `<details class="card adv"><summary>${icon('settings')}Nâng cao</summary><div class="card-b">
     <h4 style="margin:0 0 4px">Cửa hàng đang làm việc</h4>
     <p class="muted" style="margin:0 0 12px">Mỗi cửa hàng có khách hàng, hàng hóa, chứng từ, kho và công nợ riêng. Lần đăng nhập sau sẽ mở lại ${esc(ds[0].ten)}.</p>
@@ -2079,9 +2107,48 @@ function vCaiDat(el) {
   el.onclick = run(async e => {
     const a = e.target.closest('[data-act]'), sh = e.target.closest('[data-shop]');
     if (a && a.dataset.act === 'shop') openCuaHang();
+    else if (a && a.dataset.act.startsWith('mau-')) await mauHDAct(a);
     else if (a) $(a.dataset.act === 'pass' ? '#btnPass' : '#btnOut').click();
     if (sh && sh.dataset.shop !== shop.id) await switchShop(sh.dataset.shop);
   });
+}
+
+// Mẫu hợp đồng (quản trị): mỗi loại hợp đồng một file Google Docs mẫu
+function mauHDCard() {
+  const rows = S.mauHD.map((m, i) => `<tr><td><b>${esc(m.LoaiHD)}</b><span class="sub">${esc(m.MoTa)}</span></td>
+    <td><a class="more" href="${esc(m.LinkMau)}" target="_blank" rel="noopener">Mở file mẫu</a></td><td class="num"><a class="more" data-act="mau-sua" data-i="${i}">Sửa</a> · <a class="more" data-act="mau-xoa" data-i="${i}">Xóa</a></td></tr>`).join('');
+  return `<div class="card" style="margin-top:16px"><div class="card-h"><h3>Mẫu hợp đồng (Google Docs)</h3><a class="more" data-act="mau-bien">Danh sách biến</a></div><div class="card-b">
+    <p class="muted" style="margin-top:0">Mỗi loại hợp đồng là một file Google Docs mẫu: sửa nội dung và điều khoản ngay trong file. Khi tạo hợp đồng, app chép file mẫu rồi thay các biến như {{TENDOANHNGHIEP}}. File mẫu và hợp đồng nằm trong thư mục "Hợp đồng - tên cửa hàng" trên Google Drive của chủ script. Bộ mẫu mặc định chỉ là khung tham khảo, nên nhờ luật sư rà soát trước khi dùng.</p>
+    ${rows ? `<table class="mini">${rows}</table>` : '<p class="muted">Chưa có mẫu nào. Bấm "Tạo lại mẫu mặc định".</p>'}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn sm" data-act="mau-them">${icon('plus')}Thêm loại hợp đồng</button><button class="btn sm" data-act="mau-macdinh">${icon('refresh')}Tạo lại mẫu mặc định</button></div>
+  </div></div>`;
+}
+async function mauHDAct(a) {
+  const act = a.dataset.act, m = S.mauHD[+a.dataset.i];
+  const nhan = r => { S.mauHD = r.mauHD; S.loaiHD = r.loaiHD; render(); };
+  if (act === 'mau-them' || act === 'mau-sua') {
+    modal({
+      title: m ? 'Sửa mẫu: ' + m.LoaiHD : 'Thêm loại hợp đồng',
+      body: formHtml([['LoaiHD', 'Tên loại hợp đồng *', { ro: !!m, full: true }], ['LinkMau', 'Link file Google Docs mẫu *', { full: true, ph: 'https:/' + '/docs.google.com/document/d/…' }], ['MoTa', 'Mô tả ngắn', { full: true }]], m || {})
+        + '<p class="muted">Tài khoản Google chạy script phải mở được file này (file của chính chủ script thì được). Không dùng file Word .docx: mở bằng Google Docs rồi chọn Tệp → Lưu dưới dạng Google Docs.</p>',
+      buttons: [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', save: true, fn: run(async mm => { nhan(await api('luuMauHopDong', formData(mm))); closeModal(); toast('Đã lưu mẫu hợp đồng.'); }) }],
+    });
+  } else if (act === 'mau-xoa') {
+    if (!confirm(`Xóa mẫu "${m.LoaiHD}"? File Google Docs vẫn còn trong Drive; các hợp đồng đã tạo không đổi.`)) return;
+    nhan(await api('xoaMauHopDong', m.LoaiHD)); toast('Đã xóa mẫu.');
+  } else if (act === 'mau-macdinh') {
+    const r = await api('taoMauMacDinh');
+    nhan(r); toast(r.moi.length ? 'Đã tạo ' + r.moi.length + ' mẫu: ' + r.moi.join(', ') + '.' : 'Đã đủ mẫu mặc định, không tạo thêm.');
+  } else if (act === 'mau-bien') {
+    const ds = await api('bienHopDongMau');
+    const mm = modal({ title: 'Biến dùng trong file mẫu', wide: true,
+      body: '<p class="muted" style="margin-top:0">Gõ đúng như bên dưới (chữ hoa, hai dấu ngoặc nhọn) vào file Google Docs mẫu. Bấm vào biến để sao chép. Biến chưa có dữ liệu sẽ in dấu chấm để điền tay.</p><div class="tbl-wrap" style="max-height:440px"><table class="tbl"><thead><tr><th>Biến</th><th>Nội dung</th></tr></thead><tbody>'
+        + ds.map(b => `<tr><td><code class="code" data-copy="{{${esc(b[0])}}}" style="cursor:copy">{{${esc(b[0])}}}</code></td><td>${esc(b[1])}</td></tr>`).join('') + '</tbody></table></div>', buttons: [] });
+    mm.querySelector('tbody').onclick = e => {
+      const c = e.target.closest('[data-copy]'); if (!c) return;
+      Promise.resolve().then(() => navigator.clipboard.writeText(c.dataset.copy)).then(() => toast('Đã sao chép ' + c.dataset.copy)).catch(() => toast('Trình duyệt không cho sao chép tự động, hãy bôi đen và Ctrl+C.', 'err'));
+    };
+  }
 }
 
 // Quản trị sửa thông tin của cửa hàng đang làm việc (lưu ở trang CaiDat trong Sheet)
@@ -2096,7 +2163,7 @@ function openCuaHang() {
       ['chuHo', 'Chủ hộ / người đại diện (in trên sổ doanh thu)'], ['mst', 'Mã số thuế'],
       ['vatMacDinh', 'Thuế GTGT mặc định (%)', { type: 'number' }], ['baoHanhThang', 'Bảo hành mặc định (tháng)', { type: 'number' }],
       ['hinhThuc', 'Hình thức thu tiền (mỗi dòng một hình thức)', { area: true }],
-      ['qrNganHang', 'Mã QR chuyển khoản – ngân hàng', { options: [['', '— Không dùng mã QR —'], ...BANKS] }], ['qrSoTK', 'Số tài khoản nhận tiền', { ph: 'Viết liền, không dấu cách' }],
+      ['qrNganHang', 'Mã QR chuyển khoản – ngân hàng', { options: [['', '— Không dùng mã QR —'], ...S.nganHang] }], ['qrSoTK', 'Số tài khoản nhận tiền', { ph: 'Viết liền, không dấu cách' }],
       ['qrChuTK', 'Tên chủ tài khoản (không dấu)'], ['kyTen', 'Chức danh người ký báo giá'],
       ['nganHang', 'Dòng thông tin thanh toán in trên chứng từ', { full: true }],
       ['loiMo', 'Lời mở đầu báo giá', { area: true }], ['dieuKien', 'Điều kiện thương mại (mỗi dòng một ý)', { area: true }], ['gioiThieu', 'Giới thiệu cuối báo giá', { area: true }],

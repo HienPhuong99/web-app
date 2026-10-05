@@ -41,7 +41,7 @@ try { require('./kiem-trinh-duyet-hopdong')(BUOC); } catch (e) { if (e.code !== 
   let out = '';
   server.stdout.on('data', d => { out += d; });
   server.stderr.on('data', d => { out += d; });
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ env: Object.assign({}, process.env, { LANG: process.env.LANG || 'C.UTF-8' }) }); // không có locale UTF-8 thì Chromium bỏ tên tệp tải về có dấu tiếng Việt
   let loi = 0;
   try {
     for (let i = 0; i < 100 && !/Chạy thử tại/.test(out); i++) await new Promise(r => setTimeout(r, 100));
