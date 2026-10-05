@@ -35,7 +35,7 @@ let CUR_SHOP = SHOP_MAC_DINH; // cửa hàng của lần gọi hiện tại, l�
 const TABLES = {
   TaiKhoan: ['TenDangNhap', 'HoTen', 'VaiTro', 'MatKhau', 'Muoi', 'TrangThai', 'CuaHang', 'NgayTao'],
   CaiDat: ['Khoa', 'GiaTri'],
-  KhachHang: ['MaKH', 'TenKH', 'NguoiLienHe', 'SDT', 'DiaChi', 'MST', 'Email', 'GhiChu', 'NgayTao', 'NguoiTao'],
+  KhachHang: ['MaKH', 'TenKH', 'NguoiLienHe', 'SDT', 'DiaChi', 'MST', 'Email', 'GhiChu', 'NgayTao', 'NguoiTao', 'NguoiDaiDien', 'ChucVu', 'SoTK', 'NganHang', 'VanPhongGD'], // 5 cột cuối: thông tin bên A khi lập hợp đồng
   HangHoa: ['MaHH', 'TenHang', 'Model', 'NhomHang', 'PhanLoai', 'DVT', 'XuatXu', 'GiaSi', 'GiaLe', 'TonToiThieu', 'GhiChu', 'BaoHanh'],
   BaoGia: ['SoBG', 'Ngay', 'MaKH', 'TenKH', 'NguoiNhan', 'SDT', 'DiaChi', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'GhiChu', 'NguoiTao', 'NgayTao', 'NgaySua'],
   BaoGiaCT: ['SoBG', 'STT', 'MaHH', 'TenHang', 'Model', 'DVT', 'XuatXu', 'SoLuong', 'LoaiGia', 'DonGia', 'ThanhTien'],
@@ -45,11 +45,16 @@ const TABLES = {
   PhieuKhoCT: ['SoPK', 'STT', 'MaHH', 'TenHang', 'Model', 'DVT', 'SoLuong', 'IMEI'],
   ThuTien: ['SoPT', 'Ngay', 'MaKH', 'TenKH', 'SoDH', 'SoTien', 'HinhThuc', 'GhiChu', 'NguoiTao', 'NgayTao'],
   NhatKy: ['ThoiGian', 'NguoiDung', 'HanhDong', 'DoiTuong', 'ChiTiet'],
+  // Hợp đồng: bên A = khách (các cột TenDN…NganHang), bên B = cửa hàng (lấy từ cài đặt cửa hàng khi tạo file)
+  HopDong: ['SoHD', 'Ngay', 'LoaiHD', 'SoDH', 'MaKH', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang',
+    'NgayHieuLuc', 'NgayHetHan', 'NguoiPhuTrach', 'TrangThai', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'BangChu', 'GhiChu', 'FileId', 'LinkFile', 'NguoiTao', 'NgayTao', 'NgaySua'],
+  HopDongCT: ['SoHD', 'STT', 'MaHH', 'TenHang', 'DVT', 'SoLuong', 'DonGia', 'ThanhTien'],
+  MauHopDong: ['LoaiHD', 'LinkMau', 'MoTa', 'NgayTao'], // mỗi loại hợp đồng một file Google Docs mẫu
 };
 const SHARED = ['TaiKhoan', 'CaiDat']; // trang dùng chung cho mọi cửa hàng, không có tiền tố
 const NUMBER_COLS = ['GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien'];
 const SESSION_TTL = 6 * 60 * 60; // giây; tối đa của CacheService, tự gia hạn khi còn dùng
-const SCHEMA = '2'; // tăng số này khi thêm bảng/cột ở TABLES: app tự thêm phần thiếu ở lần gọi đầu sau khi triển khai
+const SCHEMA = '3'; // tăng số này khi thêm bảng/cột ở TABLES: app tự thêm phần thiếu ở lần gọi đầu sau khi triển khai
 
 // Loại chứng từ có dòng hàng. Số chứng từ dạng 001-2026/DH, mỗi năm đánh lại từ 001 (riêng từng cửa hàng).
 const CT = {
@@ -290,7 +295,7 @@ function taiDuLieu(token) {
     user: user, congTy: ch.congTy,
     cuaHang: { id: CUR_SHOP, ten: ch.ten, moTa: ch.moTa, icon: s.icon, mau: s.mau }, dsCuaHang: ds,
     khach: readTable_('KhachHang'), hang: hang, baoGia: readTable_('BaoGia'), donHang: donHang,
-    phieuKho: readTable_('PhieuKho'), thuTien: readTable_('ThuTien'),
+    phieuKho: readTable_('PhieuKho'), thuTien: readTable_('ThuTien'), hopDong: readTable_('HopDong'), mauHD: readTable_('MauHopDong'),
     ton: tonKho_(), thongKe: thongKe_(donHang, hang, Utilities.formatDate(new Date(Date.now() - 90 * 864e5), tz_(), 'yyyy-MM-dd'), '', 8),
   };
 }
@@ -604,6 +609,112 @@ function xoaThuTien(token, soPT) {
     deleteWhere_('ThuTien', soPT);
     log_(user, 'Xóa phiếu thu', soPT, pt ? pt.TenKH + ' · ' + pt.SoTien + ' đ' : '');
   });
+}
+
+// ===== Hợp đồng =====
+// Bên A = khách, bên B = cửa hàng. Trạng thái lưu: HD_TRANG_THAI; "Sắp hết hạn"/"Đã hết hạn" tính từ NgayHetHan, không lưu.
+const HD_TRANG_THAI = ['Soạn thảo', 'Đang hiệu lực', 'Tạm dừng', 'Hoàn thành'];
+const HD_DA_KY = ['Đang hiệu lực', 'Hoàn thành']; // đã ký: nhân viên không đổi hàng và số tiền, chỉ quản trị
+
+function layHopDong(token, soHD) {
+  user_(token);
+  return { lines: readTable_('HopDongCT').filter(l => String(l.SoHD) === String(soHD)).sort((a, b) => a.STT - b.STT) };
+}
+
+/** Lập hoặc sửa hợp đồng (chưa tạo file Docs). Tiền và bằng chữ luôn tính lại ở máy chủ. */
+function luuHopDong(token, doc) {
+  const user = user_(token);
+  doc = doc || {};
+  const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  const ngay = (v, ten) => {
+    v = str(v, 10);
+    if (v && (!/^\d{4}-\d{2}-\d{2}$/.test(v) || new Date(v + 'T00:00:00Z').toISOString().slice(0, 10) !== v)) throw new Error(ten + ' không hợp lệ (cần dạng năm-tháng-ngày).');
+    return v;
+  };
+  const head = {
+    SoHD: str(doc.SoHD, 40), Ngay: ngay(doc.Ngay, 'Ngày ký') || now_().slice(0, 10), LoaiHD: str(doc.LoaiHD, 80), SoDH: str(doc.SoDH, 40), MaKH: str(doc.MaKH, 20),
+    TenDN: str(doc.TenDN, 150), DiaChi: str(doc.DiaChi, 250), VanPhongGD: str(doc.VanPhongGD, 250), MST: str(doc.MST, 20),
+    NguoiDaiDien: str(doc.NguoiDaiDien, 100), ChucVu: str(doc.ChucVu, 60), SDT: str(doc.SDT, 40), SoTK: str(doc.SoTK, 40), NganHang: str(doc.NganHang, 100),
+    NgayHieuLuc: ngay(doc.NgayHieuLuc, 'Ngày hiệu lực'), NgayHetHan: ngay(doc.NgayHetHan, 'Ngày hết hạn'), NguoiPhuTrach: str(doc.NguoiPhuTrach, 60),
+    TrangThai: HD_TRANG_THAI.includes(doc.TrangThai) ? doc.TrangThai : HD_TRANG_THAI[0], VAT: Math.min(100, Math.max(0, +doc.VAT || 0)), GhiChu: str(doc.GhiChu, 1000),
+  };
+  if (!head.LoaiHD) throw new Error('Chọn loại hợp đồng.');
+  if (!head.TenDN) throw new Error('Nhập tên khách hàng (bên A).');
+  if (head.NgayHieuLuc && head.NgayHetHan && head.NgayHetHan < head.NgayHieuLuc) throw new Error('Ngày hết hạn phải sau ngày hiệu lực.');
+  const lines = (doc.lines || []).filter(l => String(l.TenHang || '').trim()).slice(0, 200).map((l, i) => {
+    const o = { STT: i + 1, MaHH: str(l.MaHH, 20), TenHang: str(l.TenHang, 200), DVT: str(l.DVT, 30), SoLuong: +l.SoLuong || 0, DonGia: Math.round(+l.DonGia || 0) };
+    if (o.SoLuong <= 0) throw new Error('Dòng ' + o.STT + ': số lượng phải lớn hơn 0.');
+    if (o.DonGia < 0) throw new Error('Dòng ' + o.STT + ': đơn giá không được âm.');
+    o.ThanhTien = Math.round(o.SoLuong * o.DonGia);
+    return o;
+  });
+  head.TienHang = lines.reduce((t, l) => t + l.ThanhTien, 0);
+  head.TienVAT = Math.round(head.TienHang * head.VAT / 100);
+  head.TongCong = head.TienHang + head.TienVAT;
+  head.BangChu = docTienChu_(head.TongCong);
+  head.NgaySua = now_();
+  return withLock_(() => {
+    const old = head.SoHD ? findObj_('HopDong', head.SoHD) : null;
+    if (head.SoHD && !old) throw new Error('Không tìm thấy hợp đồng ' + head.SoHD + ' (có thể đã bị xóa).');
+    if (head.SoDH && !findObj_('DonHang', head.SoDH)) throw new Error('Không tìm thấy đơn hàng ' + head.SoDH + '.');
+    if (old && HD_DA_KY.includes(old.TrangThai) && user.vaiTro !== 'admin') {
+      const khoa = ls => JSON.stringify(ls.map(l => [String(l.MaHH), String(l.TenHang), String(l.DVT), +l.SoLuong, +l.DonGia]));
+      const cu = readTable_('HopDongCT').filter(l => String(l.SoHD) === head.SoHD).sort((a, b) => a.STT - b.STT);
+      if (khoa(cu) !== khoa(lines) || +old.VAT !== head.VAT) throw new Error('Hợp đồng đã hiệu lực: chỉ quản trị được sửa hàng hóa và số tiền. Có thay đổi thì nhân bản thành hợp đồng mới.');
+    }
+    if (!old) { head.NguoiTao = user.ten; head.NgayTao = head.NgaySua; }
+    upsert_('HopDong', head, () => nextSo_('HopDong', 'HD', head.Ngay), ['NguoiTao', 'NgayTao', 'FileId', 'LinkFile']);
+    deleteWhere_('HopDongCT', head.SoHD);
+    if (lines.length) {
+      const sh = sheet_('HopDongCT');
+      const rows = lines.map(l => toRow_(sh, Object.assign({ SoHD: head.SoHD }, l)));
+      sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+    }
+    log_(user, (old ? 'Sửa' : 'Thêm') + ' hợp đồng', head.SoHD, head.TenDN + ' · ' + head.LoaiHD + ' · ' + head.TongCong + ' đ');
+    head.lines = lines;
+    return { doc: head };
+  });
+}
+
+function xoaHopDong(token, soHD) {
+  const user = user_(token, true);
+  withLock_(() => {
+    const hd = findObj_('HopDong', soHD);
+    if (!hd) throw new Error('Không tìm thấy hợp đồng ' + soHD + '.');
+    deleteWhere_('HopDong', soHD);
+    deleteWhere_('HopDongCT', soHD);
+    log_(user, 'Xóa hợp đồng', soHD, hd.TenDN + ' · ' + hd.LoaiHD);
+  });
+}
+
+/** Số tiền thành chữ tiếng Việt, vd. 112420000 → "Một trăm mười hai triệu bốn trăm hai mươi nghìn đồng chẵn." */
+function docTienChu_(n) {
+  n = Math.round(+n || 0);
+  if (Math.abs(n) > 999999999999999) throw new Error('Số tiền quá lớn để đọc thành chữ.');
+  if (n === 0) return 'Không đồng chẵn.';
+  const chu = (n < 0 ? 'âm ' : '') + docSo_(Math.abs(n), false) + ' đồng chẵn.';
+  return chu.charAt(0).toUpperCase() + chu.slice(1);
+}
+function docSo_(n, daCoTruoc) { // n nguyên dương; daCoTruoc = phía trước đã đọc nhóm lớn hơn (nhóm này đọc đủ "không trăm", "linh")
+  if (n >= 1e9) return docSo_(Math.floor(n / 1e9), daCoTruoc) + ' tỷ' + (n % 1e9 ? ' ' + docSo_(n % 1e9, true) : '');
+  const out = [];
+  let co = daCoTruoc;
+  [[Math.floor(n / 1e6) % 1000, 'triệu'], [Math.floor(n / 1e3) % 1000, 'nghìn'], [n % 1000, '']].forEach(g => {
+    if (!g[0]) return;
+    out.push(docSo3_(g[0], co) + (g[1] ? ' ' + g[1] : ''));
+    co = true;
+  });
+  return out.join(' ');
+}
+function docSo3_(n, co) { // n 1..999
+  const CH = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+  const tram = Math.floor(n / 100), chuc = Math.floor(n / 10) % 10, dv = n % 10, out = [];
+  if (tram || co) out.push(CH[tram] + ' trăm');
+  if (chuc > 1) out.push(CH[chuc] + ' mươi');
+  else if (chuc === 1) out.push('mười');
+  else if (dv && (tram || co)) out.push('linh');
+  if (dv) out.push(dv === 1 && chuc > 1 ? 'mốt' : dv === 5 && chuc > 0 ? 'lăm' : CH[dv]);
+  return out.join(' ');
 }
 
 // ===== Tài khoản =====

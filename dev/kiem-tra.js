@@ -199,6 +199,72 @@ assert.strictEqual(plain(G.dsNhatKy(admin))[0].HanhDong, 'Hủy đơn hàng');
 G.luuChungTu(admin, 'DH', Object.assign({}, dhP, { TrangThai: '' }));
 assert.ok(!sheets.DM_NhatKy.rows.some(r => /Anh Minh/.test(r[4])));
 
+// ===== Hợp đồng (GĐ1) =====
+// Số tiền thành chữ: các ca khó của tiếng Việt (linh, mốt, lăm, không trăm) và ví dụ trong video hướng dẫn
+[[0, 'Không đồng chẵn.'], [1, 'Một đồng chẵn.'], [11, 'Mười một đồng chẵn.'], [15, 'Mười lăm đồng chẵn.'], [21, 'Hai mươi mốt đồng chẵn.'], [25, 'Hai mươi lăm đồng chẵn.'],
+  [101, 'Một trăm linh một đồng chẵn.'], [105, 'Một trăm linh năm đồng chẵn.'], [1005, 'Một nghìn không trăm linh năm đồng chẵn.'], [21000, 'Hai mươi mốt nghìn đồng chẵn.'],
+  [112420000, 'Một trăm mười hai triệu bốn trăm hai mươi nghìn đồng chẵn.'], [1001001, 'Một triệu không trăm linh một nghìn không trăm linh một đồng chẵn.'],
+  [2500000000, 'Hai tỷ năm trăm triệu đồng chẵn.'], [1e12, 'Một nghìn tỷ đồng chẵn.'], [-5000, 'Âm năm nghìn đồng chẵn.'], [1234.6, 'Một nghìn hai trăm ba mươi lăm đồng chẵn.']]
+  .forEach(([n, chu]) => assert.strictEqual(G.docTienChu_(n), chu, 'docTienChu_(' + n + ')'));
+assert.throws(() => G.docTienChu_(1e16), /quá lớn/);
+
+// Bảng mới và cột mới của khách hàng có sẵn
+assert.ok(['PS_HopDong', 'PS_HopDongCT', 'PS_MauHopDong', 'DM_HopDong'].every(n => sheets[n]));
+assert.ok(['NguoiDaiDien', 'ChucVu', 'SoTK', 'NganHang', 'VanPhongGD'].every(c => sheets.PS_KhachHang.rows[0].includes(c)));
+const khHD = G.luuKhach(admin, { TenKH: 'Công ty Minh Long', NguoiDaiDien: 'Nguyễn Văn Hùng', ChucVu: 'Giám đốc', SoTK: '288273663', NganHang: 'VP Bank', VanPhongGD: 'Q.12', MST: '0312456789' });
+assert.deepStrictEqual([G.findObj_('KhachHang', khHD.MaKH).NguoiDaiDien, G.findObj_('KhachHang', khHD.MaKH).SoTK], ['Nguyễn Văn Hùng', '288273663']);
+
+// Lập hợp đồng: kiểm tra đầu vào
+const hdLines = [{ MaHH: 'HH0001', TenHang: 'Thép xây dựng D16', DVT: 'Tấn', SoLuong: 1, DonGia: 15200000, ThanhTien: 1 }, { TenHang: '  ' },
+  { TenHang: 'Sơn nước nội thất', DVT: 'Thùng', SoLuong: 100, DonGia: 680000 }, { TenHang: 'Ống nhựa PVC Ø60', DVT: 'Mét', SoLuong: 500, DonGia: 38000 }];
+const hdMau = { LoaiHD: 'Hợp đồng mua bán', TenDN: 'Công ty Minh Long', MaKH: khHD.MaKH, VAT: 10, Ngay: '2026-01-25', lines: hdLines };
+assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { LoaiHD: ' ' })), /Chọn loại hợp đồng/);
+assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { TenDN: '' })), /tên khách hàng/);
+assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { Ngay: '2026-02-30' })), /Ngày ký không hợp lệ/);
+assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { NgayHieuLuc: '2026-03-01', NgayHetHan: '2026-02-01' })), /hết hạn phải sau/);
+assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { lines: [{ TenHang: 'X', SoLuong: 0, DonGia: 1 }] })), /số lượng phải lớn hơn 0/);
+assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { lines: [{ TenHang: 'X', SoLuong: 1, DonGia: -5 }] })), /không được âm/);
+assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { SoDH: 'khong-co' })), /Không tìm thấy đơn hàng/);
+assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { SoHD: '999-2026/HD' })), /Không tìm thấy hợp đồng/);
+assert.strictEqual(sheets.PS_HopDong.rows.length, 1); // lỗi thì không ghi gì
+
+// Lưu: số tự đánh theo năm của ngày ký, tiền và bằng chữ tính ở máy chủ (không tin số trình duyệt gửi), bỏ dòng trống
+const hd = G.luuHopDong(admin, Object.assign({}, hdMau, { TongCong: 1, TienHang: 1, BangChu: 'giả', LinkFile: 'https://evil.example', FileId: 'x', NgayHetHan: '2027-01-25', NguoiPhuTrach: 'Linh', SoDH: dhP.SoDH })).doc;
+assert.deepStrictEqual([hd.SoHD, hd.TrangThai, hd.TienHang, hd.TienVAT, hd.TongCong, hd.lines.length], ['001-2026/HD', 'Soạn thảo', 102200000, 10220000, 112420000, 3]);
+assert.strictEqual(hd.BangChu, 'Một trăm mười hai triệu bốn trăm hai mươi nghìn đồng chẵn.');
+assert.deepStrictEqual([hd.FileId || '', hd.LinkFile || ''], ['', '']); // file chỉ do máy chủ gán khi tạo file Docs
+assert.deepStrictEqual(plain(G.layHopDong(lan, hd.SoHD).lines).map(l => [l.STT, l.TenHang, l.ThanhTien]), [[1, 'Thép xây dựng D16', 15200000], [2, 'Sơn nước nội thất', 68000000], [3, 'Ống nhựa PVC Ø60', 19000000]]);
+assert.strictEqual(G.luuHopDong(lan, Object.assign({}, hdMau, { Ngay: '2027-03-01' })).doc.SoHD, '001-2027/HD'); // năm khác đánh lại từ 001
+assert.strictEqual(G.luuHopDong(lan, hdMau).doc.SoHD, '002-2026/HD');
+assert.strictEqual(G.luuHopDong(lan, Object.assign({}, hdMau, { lines: [] })).doc.TongCong, 0); // hợp đồng nguyên tắc không cần dòng hàng
+
+// Sửa: giữ số, người lập, file; thay toàn bộ dòng; không đụng hợp đồng khác
+const hdRow = sheets.PS_HopDong.rows.findIndex(r => r[0] === hd.SoHD), cols = sheets.PS_HopDong.rows[0];
+sheets.PS_HopDong.rows[hdRow][cols.indexOf('FileId')] = 'id-that'; sheets.PS_HopDong.rows[hdRow][cols.indexOf('LinkFile')] = 'https://docs.google.com/document/d/id-that';
+const sua1 = G.luuHopDong(lan, Object.assign({}, hd, { NguoiTao: 'ai đó', LinkFile: 'https://evil.example', lines: [{ TenHang: 'Thép D16', DVT: 'Tấn', SoLuong: 2, DonGia: 15000000 }] })).doc;
+assert.deepStrictEqual([sua1.SoHD, sua1.NguoiTao, sua1.FileId, sua1.LinkFile, sua1.TongCong], [hd.SoHD, 'Quản trị', 'id-that', 'https://docs.google.com/document/d/id-that', 33000000]);
+assert.strictEqual(rowsOf('PS_HopDongCT', hd.SoHD).length, 1);
+assert.strictEqual(rowsOf('PS_HopDongCT', '002-2026/HD').length, 3);
+
+// Đã hiệu lực: nhân viên đổi trạng thái được nhưng không sửa hàng/số tiền; quản trị sửa được
+const hieuLuc = Object.assign({}, sua1, { TrangThai: 'Đang hiệu lực', lines: [{ TenHang: 'Thép D16', DVT: 'Tấn', SoLuong: 2, DonGia: 15000000 }] });
+assert.strictEqual(G.luuHopDong(lan, hieuLuc).doc.TrangThai, 'Đang hiệu lực');
+assert.throws(() => G.luuHopDong(lan, Object.assign({}, hieuLuc, { lines: [{ TenHang: 'Thép D16', DVT: 'Tấn', SoLuong: 3, DonGia: 15000000 }] })), /đã hiệu lực/);
+assert.throws(() => G.luuHopDong(lan, Object.assign({}, hieuLuc, { VAT: 8 })), /đã hiệu lực/);
+assert.strictEqual(G.luuHopDong(lan, Object.assign({}, hieuLuc, { GhiChu: 'đổi ghi chú' })).doc.GhiChu, 'đổi ghi chú');
+assert.strictEqual(G.luuHopDong(admin, Object.assign({}, hieuLuc, { lines: [{ TenHang: 'Thép D16', DVT: 'Tấn', SoLuong: 3, DonGia: 15000000 }] })).doc.TongCong, 49500000);
+
+// Xóa: chỉ quản trị; xóa cả dòng hàng; mỗi cửa hàng một sổ riêng
+assert.throws(() => G.xoaHopDong(lan, '002-2026/HD'), /quản trị/);
+G.xoaHopDong(admin, '002-2026/HD');
+assert.deepStrictEqual([rowsOf('PS_HopDong', '002-2026/HD').length, rowsOf('PS_HopDongCT', '002-2026/HD').length], [0, 0]);
+assert.throws(() => G.xoaHopDong(admin, '002-2026/HD'), /Không tìm thấy/);
+assert.deepStrictEqual([G.taiDuLieu(admin).hopDong.length, G.taiDuLieu(admin).mauHD.length], [sheets.PS_HopDong.rows.length - 1, 0]);
+G.chonCuaHang(admin, 'demo');
+assert.deepStrictEqual([G.taiDuLieu(admin).hopDong.length, G.luuHopDong(admin, hdMau).doc.SoHD], [0, '001-2026/HD']);
+G.chonCuaHang(admin, 'phone');
+assert.ok(plain(G.dsNhatKy(admin)).some(x => x.HanhDong === 'Thêm hợp đồng' && x.DoiTuong === hd.SoHD) && plain(G.dsNhatKy(admin)).some(x => x.HanhDong === 'Xóa hợp đồng' && x.DoiTuong === '002-2026/HD'));
+
 // Khóa tài khoản / quản trị đặt lại mật khẩu: phiên đang đăng nhập hết hiệu lực ngay; chỉ đổi tên thì không
 const tkLan = { TenDangNhap: 'lan.nguyen', HoTen: 'Lan', VaiTro: 'nhanvien', CuaHang: 'phone' };
 G.luuTaiKhoan(admin, Object.assign({ TrangThai: 'Khóa' }, tkLan));
