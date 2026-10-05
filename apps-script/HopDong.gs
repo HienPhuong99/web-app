@@ -492,6 +492,27 @@ function taiPdfHopDong(token, soHD) {
   } catch (e) { throw loiDocs_(e); }
 }
 
+/**
+ * Tạo hợp đồng mới từ một hợp đồng có sẵn: giữ bên A, hàng hóa, VAT; đổi sang loại mới nếu có; ngày ký là hôm nay, ngày hiệu lực/hết hạn để trống.
+ * taoFile = tạo luôn file Docs. Gọi từng hợp đồng một (tạo hàng loạt do giao diện lặp), nên một hợp đồng lỗi không ảnh hưởng hợp đồng khác
+ * và mỗi lần gọi ngắn, không chạm giới hạn thời gian của Apps Script. Lỗi tạo file không làm mất hợp đồng vừa lập (trả về loiFile).
+ */
+function nhanBanHopDong(token, soNguon, loaiMoi, taoFile) {
+  user_(token);
+  const goc = findObj_('HopDong', soNguon);
+  if (!goc) throw new Error('Không tìm thấy hợp đồng ' + soNguon + '.');
+  const doc = { LoaiHD: String(loaiMoi || '').trim() || goc.LoaiHD, Ngay: now_().slice(0, 10), TrangThai: HD_TRANG_THAI[0], VAT: goc.VAT, NguoiPhuTrach: goc.NguoiPhuTrach,
+    SoDH: goc.SoDH && findObj_('DonHang', goc.SoDH) ? goc.SoDH : '', lines: dongHopDong_(soNguon) };
+  ['MaKH', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang'].forEach(k => { doc[k] = goc[k]; });
+  const kq = { nguon: soNguon, doc: luuHopDong(token, doc).doc };
+  if (taoFile) {
+    try { const f = taoFileHopDong(token, kq.doc.SoHD); kq.doc = f.doc; kq.conSot = f.conSot; }
+    catch (e) { kq.loiFile = String((e && e.message) || e); }
+  }
+  delete kq.doc.lines;
+  return kq;
+}
+
 // ===== Quản lý mẫu (quản trị) =====
 function trangMau_() { return { mauHD: readTable_('MauHopDong'), loaiHD: loaiHopDong_() }; }
 

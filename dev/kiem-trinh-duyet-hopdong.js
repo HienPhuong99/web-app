@@ -136,6 +136,59 @@ module.exports = BUOC => {
     await page.keyboard.press('Escape');
   }]);
 
+  BUOC.push(['Hợp đồng: lập từ đơn hàng, nhân bản', async page => {
+    await page.evaluate(async () => {
+      await api('luuChungTu', 'DH', { Ngay: today(), MaKH: 'KH00001', TenKH: 'Anh Minh', VAT: 10, lines: [{ MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', DVT: 'Máy', SoLuong: 3, DonGia: 11300000 }] });
+      await loadAll(); await openDoc('DH', S.donHang[0]);
+    });
+    await nut(page, 'Tạo hợp đồng').click();
+    await page.waitForSelector('input[data-h="TenDN"]');
+    assert.strictEqual(await page.inputValue('input[data-h="TenDN"]'), 'Anh Minh');
+    assert.match(await page.inputValue('select[data-h="SoDH"]'), /^\d{3}-\d{4}\/DH$/);
+    assert.match(await page.inputValue('tr[data-i="0"] [data-f="TenHang"]'), /iPhone 15/);
+    assert.strictEqual(so(await page.locator('[data-t="tong"]').textContent()), '37290000'); // 3 x 11.300.000 + 10%
+    await nut(page, 'Lưu').click();
+    await page.waitForFunction(() => /Hợp đồng \d{3}-\d{4}\/HD/.test(document.querySelector('#title').textContent), null, { timeout: 8000 });
+    const so1 = await page.evaluate(() => S.hd.SoHD);
+    assert.ok((await page.evaluate(() => S.hd.SoDH)).length > 0, 'Hợp đồng phải gắn với đơn hàng');
+    await nut(page, 'Nhân bản').click();
+    await page.waitForFunction(() => document.querySelector('#title').textContent.startsWith('Hợp đồng mới'));
+    assert.strictEqual(so(await page.locator('[data-t="tong"]').textContent()), '37290000');
+    assert.strictEqual(await page.inputValue('input[data-h="NgayHetHan"]'), '');
+    await nut(page, 'Lưu').click();
+    await page.waitForFunction(old => /Hợp đồng \d{3}-\d{4}\/HD/.test(document.querySelector('#title').textContent) && !document.querySelector('#title').textContent.includes(old), so1, { timeout: 8000 });
+  }]);
+
+  BUOC.push(['Hợp đồng: tạo hàng loạt từ nhiều hợp đồng nguồn', async page => {
+    await page.evaluate(() => go('hopdong'));
+    const truoc = await page.evaluate(() => S.hopDong.length);
+    await nut(page, 'Tạo hàng loạt').click();
+    await page.waitForSelector('#modal [data-list] [data-so]');
+    await page.fill('#modal [data-q]', 'anh minh');
+    const nguon = await page.locator('#modal [data-list] [data-so]').count();
+    assert.ok(nguon >= 3, 'Phải tìm thấy các hợp đồng của Anh Minh: ' + nguon);
+    await page.click('#modal [data-all]');
+    assert.strictEqual(Number(await page.locator('#modal [data-n]').textContent()), nguon);
+    await page.selectOption('#modal select[name=loai]', 'Hợp đồng nguyên tắc');
+    await shot(page, 'hd-7-hang-loat');
+    await page.click('#modal [data-b="0"]');
+    await page.waitForSelector('text=/Xong: tạo được \\d+\\/\\d+ hợp đồng/', { timeout: 20000 });
+    assert.ok(await page.locator('#modal [data-kq]', { hasText: `tạo được ${nguon}/${nguon}` }).count() === 1);
+    const moi = await page.evaluate(() => S.hopDong.filter(h => h.LoaiHD === 'Hợp đồng nguyên tắc'));
+    assert.strictEqual(moi.length, nguon);
+    assert.ok(moi.every(h => h.FileId && h.TrangThai === 'Soạn thảo' && !h.NgayHetHan), 'Mỗi hợp đồng mới có file, ở trạng thái soạn thảo, chưa có ngày hết hạn');
+    assert.strictEqual(await page.evaluate(() => S.hopDong.length), truoc + nguon);
+    await shot(page, 'hd-8-hang-loat-xong');
+    await page.keyboard.press('Escape');
+    await page.selectOption('select[data-f="loai"]', 'Hợp đồng nguyên tắc');
+    assert.strictEqual(await page.locator('tbody tr[data-i]').count(), nguon);
+    // không chọn gì thì báo lỗi
+    await nut(page, 'Tạo hàng loạt').click();
+    await page.click('#modal [data-b="0"]');
+    await page.waitForSelector('#toast .err');
+    await page.keyboard.press('Escape');
+  }]);
+
   BUOC.push(['Hợp đồng: màn hình điện thoại không tràn ngang', async page => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => newHD());

@@ -1010,6 +1010,7 @@ function openKhach(kh, onPicked) {
       ...(!isNew && !onPicked ? [
         { t: 'Lập báo giá', ic: 'file', fn: () => { closeModal(); newDoc('BG', prefill()); } },
         { t: 'Tạo đơn hàng', ic: 'cart', fn: () => { closeModal(); newDoc('DH', prefill()); } },
+        { t: 'Lập hợp đồng', ic: 'clipboard', fn: () => { closeModal(); newHD(benAKhach(kh)); } },
         { t: 'Thu tiền', ic: 'card', fn: () => { closeModal(); openThu({ MaKH: kh.MaKH }); } },
       ] : []),
       ...(!isNew && isAdmin() ? [{ t: 'Xóa', ic: 'trash', cls: 'danger', fn: run(async () => {
@@ -1211,6 +1212,7 @@ function vDoc(el) {
     if (d.TrangThai !== 'Đã giao') btns.push({ t: 'Giao hàng', ic: 'truck', cls: 'soft', fn: run(giaoHang) });
     if (conNo(d) > 0) btns.push({ t: 'Thu tiền', ic: 'card', cls: 'soft', fn: () => openThu({ SoDH: d.SoDH }) });
   }
+  if (L === 'DH' && saved && d.TrangThai !== 'Hủy') btns.push({ t: 'Tạo hợp đồng', ic: 'clipboard', cls: 'soft', fn: run(() => hdTuDon(d)) });
   if (L === 'DH' && saved) btns.push({ t: d.TrangThai === 'Hủy' ? 'Khôi phục đơn' : 'Hủy đơn', ic: 'x', fn: run(huyDon) });
   if (L === 'XK' && d.SoDH) {
     const dh = S.donHang.find(x => x.SoDH === d.SoDH);
@@ -1637,8 +1639,10 @@ function ttHD(h) {
 }
 const loaiHDAll = (cur) => [...new Set([...S.loaiHD, ...S.hopDong.map(h => h.LoaiHD), cur].filter(Boolean))]; // gồm cả loại của hợp đồng cũ đã bỏ khỏi danh sách mẫu
 
+// Chuỗi tìm kiếm của hợp đồng: dùng một hàm duy nhất vì kết quả được nhớ theo từng bản ghi (xem matches)
+const hdText = r => [r.SoHD, r.TenDN, r.MST, r.NguoiDaiDien, r.SDT, digits(r.SDT), r.LoaiHD, r.NguoiPhuTrach, r.SoDH, r.GhiChu].join(' ');
 function vHopDong(el) {
-  setTop('Hợp đồng', 'Hợp đồng', [{ t: 'Lập hợp đồng', ic: 'plus', cls: 'primary', fn: () => newHD() }]);
+  setTop('Hợp đồng', 'Hợp đồng', [{ t: 'Tạo hàng loạt', ic: 'layers', fn: () => openHDHangLoat() }, { t: 'Lập hợp đồng', ic: 'plus', cls: 'primary', fn: () => newHD() }]);
   S.onNew = () => newHD();
   listCard(el, {
     id: 'hopdong', ph: 'Tìm số hợp đồng, khách hàng, MST, SĐT…',
@@ -1658,7 +1662,7 @@ function vHopDong(el) {
       { t: 'Trạng thái', f: r => `${ttHD(r)}${r.NguoiPhuTrach ? `<span class="sub">${esc(r.NguoiPhuTrach)}</span>` : ''}` },
     ],
     data: () => S.hopDong,
-    text: r => [r.SoHD, r.TenDN, r.MST, r.NguoiDaiDien, r.SDT, digits(r.SDT), r.LoaiHD, r.NguoiPhuTrach, r.SoDH, r.GhiChu].join(' '),
+    text: hdText,
     open: run(r => openHD(r)),
     foot: rows => `<span>${rows.length} hợp đồng</span><span>Tổng giá trị <b>${money(sum(rows, r => r.TongCong))} ₫</b></span>`,
   });
@@ -1694,6 +1698,7 @@ async function openHD(h) {
 function vHD(el) {
   const d = S.hd, saved = !!d.SoHD, khoa = !!S.extra.khoa;
   const btns = [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', fn: run(saveHD) }];
+  if (saved) btns.push({ t: 'Nhân bản', ic: 'copy', fn: run(nhanBanHD) });
   if (isAdmin() && saved) btns.push({ t: 'Xóa', ic: 'trash', cls: 'danger', fn: run(delHD) });
   setTop('Hợp đồng', hdTitle() + (S.dirty ? ' •' : ''), btns);
   S.onNew = () => newHD();
@@ -1813,16 +1818,90 @@ function pickHDHang(i, h) {
   focusCell(el, i, gia === '' ? 'DonGia' : 'SoLuong');
 }
 
-// Chọn khách có sẵn: điền thông tin bên A (người đại diện lấy theo người đại diện, không có thì người liên hệ)
+// Thông tin bên A lấy từ khách hàng (người đại diện lấy theo người đại diện, không có thì người liên hệ)
+const benAKhach = kh => ({ MaKH: kh.MaKH, TenDN: kh.TenKH, DiaChi: kh.DiaChi || '', VanPhongGD: kh.VanPhongGD || '', MST: kh.MST || '', NguoiDaiDien: kh.NguoiDaiDien || kh.NguoiLienHe || '',
+  ChucVu: kh.ChucVu || '', SDT: kh.SDT || '', SoTK: kh.SoTK || '', NganHang: kh.NganHang || '' });
 function pickHDKhach(kh) {
   const d = S.hd, el = $('#view');
-  Object.assign(d, { MaKH: kh.MaKH, TenDN: kh.TenKH, DiaChi: kh.DiaChi || '', VanPhongGD: kh.VanPhongGD || '', MST: kh.MST || '', NguoiDaiDien: kh.NguoiDaiDien || kh.NguoiLienHe || '',
-    ChucVu: kh.ChucVu || '', SDT: kh.SDT || '', SoTK: kh.SoTK || '', NganHang: kh.NganHang || '' });
+  Object.assign(d, benAKhach(kh));
   if (!S.donHang.some(x => x.SoDH === d.SoDH && x.MaKH === kh.MaKH)) d.SoDH = '';
   el.querySelectorAll('input[data-h]').forEach(i => { i.value = d[i.dataset.h] ?? ''; });
   $('select[data-h="SoDH"]', el).innerHTML = hdOrderOptions();
   $('[data-ro="MaKH"]', el).textContent = 'Mã khách: ' + kh.MaKH;
   setDirty(true);
+}
+
+// Lập hợp đồng từ đơn hàng đã lưu: chép khách, VAT và các dòng hàng
+async function hdTuDon(dh) {
+  if (S.dirty) throw new Error('Lưu đơn hàng trước khi lập hợp đồng.');
+  const co = S.hopDong.filter(h => h.SoDH === dh.SoDH);
+  if (co.length && !confirm(`Đơn ${dh.SoDH} đã có hợp đồng ${co.map(h => h.SoHD).join(', ')}. Vẫn lập thêm hợp đồng mới?`)) return;
+  const kh = S.khach.find(x => x.MaKH === dh.MaKH);
+  const ben = kh ? benAKhach(kh) : { MaKH: dh.MaKH || '', TenDN: dh.TenKH, DiaChi: dh.DiaChi || '', SDT: dh.SDT || '', NguoiDaiDien: dh.NguoiNhan || '' };
+  if (newHD(Object.assign(ben, { SoDH: dh.SoDH, VAT: dh.VAT, lines: filled(dh.lines).map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, DVT: l.DVT, SoLuong: l.SoLuong, DonGia: l.DonGia })) }))) {
+    setDirty(true);
+    toast(`Đã chép khách và hàng từ đơn ${dh.SoDH}. Chọn loại hợp đồng, kiểm tra rồi bấm Lưu.`);
+  }
+}
+
+// Nhân bản: bản sao chưa lưu của hợp đồng đang mở (đổi loại hợp đồng ở bước 1 nếu muốn dùng mẫu khác)
+function nhanBanHD() {
+  const b = S.hd;
+  if (S.dirty) throw new Error('Lưu hợp đồng trước khi nhân bản.');
+  if (editHD(Object.assign({}, b, { SoHD: '', FileId: '', LinkFile: '', NgayFile: '', FileCu: '', NguoiTao: '', NgayTao: '', NgaySua: '', TrangThai: 'Soạn thảo', Ngay: today(), NgayHieuLuc: '', NgayHetHan: '',
+    lines: filled(b.lines).map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, DVT: l.DVT, SoLuong: l.SoLuong, DonGia: l.DonGia })) }))) {
+    setDirty(true);
+    toast('Đã tạo bản sao: sửa rồi bấm Lưu để có số hợp đồng mới.');
+  }
+}
+
+// Tạo hàng loạt: chọn nhiều hợp đồng nguồn + một loại hợp đồng mới, tạo lần lượt từng cái (mỗi cái một lần gọi máy chủ, lỗi cái nào báo cái đó)
+function openHDHangLoat() {
+  const sel = new Set(), TOI_DA = 20;
+  const m = modal({
+    title: 'Tạo hợp đồng hàng loạt', wide: true,
+    body: `<p class="muted" style="margin-top:0">Chọn các hợp đồng có sẵn làm nguồn: mỗi hợp đồng được chép (bên A, hàng hóa, VAT) thành một hợp đồng mới thuộc loại bạn chọn, ngày ký là hôm nay, ngày hiệu lực và hết hạn để trống. Mỗi lần tối đa ${TOI_DA} hợp đồng.</p>
+      <label class="field"><span class="lb">Hợp đồng nguồn (chọn nhiều)</span><input type="search" data-q placeholder="Tìm số hợp đồng, khách hàng, loại hợp đồng…"></label>
+      <div style="display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap"><button class="btn sm" data-all>Chọn tất cả</button><button class="btn sm" data-none>Bỏ chọn</button><span class="muted">Đã chọn: <b data-n>0</b></span></div>
+      <div data-list class="tbl-wrap" style="max-height:250px;padding:4px 8px"></div>
+      <div class="fgrid" style="margin-top:12px"><label class="field"><span class="lb">Loại hợp đồng mới (chung cho tất cả)</span><select name="loai">${loaiHDAll().map(x => `<option>${esc(x)}</option>`).join('')}</select></label>
+      <label class="check" style="align-self:end;padding-bottom:8px"><input type="checkbox" name="taofile" checked><b>Tạo luôn file Google Docs</b></label></div>
+      <div data-kq style="margin-top:10px"></div>`,
+    buttons: [{ t: 'Tạo hàng loạt', ic: 'plus', cls: 'primary', fn: run(chay) }],
+  });
+  const q = $('[data-q]', m), list = $('[data-list]', m);
+  const hien = () => {
+    const w = words(q.value), ds = S.hopDong.filter(h => matches(w, h, hdText));
+    list.innerHTML = ds.length ? ds.slice(0, 200).map(h => `<label class="check" style="display:flex;gap:8px;padding:5px 2px"><input type="checkbox" data-so="${esc(h.SoHD)}"${sel.has(h.SoHD) ? ' checked' : ''}>
+      <span><b>${esc(h.SoHD)}</b> · ${esc(h.TenDN)}<span class="sub">${esc(h.LoaiHD)} · ${money(h.TongCong)} ₫</span></span></label>`).join('') : '<p class="muted">Không có hợp đồng phù hợp.</p>';
+    $('[data-n]', m).textContent = sel.size;
+  };
+  q.oninput = hien;
+  list.onchange = e => { const c = e.target.closest('[data-so]'); if (c) { c.checked ? sel.add(c.dataset.so) : sel.delete(c.dataset.so); hien(); } };
+  $('[data-all]', m).onclick = () => { list.querySelectorAll('[data-so]').forEach(c => sel.add(c.dataset.so)); hien(); };
+  $('[data-none]', m).onclick = () => { sel.clear(); hien(); };
+  hien();
+  async function chay() {
+    const ds = [...sel];
+    if (!ds.length) throw new Error('Chọn ít nhất 1 hợp đồng nguồn.');
+    if (ds.length > TOI_DA) throw new Error(`Mỗi lần tối đa ${TOI_DA} hợp đồng. Bỏ bớt ${ds.length - TOI_DA} hợp đồng.`);
+    const loai = $('[name=loai]', m).value, taoFile = $('[name=taofile]', m).checked, kq = $('[data-kq]', m);
+    kq.innerHTML = '';
+    let ok = 0;
+    for (const so of ds) {
+      const dong = document.createElement('div');
+      dong.textContent = `… ${so}: đang tạo`; kq.append(dong);
+      try {
+        const r = await api('nhanBanHopDong', so, loai, taoFile);
+        upsertLocal('hopDong', 'SoHD', r.doc); ok++;
+        dong.innerHTML = `<span class="green">✔</span> ${esc(so)} → <b>${esc(r.doc.SoHD)}</b>${r.loiFile ? ` <span class="warn">(chưa tạo được file: ${esc(r.loiFile)})</span>` : r.conSot && r.conSot.length ? ` <span class="warn">(mẫu còn biến lạ: ${esc(r.conSot.join(', '))})</span>` : ''}`;
+      } catch (e) { dong.innerHTML = `<span class="red">✘</span> ${esc(so)}: ${esc(errMsg(e))}`; }
+      if (!document.body.contains(kq)) break; // đã đóng hộp thoại: dừng
+    }
+    sortAll(); render();
+    if (document.body.contains(kq)) kq.insertAdjacentHTML('afterbegin', `<p><b>Xong: tạo được ${ok}/${ds.length} hợp đồng.</b></p>`);
+    toast(`Đã tạo ${ok}/${ds.length} hợp đồng.`, ok === ds.length ? '' : 'err');
+  }
 }
 
 async function saveHD() {
