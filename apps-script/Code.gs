@@ -295,7 +295,7 @@ function taiDuLieu(token) {
     user: user, congTy: ch.congTy,
     cuaHang: { id: CUR_SHOP, ten: ch.ten, moTa: ch.moTa, icon: s.icon, mau: s.mau }, dsCuaHang: ds,
     khach: readTable_('KhachHang'), hang: hang, baoGia: readTable_('BaoGia'), donHang: donHang,
-    phieuKho: readTable_('PhieuKho'), thuTien: readTable_('ThuTien'), hopDong: readTable_('HopDong'), mauHD: readTable_('MauHopDong'),
+    phieuKho: readTable_('PhieuKho'), thuTien: readTable_('ThuTien'), hopDong: readTable_('HopDong'), mauHD: readTable_('MauHopDong'), loaiHD: loaiHopDong_(),
     ton: tonKho_(), thongKe: thongKe_(donHang, hang, Utilities.formatDate(new Date(Date.now() - 90 * 864e5), tz_(), 'yyyy-MM-dd'), '', 8),
   };
 }
@@ -614,6 +614,18 @@ function xoaThuTien(token, soPT) {
 // ===== Hợp đồng =====
 // Bên A = khách, bên B = cửa hàng. Trạng thái lưu: HD_TRANG_THAI; "Sắp hết hạn"/"Đã hết hạn" tính từ NgayHetHan, không lưu.
 const HD_TRANG_THAI = ['Soạn thảo', 'Đang hiệu lực', 'Tạm dừng', 'Hoàn thành'];
+// Loại hợp đồng có sẵn (ngành điện thoại). caiDat tạo file Google Docs mẫu cho từng loại rồi ghi vào trang MauHopDong; quản trị thêm/xóa loại ở đó.
+const HD_LOAI_MAC_DINH = [
+  { ten: 'Hợp đồng mua bán', moTa: 'Bán lẻ/bán sỉ điện thoại, phụ kiện: bảng hàng, giá, thanh toán, giao nhận, bảo hành.' },
+  { ten: 'Hợp đồng nguyên tắc', moTa: 'Khung cho khách mua thường xuyên: chính sách giá, thanh toán, công nợ; từng đơn mua theo phụ lục hoặc đơn hàng.' },
+  { ten: 'Hợp đồng đại lý – phân phối', moTa: 'Đại lý/cộng tác viên nhận hàng bán lại: chiết khấu, chỉ tiêu, công nợ, bảo hành, đổi trả.' },
+  { ten: 'Hợp đồng thu cũ đổi mới', moTa: 'Mua lại máy cũ của khách (định giá, IMEI, xác nhận quyền sở hữu, xóa dữ liệu) để đổi máy mới.' },
+  { ten: 'Hợp đồng dịch vụ sửa chữa – bảo hành', moTa: 'Nhận máy sửa chữa/bảo hành: tình trạng máy, chi phí, thời gian, bảo hành sau sửa.' },
+];
+function loaiHopDong_() {
+  const ds = readTable_('MauHopDong').map(m => String(m.LoaiHD)).filter(Boolean);
+  return ds.length ? ds : HD_LOAI_MAC_DINH.map(l => l.ten);
+}
 const HD_DA_KY = ['Đang hiệu lực', 'Hoàn thành']; // đã ký: nhân viên không đổi hàng và số tiền, chỉ quản trị
 
 function layHopDong(token, soHD) {
@@ -713,7 +725,7 @@ function docSo3_(n, co) { // n 1..999
   if (chuc > 1) out.push(CH[chuc] + ' mươi');
   else if (chuc === 1) out.push('mười');
   else if (dv && (tram || co)) out.push('linh');
-  if (dv) out.push(dv === 1 && chuc > 1 ? 'mốt' : dv === 5 && chuc > 0 ? 'lăm' : CH[dv]);
+  if (dv) out.push(dv === 1 && chuc > 1 ? 'mốt' : dv === 5 && chuc > 0 ? 'lăm' : dv === 4 && chuc > 1 ? 'tư' : CH[dv]); // giống hàm docSo trong Index.html (in báo giá) để hai nơi đọc như nhau
   return out.join(' ');
 }
 

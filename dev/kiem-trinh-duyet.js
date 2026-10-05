@@ -16,6 +16,24 @@ BUOC.push(['Đăng nhập, chỉ còn một cửa hàng', async page => {
   await page.waitForSelector('text=Thông tin cửa hàng');
   assert.strictEqual(await page.locator('text=Nâng cao').count(), 0, 'Mục Nâng cao (chọn cửa hàng) phải ẩn khi chỉ có 1 cửa hàng');
 }]);
+BUOC.push(['Báo giá vẫn lập, lưu và hỏi khi bỏ dở (hồi quy sau khi thêm Hợp đồng)', async page => {
+  const hoi = [];
+  const ghi = d => { hoi.push(d.message()); d.accept(); };
+  page.on('dialog', ghi);
+  try {
+    await page.click('#nav a[data-go="baogia"]');
+    await page.locator('#topActions .btn', { hasText: 'Lập báo giá' }).click();
+    await page.fill('input[data-h="TenKH"]', 'minh');
+    await page.locator('#picker [data-i]').first().click();
+    await page.fill('tr[data-i="0"] [data-f="TenHang"]', 'iphone 16');
+    await page.locator('#picker [data-i]').first().click();
+    await page.locator('#topActions .btn', { hasText: 'Lưu' }).click();
+    await page.waitForFunction(() => /Báo giá \d{3}-\d{4}\/BG/.test(document.querySelector('#title').textContent), null, { timeout: 8000 });
+    await page.locator('#topActions .btn', { hasText: 'Sao chép' }).click(); // bản sao chưa lưu
+    await page.click('#nav a[data-go="home"]');
+    assert.ok(hoi.some(m => /chưa lưu/.test(m)), 'Phải hỏi khi bỏ bản sao chưa lưu: ' + hoi.join('|'));
+  } finally { page.off('dialog', ghi); }
+}]);
 try { require('./kiem-trinh-duyet-hopdong')(BUOC); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
 
 (async () => {

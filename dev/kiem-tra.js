@@ -208,6 +208,13 @@ assert.ok(!sheets.DM_NhatKy.rows.some(r => /Anh Minh/.test(r[4])));
   .forEach(([n, chu]) => assert.strictEqual(G.docTienChu_(n), chu, 'docTienChu_(' + n + ')'));
 assert.throws(() => G.docTienChu_(1e16), /quá lớn/);
 
+// Giao diện (Index.html, docSo: in báo giá và xem trước hợp đồng) và máy chủ (docTienChu_: ghi vào file hợp đồng) phải đọc số giống nhau
+const docSoGiaoDien = vm.runInNewContext(require('fs').readFileSync(require('path').join(__dirname, '..', 'apps-script', 'Index.html'), 'utf8').match(/function docSo\(n\) \{[\s\S]*?\n\}\n/)[0] + ';docSo');
+let seedRng = 12345; const rnd = () => (seedRng = (seedRng * 1103515245 + 12345) % 2147483648) / 2147483648;
+const mau = [0, 1, 4, 14, 24, 34, 104, 1004, 1e6 + 4, 1e9, 1e9 + 1, 2e9 + 24, 999999999999];
+for (let i = 0; i < 3000; i++) mau.push(Math.floor(rnd() * Math.pow(10, 1 + Math.floor(rnd() * 11))));
+mau.forEach(n => assert.strictEqual(G.docTienChu_(n), docSoGiaoDien(n) + ' chẵn.', 'Đọc số khác nhau ở ' + n)); // ≥ 1 nghìn tỷ hai bên đọc khác nhau nhưng không có thật trong cửa hàng
+
 // Bảng mới và cột mới của khách hàng có sẵn
 assert.ok(['PS_HopDong', 'PS_HopDongCT', 'PS_MauHopDong', 'DM_HopDong'].every(n => sheets[n]));
 assert.ok(['NguoiDaiDien', 'ChucVu', 'SoTK', 'NganHang', 'VanPhongGD'].every(c => sheets.PS_KhachHang.rows[0].includes(c)));

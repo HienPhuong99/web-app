@@ -325,7 +325,7 @@ table.lines { width: 100%; border-collapse: collapse; min-width: 1040px; }
 
 <script>
 // ===================== Trạng thái & tiện ích =====================
-const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], ton: {},
+const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], hopDong: [], mauHD: [], loaiHD: [], hd: null, ton: {},
   thongKe: { topHang: [], theoNhom: [] }, taiKhoan: null, baoHanh: null, nhatKy: null, view: 'home', loai: '', doc: null, extra: {}, dirty: false, q: {}, onNew: null };
 const D = { thuDH: {}, thuKH: {}, muaKH: {}, noKH: {}, dhBG: {} }; // số liệu suy ra: đã thu, công nợ, báo giá đã chốt
 const LG = { si: 'Giá sỉ', le: 'Giá lẻ', tuy: 'Giá tùy chọn' };
@@ -413,6 +413,7 @@ const IC = {
   flame: '<path d="M12 2c.6 3.4 4.6 5.4 4.6 10.2A4.6 4.6 0 0 1 12 17a4.6 4.6 0 0 1-4.6-4.8c0-2.4 1.3-3.9 2.4-4.9.2 1.8 1 2.9 2.2 3.4C11.4 8 11 5.2 12 2z"/><path d="M5 21h14"/>',
   award: '<circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>',
   chart: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+  clipboard: '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/>',
   clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
 };
@@ -491,7 +492,7 @@ function tonBadge(h) {
   return t <= 0 ? badge('Hết hàng', 'b-red') : isLow(h) ? badge('Sắp hết', 'b-amber') : badge('Còn hàng', 'b-green');
 }
 const byDate = (a, b) => String(b.Ngay + b.NgayTao).localeCompare(String(a.Ngay + a.NgayTao));
-function sortAll() { S.khach.sort((a, b) => String(b.MaKH).localeCompare(String(a.MaKH))); [S.baoGia, S.donHang, S.phieuKho, S.thuTien].forEach(l => l.sort(byDate)); }
+function sortAll() { S.khach.sort((a, b) => String(b.MaKH).localeCompare(String(a.MaKH))); [S.baoGia, S.donHang, S.phieuKho, S.thuTien, S.hopDong].forEach(l => l.sort(byDate)); }
 function upsertLocal(list, key, obj) {
   const i = S[list].findIndex(x => x[key] === obj[key]);
   if (i >= 0) S[list][i] = obj; else S[list].unshift(obj);
@@ -541,7 +542,7 @@ function applyShop() {
 async function switchShop(id) {
   const d = await api('chonCuaHang', id);
   Object.assign(S, d);
-  S.q = {}; S.taiKhoan = S.baoHanh = S.nhatKy = null; S.doc = null; S.dirty = false;
+  S.q = {}; S.taiKhoan = S.baoHanh = S.nhatKy = null; S.doc = S.hd = null; S.dirty = false;
   sortAll(); derive(); applyShop(); go('home');
   toast('Đang làm việc ở cửa hàng ' + S.cuaHang.ten + '.');
 }
@@ -578,6 +579,7 @@ $('#btnPass').onclick = () => modal({
 const NAV = [
   ['', [['home', 'Tổng quan', 'home'], ['baocao', 'Báo cáo & sổ doanh thu', 'chart']]],
   ['Bán hàng', [['baogia', 'Báo giá', 'file'], ['donhang', 'Đơn hàng', 'cart'], ['congno', 'Thu tiền & công nợ', 'card'], ['baohanh', 'Bảo hành', 'award']]],
+  ['Hợp đồng', [['hopdong', 'Hợp đồng', 'clipboard']]],
   ['Kho hàng', [['hang', 'Hàng hóa & bảng giá', 'box'], ['kho', 'Nhập – xuất kho', 'truck'], ['ton', 'Tồn kho', 'layers']]],
   ['Danh mục', [['khach', 'Khách hàng', 'users']]],
   ['Hệ thống', [['caidat', 'Cài đặt', 'settings'], ['taikhoan', 'Tài khoản', 'shield', true], ['nhatky', 'Nhật ký', 'clock', true]]],
@@ -590,7 +592,7 @@ const DOC = {
 };
 
 function drawNav() {
-  const cur = S.view === 'doc' ? DOC[S.loai].list : S.view;
+  const cur = S.view === 'doc' ? DOC[S.loai].list : S.view === 'hd' ? 'hopdong' : S.view;
   const cnt = {
     donhang: S.donHang.filter(d => d.TrangThai === 'Chờ giao' || d.TrangThai === 'Giao một phần').length,
     ton: S.hang.filter(isLow).length,
@@ -613,9 +615,10 @@ function setTop(crumb, title, buttons = []) {
   box.onclick = e => { const x = e.target.closest('[data-i]'); if (x) buttons[+x.dataset.i].fn(); };
 }
 
+const dangSoan = () => (S.view === 'doc' || S.view === 'hd') && S.dirty; // đang mở màn hình soạn (chứng từ hoặc hợp đồng) có thay đổi chưa lưu
 function go(view) {
-  if (S.view === 'doc' && view !== 'doc' && S.dirty && !confirm('Chứng từ đang soạn chưa lưu. Bỏ thay đổi?')) return false;
-  if (view !== 'doc') { S.doc = null; S.dirty = false; }
+  if (view !== 'doc' && view !== 'hd' && dangSoan() && !confirm('Chứng từ đang soạn chưa lưu. Bỏ thay đổi?')) return false;
+  if (view !== 'doc' && view !== 'hd') { S.doc = null; S.hd = null; S.dirty = false; }
   S.view = view;
   closeSide(); render(); window.scrollTo(0, 0);
   return true;
@@ -996,8 +999,9 @@ function openKhach(kh, onPicked) {
     body: formHtml([
       ['MaKH', 'Mã khách hàng', { ro: true, ph: 'Tự sinh khi lưu' }], ['TenKH', 'Tên khách hàng / công ty *'], ['NguoiLienHe', 'Người liên hệ'],
       ['SDT', 'Điện thoại', { ph: 'Nhiều số cách nhau bằng dấu /' }], ['DiaChi', 'Địa chỉ', { full: true }], ['MST', 'Mã số thuế'], ['Email', 'Email'],
+      ['NguoiDaiDien', 'Người đại diện (ký hợp đồng)'], ['ChucVu', 'Chức vụ'], ['VanPhongGD', 'Văn phòng giao dịch', { full: true }], ['SoTK', 'Số tài khoản'], ['NganHang', 'Ngân hàng', { list: 'dl-nh' }],
       ['GhiChu', 'Ghi chú', { area: true }],
-    ], kh) + extra,
+    ], kh) + datalist('dl-nh', BANKS.map(b => b[1])) + extra,
     buttons: [
       { t: 'Lưu (F8)', ic: 'save', cls: 'primary', save: true, fn: run(async m => {
         const d = formData(m);
@@ -1169,6 +1173,7 @@ function ensureTail() {
 function setDirty(v) {
   S.dirty = v;
   if (S.view === 'doc') $('#title').textContent = docTitle() + (v ? ' •' : '');
+  else if (S.view === 'hd') $('#title').textContent = hdTitle() + (v ? ' •' : '');
 }
 function docTitle() {
   const c = DOC[S.loai], d = S.doc;
@@ -1183,7 +1188,7 @@ function newDoc(loai, init) {
   editDoc(loai, Object.assign(base, init || {}), {});
 }
 function editDoc(loai, doc, extra) {
-  if (S.view === 'doc' && S.dirty && !confirm('Chứng từ đang soạn chưa lưu. Bỏ thay đổi?')) return false;
+  if (dangSoan() && !confirm('Chứng từ đang soạn chưa lưu. Bỏ thay đổi?')) return false;
   closeModal();
   S.loai = loai; S.doc = doc; S.extra = extra || {}; S.dirty = false;
   ensureTail();
@@ -1192,7 +1197,7 @@ function editDoc(loai, doc, extra) {
 }
 async function openDoc(loai, head) {
   if (!head) return;
-  if (S.view === 'doc' && S.dirty && !confirm('Chứng từ đang soạn chưa lưu. Bỏ thay đổi?')) return;
+  if (dangSoan() && !confirm('Chứng từ đang soạn chưa lưu. Bỏ thay đổi?')) return;
   const r = await api('layChungTu', loai, head[DOC[loai].key]);
   const goc = {}; // số lượng gốc của phiếu kho, để tính tồn khả dụng khi sửa phiếu xuất
   r.lines.forEach(l => { if (l.MaHH) goc[l.MaHH] = (goc[l.MaHH] || 0) + (+l.SoLuong || 0); });
@@ -1620,6 +1625,245 @@ $('#picker').addEventListener('mousedown', e => { const d = e.target.closest('[d
 document.addEventListener('focusout', e => { if (e.target === P.input) setTimeout(() => { if (document.activeElement !== P.input) hidePicker(); }, 150); });
 window.addEventListener('scroll', e => { if (e.target !== $('#picker')) hidePicker(); }, true);
 
+// ===================== Hợp đồng =====================
+// Bên A = khách hàng, bên B = cửa hàng. Trạng thái lưu ở máy chủ; "sắp hết hạn" / "đã hết hạn" tính từ ngày hết hạn.
+const HD_TT = { 'Soạn thảo': 'b-gray', 'Đang hiệu lực': 'b-blue', 'Tạm dừng': 'b-amber', 'Hoàn thành': 'b-green' };
+const HD_DA_KY = ['Đang hiệu lực', 'Hoàn thành']; // đã ký: nhân viên không sửa hàng và số tiền
+const HD_SAP = 30; // báo "sắp hết hạn" trước hạn bấy nhiêu ngày
+const HD_BEN_A = ['TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang'];
+function hanHD(h) { // hợp đồng đang hiệu lực đã quá hạn / sắp hết hạn, còn lại null
+  if (h.TrangThai !== 'Đang hiệu lực' || !h.NgayHetHan) return null;
+  const n = Math.round((Date.parse(h.NgayHetHan) - Date.parse(today())) / 864e5);
+  return n < 0 ? { het: true, n: -n } : n <= HD_SAP ? { sap: true, n } : null;
+}
+function ttHD(h) {
+  const x = hanHD(h);
+  if (x && x.het) return badge('Đã hết hạn', 'b-red');
+  if (x && x.sap) return badge(x.n ? 'Sắp hết hạn · còn ' + x.n + ' ngày' : 'Hết hạn hôm nay', 'b-amber');
+  return badge(h.TrangThai || 'Soạn thảo', HD_TT[h.TrangThai] || 'b-gray');
+}
+const loaiHDAll = (cur) => [...new Set([...S.loaiHD, ...S.hopDong.map(h => h.LoaiHD), cur].filter(Boolean))]; // gồm cả loại của hợp đồng cũ đã bỏ khỏi danh sách mẫu
+
+function vHopDong(el) {
+  setTop('Hợp đồng', 'Hợp đồng', [{ t: 'Lập hợp đồng', ic: 'plus', cls: 'primary', fn: () => newHD() }]);
+  S.onNew = () => newHD();
+  listCard(el, {
+    id: 'hopdong', ph: 'Tìm số hợp đồng, khách hàng, MST, SĐT…',
+    filters: [
+      { id: 'loai', options: [['', 'Mọi loại hợp đồng'], ...loaiHDAll().map(x => [x, x])] },
+      { id: 'tt', options: [['', 'Mọi trạng thái'], ...Object.keys(HD_TT).map(x => [x, x]), ['sap', 'Sắp hết hạn'], ['het', 'Đã hết hạn']] },
+      { id: 'ngay', type: 'dates' },
+    ],
+    filter: (r, f) => (!f.loai || r.LoaiHD === f.loai) && inRange(r.Ngay, f, 'ngay')
+      && (!f.tt || (f.tt === 'sap' ? !!(hanHD(r) || {}).sap : f.tt === 'het' ? !!(hanHD(r) || {}).het : r.TrangThai === f.tt)),
+    cols: [
+      { t: 'Số hợp đồng', f: r => `<span class="code">${esc(r.SoHD)}</span><span class="sub">Ký ${dmy(r.Ngay)}</span>` },
+      { t: 'Khách hàng (bên A)', cls: 'wrap', f: r => `<b>${esc(r.TenDN)}</b><span class="sub">${esc([r.NguoiDaiDien, r.SDT].filter(Boolean).join(' · '))}</span>` },
+      { t: 'Loại hợp đồng', cls: 'wrap', k: 'LoaiHD' },
+      { t: 'Giá trị', cls: 'num', f: r => +r.TongCong ? `<b>${money(r.TongCong)}</b>` : '<span class="muted">—</span>' },
+      { t: 'Hết hạn', f: r => r.NgayHetHan ? `${dmy(r.NgayHetHan)}${r.NgayHieuLuc ? `<span class="sub">Hiệu lực từ ${dmy(r.NgayHieuLuc)}</span>` : ''}` : '<span class="muted">—</span>' },
+      { t: 'Trạng thái', f: r => `${ttHD(r)}${r.NguoiPhuTrach ? `<span class="sub">${esc(r.NguoiPhuTrach)}</span>` : ''}` },
+    ],
+    data: () => S.hopDong,
+    text: r => [r.SoHD, r.TenDN, r.MST, r.NguoiDaiDien, r.SDT, digits(r.SDT), r.LoaiHD, r.NguoiPhuTrach, r.SoDH, r.GhiChu].join(' '),
+    open: run(r => openHD(r)),
+    foot: rows => `<span>${rows.length} hợp đồng</span><span>Tổng giá trị <b>${money(sum(rows, r => r.TongCong))} ₫</b></span>`,
+  });
+}
+
+const hdTitle = () => S.hd.SoHD ? 'Hợp đồng ' + S.hd.SoHD : 'Hợp đồng mới';
+const blankHDLine = () => ({ MaHH: '', TenHang: '', DVT: '', SoLuong: '', DonGia: '' });
+const hdTotal = () => { const t = sum(S.hd.lines, lineTotal), v = Math.min(100, Math.max(0, +S.hd.VAT || 0)), tv = Math.round(t * v / 100); return { tien: t, vat: v, tienVat: tv, tong: t + tv }; };
+function hdTail() { const ls = S.hd.lines; if (!ls.length || String(ls[ls.length - 1].TenHang).trim()) ls.push(blankHDLine()); }
+
+function newHD(init) {
+  const base = { SoHD: '', Ngay: today(), LoaiHD: S.loaiHD[0] || '', SoDH: '', MaKH: '', NgayHieuLuc: '', NgayHetHan: '', NguoiPhuTrach: S.user.ten, TrangThai: 'Soạn thảo',
+    VAT: S.congTy.vatMacDinh ?? 0, GhiChu: '', lines: [] };
+  HD_BEN_A.forEach(k => { base[k] = ''; });
+  return editHD(Object.assign(base, init || {}));
+}
+function editHD(doc) {
+  if (dangSoan() && !confirm('Chứng từ đang soạn chưa lưu. Bỏ thay đổi?')) return false;
+  closeModal();
+  S.hd = doc; S.dirty = false; S.extra = { khoa: !!doc.SoHD && HD_DA_KY.includes(doc.TrangThai) && !isAdmin() };
+  hdTail();
+  S.view = 'hd'; closeSide(); render(); window.scrollTo(0, 0);
+  return true;
+}
+async function openHD(h) {
+  if (!h) return;
+  if (dangSoan() && !confirm('Chứng từ đang soạn chưa lưu. Bỏ thay đổi?')) return;
+  const r = await api('layHopDong', h.SoHD);
+  S.dirty = false;
+  editHD(Object.assign({}, h, { lines: r.lines.map(l => Object.assign({}, l)) }));
+}
+
+function vHD(el) {
+  const d = S.hd, saved = !!d.SoHD, khoa = !!S.extra.khoa;
+  const btns = [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', fn: run(saveHD) }];
+  if (isAdmin() && saved) btns.push({ t: 'Xóa', ic: 'trash', cls: 'danger', fn: run(delHD) });
+  setTop('Hợp đồng', hdTitle() + (S.dirty ? ' •' : ''), btns);
+  S.onNew = () => newHD();
+  const fld = (label, html, cls = '') => `<label class="field ${cls}"><span class="lb">${label}</span>${html}</label>`;
+  const inp = (k, attrs = '') => `<input data-h="${k}" value="${esc(d[k])}" ${attrs}>`;
+  const sel = (k, opts) => `<select data-h="${k}">${opts.map(o => { const [v, t] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(v)}"${String(v) === String(d[k] ?? '') ? ' selected' : ''}>${esc(t)}</option>`; }).join('')}</select>`;
+  const t = hdTotal();
+  el.innerHTML = `
+  <div class="card"><div class="card-h"><h3>1. Loại hợp đồng và thông tin chung</h3></div><div class="doc-head">
+    ${fld('Số hợp đồng', `<input value="${esc(d.SoHD)}" readonly placeholder="Tự sinh khi lưu">`)}
+    ${fld('Loại hợp đồng *', sel('LoaiHD', loaiHDAll(d.LoaiHD)))}
+    ${fld('Ngày ký', inp('Ngay', 'type="date"'))}
+    ${fld('Trạng thái', sel('TrangThai', Object.keys(HD_TT)))}
+    ${fld('Ngày hiệu lực', inp('NgayHieuLuc', 'type="date"'))}
+    ${fld('Ngày hết hạn', inp('NgayHetHan', 'type="date"'))}
+    ${fld('Người phụ trách', inp('NguoiPhuTrach'))}
+    ${fld('Theo đơn hàng', `<select data-h="SoDH">${hdOrderOptions()}</select>`)}
+  </div></div>
+  <div class="card" style="margin-top:16px"><div class="card-h"><h3>2. Bên A – khách hàng</h3></div><div class="doc-head">
+    ${fld('Tên khách hàng / doanh nghiệp *', `<span class="row">${inp('TenDN', 'placeholder="Gõ tên hoặc SĐT để chọn khách đã có" autocomplete="off"')}<button class="btn sm" data-act="newkh" title="Thêm khách hàng mới">${icon('plus')}</button></span><small class="muted" data-ro="MaKH">${d.MaKH ? 'Mã khách: ' + esc(d.MaKH) : 'Chưa chọn khách trong danh sách'}</small>`)}
+    ${fld('Địa chỉ', inp('DiaChi'))}
+    ${fld('Văn phòng giao dịch', inp('VanPhongGD'))}
+    ${fld('Mã số thuế', inp('MST'))}
+    ${fld('Người đại diện', inp('NguoiDaiDien'))}
+    ${fld('Chức vụ', inp('ChucVu'))}
+    ${fld('Số điện thoại', inp('SDT'))}
+    ${fld('Số tài khoản', inp('SoTK'))}
+    ${fld('Ngân hàng', inp('NganHang', 'list="dl-nh"'))}${datalist('dl-nh', BANKS.map(b => b[1]))}
+  </div></div>
+  <div class="card" style="margin-top:16px"><div class="card-h"><h3>3. Bảng hàng hóa</h3>${khoa ? '<span class="muted" style="margin-left:auto;font-size:12.5px">Hợp đồng đã hiệu lực: chỉ quản trị sửa hàng và số tiền</span>' : ''}</div>
+    <div class="lines-wrap"><table class="lines" style="min-width:720px"><thead><tr><th style="width:40px">#</th><th>Hàng hóa, dịch vụ</th><th style="width:90px">ĐVT</th><th class="num" style="width:90px">SL</th><th class="num" style="width:130px">Đơn giá</th><th class="num" style="width:140px">Thành tiền</th><th style="width:44px"></th></tr></thead><tbody></tbody></table></div>
+    <div class="doc-foot">${khoa ? '' : `<button class="btn sm" data-act="addline">${icon('plus')}Thêm dòng</button>`}
+      <span class="hint">Gõ tên hoặc model để chọn hàng, đơn giá tự lấy từ bảng giá (giá sỉ nếu có, không thì giá lẻ) và sửa được. Hợp đồng không có hàng (vd. hợp đồng nguyên tắc) thì để trống bảng này.</span>
+      <div class="totals"><div><span>Cộng tiền hàng</span><b data-t="tien">${money(t.tien)} ₫</b></div>
+        <div><span>Thuế GTGT (%)</span><input data-h="VAT" type="number" min="0" max="100" step="any" value="${esc(d.VAT)}" style="width:84px;text-align:right"${khoa ? ' readonly' : ''}></div>
+        <div><span>Tiền thuế</span><b data-t="tienVat">${money(t.tienVat)} ₫</b></div>
+        <div class="sum"><span>Tổng thanh toán</span><span data-t="tong">${money(t.tong)} ₫</span></div></div></div>
+    <div class="doc-head" style="padding-top:0">${fld('Bằng chữ', `<input data-t="chu" value="${esc(docSo(t.tong) + ' chẵn.')}" readonly>`, 'full')}${fld('Ghi chú', inp('GhiChu', 'placeholder="Điều khoản bổ sung, ghi chú nội bộ"'), 'full')}</div></div>`;
+  drawHDLines(el);
+
+  el.onclick = run(async e => {
+    const a = e.target.closest('[data-act]');
+    if (!a) return;
+    const b = S.hd;
+    if (a.dataset.act === 'newkh') openKhach(null, pickHDKhach);
+    else if (a.dataset.act === 'addline') { b.lines.push(blankHDLine()); drawHDLines(el); focusCell(el, b.lines.length - 1, 'TenHang'); }
+    else if (a.dataset.act === 'rm') { b.lines.splice(+a.dataset.i, 1); hdTail(); drawHDLines(el); drawHDTotals(el); setDirty(true); }
+  });
+  el.oninput = e => onHDInput(el, e.target);
+}
+
+// Đơn hàng của khách đã chọn (đơn đang gắn vào hợp đồng luôn có mặt trong danh sách)
+function hdOrderOptions() {
+  const d = S.hd, ds = S.donHang.filter(x => x.TrangThai !== 'Hủy' && ((d.MaKH && x.MaKH === d.MaKH) || x.SoDH === d.SoDH));
+  return `<option value="">— Không gắn đơn hàng —</option>` + ds.map(x => `<option value="${esc(x.SoDH)}"${x.SoDH === d.SoDH ? ' selected' : ''}>${esc(x.SoDH)} · ${dmy(x.Ngay)} · ${money(x.TongCong)} ₫</option>`).join('');
+}
+
+function drawHDLines(el) {
+  const ls = S.hd.lines, n = ls.length, khoa = !!S.extra.khoa, ro = khoa ? ' readonly' : '';
+  $('tbody', el).innerHTML = ls.map((l, i) => `<tr data-i="${i}"><td class="c muted">${i + 1}</td>
+    <td><input data-f="TenHang" value="${esc(l.TenHang)}" autocomplete="off"${ro}${i === n - 1 && !khoa ? ' placeholder="Gõ tên / model để tìm hàng…"' : ''} aria-label="Tên hàng dòng ${i + 1}"></td>
+    <td><input data-f="DVT" value="${esc(l.DVT)}"${ro}></td>
+    <td><input data-f="SoLuong" class="num" type="number" min="0" step="any" value="${esc(l.SoLuong)}"${ro}></td>
+    <td><input data-f="DonGia" class="num money" inputmode="numeric" value="${money(l.DonGia)}"${ro} aria-label="Đơn giá dòng ${i + 1}"></td>
+    <td class="c num" data-c="ThanhTien">${l.TenHang ? money(lineTotal(l)) : ''}</td>
+    <td>${khoa ? '' : `<button class="icon-btn" data-act="rm" data-i="${i}" title="Xóa dòng" aria-label="Xóa dòng ${i + 1}">${icon('x')}</button>`}</td></tr>`).join('');
+}
+function drawHDTotals(el) {
+  const t = hdTotal();
+  $('[data-t="tien"]', el).textContent = money(t.tien) + ' ₫';
+  $('[data-t="tienVat"]', el).textContent = money(t.tienVat) + ' ₫';
+  $('[data-t="tong"]', el).textContent = money(t.tong) + ' ₫';
+  $('[data-t="chu"]', el).value = docSo(t.tong) + ' chẵn.';
+}
+
+function onHDInput(el, t) {
+  const d = S.hd;
+  if (t.dataset.h) {
+    d[t.dataset.h] = t.value;
+    if (t.dataset.h === 'TenDN') {
+      d.MaKH = ''; $('[data-ro="MaKH"]', el).textContent = 'Chưa chọn khách trong danh sách';
+      showPicker(t, khachSource, pickHDKhach);
+    }
+    if (t.dataset.h === 'VAT') drawHDTotals(el);
+    setDirty(true);
+    return;
+  }
+  const tr = t.closest('tr[data-i]'), f = t.dataset.f;
+  if (!tr || !f) return;
+  const i = +tr.dataset.i, l = d.lines[i];
+  if (f === 'DonGia') l.DonGia = parseMoney(t.value);
+  else if (f === 'SoLuong') l.SoLuong = t.value === '' ? '' : +t.value;
+  else l[f] = t.value;
+  if (f === 'TenHang') {
+    if (!t.value.trim()) l.MaHH = '';
+    showPicker(t, hangSource, h => pickHDHang(i, h));
+  }
+  $('[data-c="ThanhTien"]', tr).textContent = l.TenHang ? money(lineTotal(l)) : '';
+  drawHDTotals(el); setDirty(true);
+}
+
+function pickHDHang(i, h) {
+  const l = S.hd.lines[i], el = $('#view'), gia = h.GiaSi !== '' ? h.GiaSi : h.GiaLe;
+  Object.assign(l, { MaHH: h.MaHH, TenHang: h.TenHang, DVT: h.DVT, SoLuong: l.SoLuong || 1, DonGia: gia });
+  if (gia === '') toast(`"${h.TenHang}" chưa có giá – hãy nhập đơn giá.`, 'err');
+  hdTail(); drawHDLines(el); drawHDTotals(el); setDirty(true);
+  focusCell(el, i, gia === '' ? 'DonGia' : 'SoLuong');
+}
+
+// Chọn khách có sẵn: điền thông tin bên A (người đại diện lấy theo người đại diện, không có thì người liên hệ)
+function pickHDKhach(kh) {
+  const d = S.hd, el = $('#view');
+  Object.assign(d, { MaKH: kh.MaKH, TenDN: kh.TenKH, DiaChi: kh.DiaChi || '', VanPhongGD: kh.VanPhongGD || '', MST: kh.MST || '', NguoiDaiDien: kh.NguoiDaiDien || kh.NguoiLienHe || '',
+    ChucVu: kh.ChucVu || '', SDT: kh.SDT || '', SoTK: kh.SoTK || '', NganHang: kh.NganHang || '' });
+  if (!S.donHang.some(x => x.SoDH === d.SoDH && x.MaKH === kh.MaKH)) d.SoDH = '';
+  el.querySelectorAll('input[data-h]').forEach(i => { i.value = d[i.dataset.h] ?? ''; });
+  $('select[data-h="SoDH"]', el).innerHTML = hdOrderOptions();
+  $('[data-ro="MaKH"]', el).textContent = 'Mã khách: ' + kh.MaKH;
+  setDirty(true);
+}
+
+async function saveHD() {
+  if (saving) return;
+  const d = Object.assign({}, S.hd), lines = d.lines.filter(l => String(l.TenHang).trim());
+  if (!d.LoaiHD) throw new Error('Chọn loại hợp đồng.');
+  if (!String(d.TenDN).trim()) throw new Error('Nhập tên khách hàng (bên A).');
+  if (lines.some(l => !(+l.SoLuong > 0))) throw new Error('Nhập số lượng lớn hơn 0 cho mọi dòng hàng.');
+  if (d.NgayHieuLuc && d.NgayHetHan && d.NgayHetHan < d.NgayHieuLuc) throw new Error('Ngày hết hạn phải sau ngày hiệu lực.');
+  if (lines.some(l => l.DonGia === '' || l.DonGia == null) && !confirm('Có dòng chưa có đơn giá (sẽ tính 0 ₫). Vẫn lưu?')) return;
+  saving = true;
+  try {
+    // Khách chưa có trong danh sách: thêm để lần sau tự điền; khách có rồi mà thiếu thông tin bên A: bổ sung chỗ còn trống
+    const benA = { NguoiLienHe: d.NguoiDaiDien, SDT: d.SDT, DiaChi: d.DiaChi, MST: d.MST, NguoiDaiDien: d.NguoiDaiDien, ChucVu: d.ChucVu, VanPhongGD: d.VanPhongGD, SoTK: d.SoTK, NganHang: d.NganHang };
+    if (!d.MaKH) {
+      if (confirm(`Khách "${d.TenDN}" chưa có trong danh sách khách hàng. Thêm vào danh sách?`)) {
+        const kh = await api('luuKhach', Object.assign({ TenKH: d.TenDN }, benA));
+        upsertLocal('khach', 'MaKH', kh); d.MaKH = S.hd.MaKH = kh.MaKH;
+      }
+    } else {
+      const kh = S.khach.find(x => x.MaKH === d.MaKH), them = {};
+      if (kh) ['SDT', 'DiaChi', 'MST', 'NguoiDaiDien', 'ChucVu', 'VanPhongGD', 'SoTK', 'NganHang'].forEach(k => { if (!String(kh[k] || '').trim() && String(benA[k] || '').trim()) them[k] = benA[k]; });
+      if (kh && Object.keys(them).length && confirm(`Lưu thêm thông tin vừa nhập vào khách hàng "${kh.TenKH}" để lần sau tự điền?`)) upsertLocal('khach', 'MaKH', await api('luuKhach', Object.assign({}, kh, them)));
+    }
+    const r = await api('luuHopDong', Object.assign({}, d, { lines }));
+    const head = Object.assign({}, r.doc); delete head.lines;
+    upsertLocal('hopDong', 'SoHD', head); sortAll();
+    S.hd = Object.assign({}, head, { lines: r.doc.lines.map(l => Object.assign({}, l)) });
+    S.extra = { khoa: HD_DA_KY.includes(head.TrangThai) && !isAdmin() };
+    S.dirty = false; hdTail();
+    render();
+    toast(`Đã lưu hợp đồng ${head.SoHD}.`);
+  } finally { saving = false; }
+}
+
+async function delHD() {
+  const so = S.hd.SoHD;
+  if (!confirm(`Xóa hợp đồng ${so}? Không thể hoàn tác.`)) return;
+  await api('xoaHopDong', so);
+  S.hopDong = S.hopDong.filter(x => x.SoHD !== so);
+  S.dirty = false; go('hopdong');
+  toast(`Đã xóa hợp đồng ${so}.`);
+}
+
 // ===================== Bảo hành: tra theo IMEI/serial, SĐT, tên khách =====================
 function vBaoHanh(el) {
   setTop('Bán hàng', 'Tra cứu bảo hành');
@@ -1867,7 +2111,7 @@ function openCuaHang() {
 }
 
 // ===================== Phím tắt: F2 mới, F3 tìm, F8 lưu, Esc đóng =====================
-const VIEWS = { home: vHome, baogia: vBaoGia, donhang: vDonHang, congno: vCongNo, hang: vHang, kho: vKho, ton: vTon, khach: vKhach, taikhoan: vTaiKhoan, caidat: vCaiDat, baohanh: vBaoHanh, baocao: vBaoCao, nhatky: vNhatKy, doc: vDoc };
+const VIEWS = { home: vHome, baogia: vBaoGia, donhang: vDonHang, congno: vCongNo, hang: vHang, kho: vKho, ton: vTon, khach: vKhach, taikhoan: vTaiKhoan, caidat: vCaiDat, baohanh: vBaoHanh, hopdong: vHopDong, hd: vHD, baocao: vBaoCao, nhatky: vNhatKy, doc: vDoc };
 document.addEventListener('keydown', e => {
   if ($('#app').classList.contains('hidden')) return;
   const modalOpen = !$('#modal').classList.contains('hidden');
@@ -1876,6 +2120,7 @@ document.addEventListener('keydown', e => {
     e.preventDefault();
     if (modalOpen) { const b = $('#modal [data-save]'); if (b && !b.disabled) b.click(); }
     else if (S.view === 'doc') run(saveDoc)();
+    else if (S.view === 'hd') run(saveHD)();
   }
   if (e.key === 'F2' && !modalOpen && S.onNew) { e.preventDefault(); S.onNew(); }
   if (e.key === 'F3' && !modalOpen) { const s = $('#view .search input'); if (s) { e.preventDefault(); s.focus(); } }

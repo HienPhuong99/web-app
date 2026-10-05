@@ -1,0 +1,105 @@
+// Các bước kiểm tra giao diện Hợp đồng, chạy trong dev/kiem-trinh-duyet.js (xem file đó để biết cách chạy).
+// Đặt SHOT_DIR=<thư mục> để lưu ảnh chụp màn hình các bước chính.
+const assert = require('assert'), path = require('path');
+const so = t => String(t).replace(/\D/g, ''); // "24.860.000 ₫" -> "24860000"
+
+module.exports = BUOC => {
+  const shot = async (page, ten) => { if (process.env.SHOT_DIR) await page.screenshot({ path: path.join(process.env.SHOT_DIR, ten + '.png'), fullPage: true }); };
+  const dialogs = [];
+  const nut = (page, ten) => page.locator('#topActions .btn', { hasText: ten }).first();
+
+  BUOC.push(['Hợp đồng: menu, danh sách trống', async page => {
+    page.on('dialog', d => { dialogs.push(d.message()); d.accept(); });
+    await page.click('#nav a[data-go="hopdong"]');
+    await page.waitForSelector('text=Không có dữ liệu phù hợp');
+    assert.match(await page.locator('#title').textContent(), /Hợp đồng/);
+    await shot(page, 'hd-1-danh-sach-trong');
+  }]);
+
+  BUOC.push(['Hợp đồng: lập mới, chọn khách, chọn hàng, tính tiền và bằng chữ', async page => {
+    await nut(page, 'Lập hợp đồng').click();
+    await page.waitForSelector('input[data-h="TenDN"]');
+    assert.strictEqual(await page.locator('select[data-h="LoaiHD"] option').count() >= 5, true, 'Phải có đủ loại hợp đồng mặc định');
+    // Chọn khách có sẵn: bên A tự điền
+    await page.fill('input[data-h="TenDN"]', 'minh');
+    await page.locator('#picker [data-i]').first().click();
+    assert.strictEqual(await page.inputValue('input[data-h="DiaChi"]'), 'Quận 3, TP.HCM');
+    await page.fill('input[data-h="NguoiDaiDien"]', 'Nguyễn Văn Minh');
+    await page.fill('input[data-h="ChucVu"]', 'Giám đốc');
+    // Chọn hàng: đơn giá lấy từ bảng giá (không có giá sỉ nên lấy giá lẻ)
+    await page.fill('tr[data-i="0"] [data-f="TenHang"]', 'iphone 15');
+    await page.locator('#picker [data-i]').first().click();
+    assert.strictEqual(so(await page.inputValue('tr[data-i="0"] [data-f="DonGia"]')), '11300000');
+    await page.fill('tr[data-i="0"] [data-f="SoLuong"]', '2');
+    assert.strictEqual(so(await page.locator('[data-t="tong"]').textContent()), '22600000');
+    assert.strictEqual(await page.inputValue('[data-t="chu"]'), 'Hai mươi hai triệu sáu trăm nghìn đồng chẵn.');
+    await page.fill('input[data-h="VAT"]', '10');
+    assert.strictEqual(so(await page.locator('[data-t="tong"]').textContent()), '24860000');
+    assert.strictEqual(await page.inputValue('[data-t="chu"]'), 'Hai mươi tư triệu tám trăm sáu mươi nghìn đồng chẵn.');
+    assert.strictEqual(await page.locator('tbody tr[data-i]').count(), 2, 'Luôn còn một dòng trống ở cuối để nhập tiếp');
+    await page.fill('input[data-h="NgayHieuLuc"]', '2026-01-01');
+    await page.fill('input[data-h="NgayHetHan"]', '2027-01-01');
+    await shot(page, 'hd-2-form-day-du');
+  }]);
+
+  BUOC.push(['Hợp đồng: lưu, bổ sung thông tin vào khách, mở lại', async page => {
+    dialogs.length = 0;
+    await nut(page, 'Lưu').click();
+    await page.waitForFunction(() => /Hợp đồng \d{3}-\d{4}\/HD/.test(document.querySelector('#title').textContent), null, { timeout: 8000 });
+    assert.ok(dialogs.some(m => /Lưu thêm thông tin .* vào khách hàng/.test(m)), 'Phải hỏi bổ sung thông tin vào khách: ' + dialogs.join('|'));
+    assert.deepStrictEqual(await page.evaluate(() => [S.khach.find(k => k.MaKH === 'KH00001').NguoiDaiDien, S.khach.find(k => k.MaKH === 'KH00001').ChucVu]), ['Nguyễn Văn Minh', 'Giám đốc']);
+    await page.click('#nav a[data-go="hopdong"]');
+    await page.waitForSelector('tbody tr[data-i]');
+    const dong = await page.locator('tbody tr[data-i]').first().textContent();
+    assert.ok(/Anh Minh/.test(dong) && /24\.860\.000/.test(dong) && /Soạn thảo/.test(dong), dong);
+    await page.locator('tbody tr[data-i]').first().click();
+    await page.waitForSelector('tr[data-i="0"] [data-f="TenHang"]');
+    assert.match(await page.inputValue('tr[data-i="0"] [data-f="TenHang"]'), /iPhone 15/);
+    assert.strictEqual(so(await page.locator('[data-t="tong"]').textContent()), '24860000');
+    assert.strictEqual(await page.inputValue('input[data-h="NguoiDaiDien"]'), 'Nguyễn Văn Minh');
+    // lập hợp đồng khác cho khách này: người đại diện đã được điền từ danh sách khách
+    await page.click('#nav a[data-go="hopdong"]');
+    await nut(page, 'Lập hợp đồng').click();
+    await page.fill('input[data-h="TenDN"]', 'minh');
+    await page.locator('#picker [data-i]').first().click();
+    assert.strictEqual(await page.inputValue('input[data-h="ChucVu"]'), 'Giám đốc');
+    assert.ok((await page.locator('select[data-h="SoDH"] option').count()) >= 1);
+  }]);
+
+  BUOC.push(['Hợp đồng: bỏ thay đổi chưa lưu thì được hỏi', async page => {
+    dialogs.length = 0;
+    await page.click('#nav a[data-go="home"]'); // form mới đã chọn khách nhưng chưa lưu
+    assert.ok(dialogs.some(m => /chưa lưu/.test(m)), 'Phải hỏi trước khi bỏ: ' + dialogs.join('|'));
+  }]);
+
+  BUOC.push(['Hợp đồng: trạng thái sắp hết hạn / đã hết hạn và bộ lọc', async page => {
+    await page.evaluate(async () => {
+      const ngay = n => iso(new Date(Date.now() + n * 864e5));
+      const mau = { LoaiHD: 'Hợp đồng mua bán', TenDN: 'Công ty Hạn', TrangThai: 'Đang hiệu lực', VAT: 0, lines: [] };
+      await api('luuHopDong', Object.assign({}, mau, { NgayHieuLuc: ngay(-100), NgayHetHan: ngay(10) }));
+      await api('luuHopDong', Object.assign({}, mau, { TenDN: 'Công ty Quá Hạn', NgayHieuLuc: ngay(-200), NgayHetHan: ngay(-1) }));
+      await api('luuHopDong', Object.assign({}, mau, { TenDN: 'Công ty Còn Dài', NgayHieuLuc: ngay(-1), NgayHetHan: ngay(300) }));
+      await loadAll(); go('hopdong');
+    });
+    await page.waitForSelector('text=Sắp hết hạn · còn 10 ngày');
+    assert.ok(await page.locator('text=Đã hết hạn').count() >= 1);
+    await page.selectOption('select[data-f="tt"]', 'sap');
+    assert.strictEqual(await page.locator('tbody tr[data-i]').count(), 1);
+    assert.match(await page.locator('tbody tr[data-i]').first().textContent(), /Công ty Hạn/);
+    await page.selectOption('select[data-f="tt"]', 'het');
+    assert.match(await page.locator('tbody tr[data-i]').first().textContent(), /Quá Hạn/);
+    await page.selectOption('select[data-f="tt"]', '');
+    await shot(page, 'hd-3-danh-sach');
+  }]);
+
+  BUOC.push(['Hợp đồng: màn hình điện thoại không tràn ngang', async page => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => newHD());
+    await page.waitForSelector('input[data-h="TenDN"]');
+    await page.waitForTimeout(500); // chờ ngăn menu trượt xong
+    const tran = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    await shot(page, 'hd-4-dien-thoai');
+    assert.ok(tran <= 1, 'Trang tràn ngang ' + tran + 'px trên điện thoại');
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }]);
+};
