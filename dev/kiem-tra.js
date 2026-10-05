@@ -267,7 +267,7 @@ assert.throws(() => G.xoaHopDong(lan, '002-2026/HD'), /quản trị/);
 G.xoaHopDong(admin, '002-2026/HD');
 assert.deepStrictEqual([rowsOf('PS_HopDong', '002-2026/HD').length, rowsOf('PS_HopDongCT', '002-2026/HD').length], [0, 0]);
 assert.throws(() => G.xoaHopDong(admin, '002-2026/HD'), /Không tìm thấy/);
-assert.deepStrictEqual([G.taiDuLieu(admin).hopDong.length, G.taiDuLieu(admin).mauHD.length], [sheets.PS_HopDong.rows.length - 1, 5]); // caiDat đã tạo 5 file mẫu hợp đồng
+assert.deepStrictEqual([G.taiDuLieu(admin).hopDong.length, G.taiDuLieu(admin).mauHD.length], [sheets.PS_HopDong.rows.length - 1, 6]); // caiDat đã tạo 6 file mẫu hợp đồng
 G.chonCuaHang(admin, 'demo');
 assert.deepStrictEqual([G.taiDuLieu(admin).hopDong.length, G.luuHopDong(admin, hdMau).doc.SoHD], [0, '001-2026/HD']);
 G.chonCuaHang(admin, 'phone');
@@ -281,7 +281,7 @@ const bangTrong = id => docs.get(id).body.children.filter(c => c.getType() === '
 const tenThuMuc = id => (drive.folders.get(drive.files.get(id).folder) || {}).name;
 // Bộ mẫu mặc định cho ngành điện thoại: 5 loại, tự tạo trong thư mục Drive của cửa hàng, chỉ dùng biến app biết
 const mauPS = G.readTable_('MauHopDong');
-assert.deepStrictEqual(mauPS.map(m => m.LoaiHD), ['Hợp đồng mua bán', 'Hợp đồng nguyên tắc', 'Hợp đồng đại lý – phân phối', 'Hợp đồng thu cũ đổi mới', 'Hợp đồng dịch vụ sửa chữa – bảo hành']);
+assert.deepStrictEqual(mauPS.map(m => m.LoaiHD), ['Hợp đồng mua bán', 'Hợp đồng mua bán trả góp', 'Hợp đồng nguyên tắc', 'Hợp đồng đại lý – phân phối', 'Hợp đồng thu cũ đổi mới', 'Hợp đồng dịch vụ sửa chữa – bảo hành']);
 const bienBiet = new Set(plain(G.bienHopDongMau(admin)).map(b => b[0]));
 mauPS.forEach(m => {
   const id = G.idTuLink_(m.LinkMau), vb = vanBan(id), dung = vb.match(/\{\{[A-Z0-9_]+\}\}/g) || [];
@@ -351,7 +351,7 @@ assert.throws(() => G.luuMauHopDong(admin, { LoaiHD: 'X', LinkMau: 'https://docs
 drive.files.set('P'.repeat(30), { id: 'P'.repeat(30), name: 'a.pdf', mime: 'application/pdf', folder: 'root' });
 assert.throws(() => G.luuMauHopDong(admin, { LoaiHD: 'X', LinkMau: 'P'.repeat(30) }), /không phải Google Docs/);
 const dsMau = plain(G.luuMauHopDong(admin, { LoaiHD: 'Hợp đồng thử', LinkMau: mauTuy.getUrl(), MoTa: 'thử' }));
-assert.ok(dsMau.loaiHD.includes('Hợp đồng thử') && dsMau.mauHD.length === 6 && G.taiDuLieu(lan).loaiHD.includes('Hợp đồng thử'));
+assert.ok(dsMau.loaiHD.includes('Hợp đồng thử') && dsMau.mauHD.length === 7 && G.taiDuLieu(lan).loaiHD.includes('Hợp đồng thử'));
 const hdThu = G.luuHopDong(lan, { LoaiHD: 'Hợp đồng thử', TenDN: 'Khách Thử', lines: hdLines }).doc;
 const rThu = plain(G.taoFileHopDong(lan, hdThu.SoHD));
 assert.deepStrictEqual(rThu.conSot, ['{{BIEN_LA}}']);
@@ -369,7 +369,7 @@ assert.throws(() => G.taoFileHopDong(lan, hdDL.SoHD), /chưa có file mẫu/);
 assert.throws(() => G.luuHopDong(lan, { LoaiHD: 'Hợp đồng đại lý – phân phối', TenDN: 'Đại lý Ba', lines: [] }), /chưa có mẫu/); // loại đã xóa không lập mới được
 assert.strictEqual(G.luuHopDong(lan, Object.assign({}, hdDL, { GhiChu: 'sửa' })).doc.TrangThai, 'Soạn thảo'); // hợp đồng cũ vẫn sửa được khi giữ nguyên loại
 assert.deepStrictEqual(plain(G.taoMauMacDinh(admin).moi), ['Hợp đồng đại lý – phân phối']);
-assert.ok(vanBan(idDe(G.taoFileHopDong(lan, hdDL.SoHD))).includes('HỢP ĐỒNG ĐẠI LÝ – PHÂN PHỐI') && G.readTable_('MauHopDong').length === 5);
+assert.ok(vanBan(idDe(G.taoFileHopDong(lan, hdDL.SoHD))).includes('HỢP ĐỒNG ĐẠI LÝ – PHÂN PHỐI') && G.readTable_('MauHopDong').length === 6);
 G.xoaMauHopDong(admin, 'Hợp đồng thu cũ đổi mới');
 assert.throws(() => G.taoMauMacDinh(lan), /quản trị/);
 assert.deepStrictEqual([plain(G.taoMauMacDinh(admin).moi), plain(G.taoMauMacDinh(admin).moi)], [['Hợp đồng thu cũ đổi mới'], []]);
@@ -390,7 +390,7 @@ assert.strictEqual(G.luuHopDong(admin, Object.assign({}, hdTamDung, { TrangThai:
 // Nhân viên chỉ thấy cờ đã có file; link mẫu chỉ gửi cho quản trị
 const soCoFile = G.taiDuLieu(lan).hopDong.find(h => h.SoHD === hdKhong.SoHD), soCoFileQT = G.taiDuLieu(admin).hopDong.find(h => h.SoHD === hdKhong.SoHD);
 assert.deepStrictEqual([soCoFile.FileId, soCoFile.LinkFile, soCoFileQT.FileId.length > 5, /^https:/.test(soCoFileQT.LinkFile)], ['1', '', true, true]);
-assert.deepStrictEqual([G.taiDuLieu(lan).mauHD.length, G.taiDuLieu(admin).mauHD.length, G.taiDuLieu(lan).loaiHD.length], [0, 5, 5]);
+assert.deepStrictEqual([G.taiDuLieu(lan).mauHD.length, G.taiDuLieu(admin).mauHD.length, G.taiDuLieu(lan).loaiHD.length], [0, 6, 6]);
 // Đổi người phụ trách (có trong file) làm file cũ; người khác sửa trong lúc đang tạo file thì file cũng được coi là cũ
 const hdPT = G.luuHopDong(lan, { LoaiHD: 'Hợp đồng mua bán', TenDN: 'Khách PT', NguoiPhuTrach: 'Linh', lines: [] }).doc;
 G.taoFileHopDong(lan, hdPT.SoHD);
@@ -425,7 +425,7 @@ G.chonCuaHang(admin, 'demo');
 const hdDemo = G.luuHopDong(admin, Object.assign({}, hdMau, { TenDN: 'Khách demo' })).doc;
 assert.strictEqual(G.readTable_('MauHopDong').length, 0);
 const fDemo = G.taoFileHopDong(admin, hdDemo.SoHD).doc.FileId;
-assert.deepStrictEqual([G.readTable_('MauHopDong').length, tenThuMuc(fDemo), vanBan(fDemo).includes('CÔNG TY THỬ')], [5, 'Hợp đồng - Cửa hàng thử', true]); // chưa có mẫu nào: tạo đủ bộ mặc định lần đầu dùng
+assert.deepStrictEqual([G.readTable_('MauHopDong').length, tenThuMuc(fDemo), vanBan(fDemo).includes('CÔNG TY THỬ')], [6, 'Hợp đồng - Cửa hàng thử', true]); // chưa có mẫu nào: tạo đủ bộ mặc định lần đầu dùng
 G.chonCuaHang(admin, 'phone');
 assert.ok(plain(G.dsNhatKy(admin)).some(x => x.HanhDong === 'Tạo file hợp đồng') && plain(G.dsNhatKy(admin)).some(x => x.HanhDong === 'Tạo lại file hợp đồng'));
 
@@ -512,6 +512,78 @@ for (const homNay of ['2026-10-05', '2026-03-01', '2027-01-01']) {
 }
 assert.deepStrictEqual(plain(G.hanHD_({ TrangThai: 'Đang hiệu lực', NgayHetHan: '2026-12-01', BaoTruocNgay: 60 }, '2026-10-05')), { sap: true, n: 57, bao: 60, quyetDinh: -3 }); // đã quá hạn phải báo 3 ngày
 assert.deepStrictEqual(plain(G.hanHD_({ TrangThai: 'Đang hiệu lực', NgayHetHan: '2026-12-31', BaoTruocNgay: 60 }, '2026-10-05')), null); // còn 87 ngày > 60 + 14
+
+
+// ===== Cải tiến (2): lịch thanh toán / trả góp =====
+const hdTG = cb({ LoaiHD: 'Hợp đồng mua bán trả góp', TenDN: 'Anh Minh', MaKH: 'KH00001', SoDH: dhP.SoDH, VAT: 0, lines: [{ TenHang: 'iPhone 16', DVT: 'Máy', SoLuong: 1, DonGia: 30000000, IMEI: '356789012345679' }] });
+const lichTG = [{ Nhan: 'Trả trước', NgayDen: '2026-10-05', SoTien: 10000000 }, { Nhan: 'Kỳ 1/2', NgayDen: '2026-11-05', SoTien: 10000000 }, { Nhan: 'Kỳ 2/2', NgayDen: '2026-12-05', SoTien: 10000000 }];
+assert.throws(() => G.luuLichHopDong(lan, 'khong-co', lichTG), /Không tìm thấy hợp đồng/);
+assert.throws(() => G.luuLichHopDong(lan, hdTG.SoHD, [{ Nhan: 'x', NgayDen: '2026-02-30', SoTien: 1 }]), /ngày đến hạn không hợp lệ/);
+assert.throws(() => G.luuLichHopDong(lan, hdTG.SoHD, [{ Nhan: 'x', NgayDen: '2026-11-05', SoTien: 0 }]), /số tiền phải lớn hơn 0/);
+assert.throws(() => G.luuLichHopDong(lan, hdTG.SoHD, Array.from({ length: 37 }, () => ({ NgayDen: '2026-11-05', SoTien: 1 }))), /Tối đa 36/);
+assert.deepStrictEqual(plain(G.layHopDong(lan, hdTG.SoHD).lich), []); // lỗi thì không ghi gì
+// Lưu lịch: nhập lộn xộn vẫn được sắp theo ngày đến hạn và đánh số lại
+const lt = plain(G.luuLichHopDong(lan, hdTG.SoHD, [lichTG[2], lichTG[0], { NgayDen: '2026-11-05', SoTien: '10000000' }]).lich);
+assert.deepStrictEqual(lt.map(r => [r.Dot, r.Nhan, r.NgayDen, r.SoTien]), [[1, 'Trả trước', '2026-10-05', 10000000], [2, 'Đợt 3', '2026-11-05', 10000000], [3, 'Kỳ 2/2', '2026-12-05', 10000000]]);
+G.luuLichHopDong(lan, hdTG.SoHD, lichTG);
+assert.deepStrictEqual(plain(G.layHopDong(lan, hdTG.SoHD).lich).map(r => [r.Dot, r.Nhan, r.SoPT]), [[1, 'Trả trước', ''], [2, 'Kỳ 1/2', ''], [3, 'Kỳ 2/2', '']]);
+assert.strictEqual(G.taiDuLieu(lan).hopDongLich.filter(r => r.SoHD === hdTG.SoHD).length, 3);
+// Hợp đồng chưa gắn đơn hàng thì chưa ghi nhận thu được (để công nợ khớp)
+const hdKhongDon = cb({ LoaiHD: 'Hợp đồng mua bán trả góp', TenDN: 'Anh Minh', MaKH: 'KH00001', lines: [] });
+G.luuLichHopDong(lan, hdKhongDon.SoHD, [lichTG[0]]);
+assert.throws(() => G.thuDotHopDong(lan, hdKhongDon.SoHD, 1, {}), /Gắn hợp đồng với một đơn hàng/);
+// Ghi nhận thu một đợt: tạo phiếu thu theo đơn hàng, đánh dấu đợt, nhân viên làm được
+const soPTtruoc = sheets.PS_ThuTien.rows.length;
+const thu1 = plain(G.thuDotHopDong(lan, hdTG.SoHD, 1, { Ngay: today, HinhThuc: 'Chuyển khoản', GhiChu: 'qua QR' }));
+assert.strictEqual(sheets.PS_ThuTien.rows.length, soPTtruoc + 1);
+assert.deepStrictEqual([thu1.phieu.SoDH, thu1.phieu.MaKH, thu1.phieu.SoTien, thu1.phieu.HinhThuc, thu1.phieu.NguoiTao, thu1.phieu.GhiChu], [dhP.SoDH, 'KH00001', 10000000, 'Chuyển khoản', 'Lan', `Hợp đồng ${hdTG.SoHD} – Trả trước – qua QR`]);
+assert.deepStrictEqual(thu1.lich.map(r => [r.Dot, r.SoPT, r.NgayThu]), [[1, thu1.phieu.SoPT, today], [2, '', ''], [3, '', '']]);
+assert.throws(() => G.thuDotHopDong(lan, hdTG.SoHD, 1, {}), /đã thu \(phiếu/);
+assert.throws(() => G.thuDotHopDong(lan, hdTG.SoHD, 9, {}), /Không tìm thấy đợt 9/);
+assert.strictEqual(sheets.PS_ThuTien.rows.length, soPTtruoc + 1); // lỗi thì không tạo thêm phiếu
+// Đợt đã thu không đổi, không bỏ được; đợt chưa thu thêm/bớt/sửa tự do khi hợp đồng còn là bản nháp
+assert.throws(() => G.luuLichHopDong(lan, hdTG.SoHD, lichTG.slice(1)), /Không bỏ được đợt đã thu/);
+assert.throws(() => G.luuLichHopDong(lan, hdTG.SoHD, [{ SoPT: 'PT-khong-co' }, lichTG[1]]), /không khớp/);
+const dsDaThu = thu1.lich.slice();
+const lichSua = plain(G.luuLichHopDong(lan, hdTG.SoHD, [Object.assign({}, dsDaThu[0], { SoTien: 1, NgayDen: '2030-01-01' }), { Nhan: 'Kỳ 1/2', NgayDen: '2026-11-20', SoTien: 12000000 }, { Nhan: 'Kỳ 2/2', NgayDen: '2026-12-20', SoTien: 8000000 }]).lich);
+assert.deepStrictEqual(lichSua.map(r => [r.Dot, r.SoTien, r.NgayDen, !!r.SoPT]), [[1, 10000000, '2026-10-05', true], [2, 12000000, '2026-11-20', false], [3, 8000000, '2026-12-20', false]]); // đợt đã thu giữ nguyên như đã lưu
+// Hợp đồng đã ký: nhân viên không đổi lịch chưa thu nhưng vẫn ghi nhận thu; quản trị đổi được
+G.luuHopDong(lan, Object.assign({}, G.findObj_('HopDong', hdTG.SoHD), { TrangThai: 'Đang hiệu lực', lines: plain(G.layHopDong(lan, hdTG.SoHD).lines) }));
+assert.throws(() => G.luuLichHopDong(lan, hdTG.SoHD, lichSua.map(r => Object.assign({}, r, r.SoPT ? {} : { SoTien: r.SoTien + 1 }))), /chỉ quản trị được đổi lịch/);
+assert.strictEqual(plain(G.luuLichHopDong(lan, hdTG.SoHD, lichSua)).lich.length, 3); // không đổi gì thì không bị chặn
+assert.strictEqual(plain(G.luuLichHopDong(admin, hdTG.SoHD, lichSua.map(r => Object.assign({}, r, r.SoPT ? {} : { SoTien: r.SoTien + 1 })))).lich[1].SoTien, 12000001);
+G.luuLichHopDong(admin, hdTG.SoHD, lichSua);
+assert.strictEqual(plain(G.thuDotHopDong(lan, hdTG.SoHD, 2, {})).phieu.SoTien, 12000000);
+// Hủy thu (quản trị): xóa phiếu, đưa đợt về chưa thu; hợp đồng đã thu thì không xóa được
+assert.throws(() => G.huyThuDotHopDong(lan, hdTG.SoHD, 2), /quản trị/);
+assert.throws(() => G.xoaHopDong(admin, hdTG.SoHD), /đã ghi nhận thu tiền/);
+const soPT2 = G.findObj_('ThuTien', plain(G.layHopDong(lan, hdTG.SoHD).lich)[1].SoPT).SoPT;
+assert.strictEqual(plain(G.huyThuDotHopDong(admin, hdTG.SoHD, 2).soPT), soPT2);
+assert.deepStrictEqual([G.findObj_('ThuTien', soPT2), plain(G.layHopDong(lan, hdTG.SoHD).lich)[1].SoPT], [null, '']);
+assert.throws(() => G.huyThuDotHopDong(admin, hdTG.SoHD, 2), /chưa thu tiền/);
+// Tạo file từ mẫu trả góp: bảng lịch, số kỳ, tổng; sửa lịch thì file cũ, ghi nhận thu thì không
+const vbTG = vanBan(idDe(G.taoFileHopDong(lan, hdTG.SoHD)));
+const lichBang = plain(bangTrong(G.findObj_('HopDong', hdTG.SoHD).FileId).filter(x => x.rows[0][0].getText() === 'Đợt')[0].rows.map(r => r.map(c => c.getText())));
+assert.deepStrictEqual(lichBang, [['Đợt', 'Nội dung', 'Ngày đến hạn', 'Số tiền (đồng)'], ['1', 'Trả trước', '05/10/2026', '10.000.000'], ['2', 'Kỳ 1/2', '20/11/2026', '12.000.000'], ['3', 'Kỳ 2/2', '20/12/2026', '8.000.000'], ['', 'Tổng cộng', '', '30.000.000']]);
+assert.ok(vbTG.includes('HỢP ĐỒNG MUA BÁN TRẢ GÓP') && vbTG.includes('Số tiền trả trước: 10.000.000 đồng; số kỳ trả góp: 2; tổng các đợt: 30.000.000 đồng.') && !vbTG.includes('{{'));
+assert.ok(JSON.stringify(bangTrong(G.findObj_('HopDong', hdTG.SoHD).FileId).map(x => x.rows.map(r => r.map(c => c.getText())))).includes('iPhone 16 – IMEI/serial: 356789012345679'));
+assert.strictEqual(G.findObj_('HopDong', hdTG.SoHD).FileCu, '');
+G.thuDotHopDong(lan, hdTG.SoHD, 2, {});
+assert.strictEqual(G.findObj_('HopDong', hdTG.SoHD).FileCu, ''); // ghi nhận thu không làm file cũ
+G.luuLichHopDong(admin, hdTG.SoHD, plain(G.layHopDong(lan, hdTG.SoHD).lich).concat([{ Nhan: 'Kỳ 3', NgayDen: '2027-01-20', SoTien: 5 }]));
+assert.strictEqual(G.findObj_('HopDong', hdTG.SoHD).FileCu, '1');
+assert.ok(vanBan(idDe(G.taoFileHopDong(lan, cb({ LoaiHD: 'Hợp đồng mua bán trả góp', lines: [] }).SoHD))).includes('(Chưa lập lịch thanh toán: hai bên thỏa thuận bằng phụ lục)'));
+// Hợp đồng chưa thu đợt nào: xóa được, lịch bị xóa theo
+G.xoaHopDong(admin, hdKhongDon.SoHD);
+assert.strictEqual(rowsOf('PS_HopDongLich', hdKhongDon.SoHD).length, 0);
+assert.ok(['Sửa lịch thanh toán', 'Thu đợt hợp đồng', 'Hủy thu đợt hợp đồng'].every(h => plain(G.dsNhatKy(admin)).some(x => x.HanhDong === h && x.DoiTuong === hdTG.SoHD)));
+// Tình trạng đợt: máy chủ (nhắc việc) và giao diện (Index.html) cho cùng kết quả
+const htNoi = vm.runInNewContext('const today = () => "2026-10-05";\n' + require('fs').readFileSync(require('path').join(__dirname, '..', 'apps-script', 'Index.html'), 'utf8').match(/function trangThaiDot\(r\) \{[\s\S]*?\n\}\n/)[0] + '\ntrangThaiDot');
+for (let off = -15; off <= 20; off++) for (const so of ['', 'PT1']) {
+  const r = { SoPT: so, NgayDen: new Date(Date.parse('2026-10-05') + off * 864e5).toISOString().slice(0, 10) };
+  assert.strictEqual(G.trangThaiDot_(r, '2026-10-05'), htNoi(r), JSON.stringify(r));
+}
+assert.deepStrictEqual(['2026-10-04', '2026-10-05', '2026-10-12', '2026-10-13'].map(d => G.trangThaiDot_({ SoPT: '', NgayDen: d }, '2026-10-05')), ['quahan', 'sap', 'sap', 'cho']);
 
 // Khóa tài khoản / quản trị đặt lại mật khẩu: phiên đang đăng nhập hết hiệu lực ngay; chỉ đổi tên thì không
 const tkLan = { TenDangNhap: 'lan.nguyen', HoTen: 'Lan', VaiTro: 'nhanvien', CuaHang: 'phone' };

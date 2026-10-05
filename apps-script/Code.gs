@@ -49,6 +49,7 @@ const TABLES = {
   HopDong: ['SoHD', 'Ngay', 'LoaiHD', 'SoDH', 'MaKH', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang', 'SoCCCD', 'CCCDCap', 'IMEI',
     'NgayHieuLuc', 'NgayHetHan', 'BaoTruocNgay', 'TuGiaHan', 'ThangGiaHan', 'NguoiPhuTrach', 'TrangThai', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'BangChu', 'GhiChu', 'FileId', 'LinkFile', 'NgayFile', 'FileCu', 'NguoiTao', 'NgayTao', 'NgaySua'], // FileCu = '1' khi hợp đồng đã sửa sau lần tạo file gần nhất
   HopDongCT: ['SoHD', 'STT', 'MaHH', 'TenHang', 'DVT', 'SoLuong', 'DonGia', 'ThanhTien', 'IMEI'],
+  HopDongLich: ['SoHD', 'Dot', 'Nhan', 'NgayDen', 'SoTien', 'SoPT', 'NgayThu'], // lịch thanh toán / trả góp: mỗi đợt một dòng; SoPT = phiếu thu đã ghi nhận cho đợt đó
   MauHopDong: ['LoaiHD', 'LinkMau', 'MoTa', 'NgayTao'], // mỗi loại hợp đồng một file Google Docs mẫu
 };
 // Ngân hàng nhận chuyển khoản qua mã VietQR: [mã BIN, tên] (theo danh sách của vietqr.io). Gửi cho giao diện và dùng khi in tên ngân hàng vào hợp đồng.
@@ -59,9 +60,9 @@ const NGAN_HANG = [['970436', 'Vietcombank'], ['970415', 'VietinBank'], ['970418
   ['970438', 'BaoViet Bank'], ['970433', 'VietBank'], ['970430', 'PGBank'], ['970454', 'Viet Capital Bank'], ['970414', 'MBV'], ['970446', 'Co-opBank'],
   ['970424', 'Shinhan Bank'], ['970457', 'Woori Bank'], ['422589', 'CIMB'], ['668888', 'KBank'], ['546034', 'CAKE'], ['546035', 'Ubank'], ['963388', 'Timo']];
 const SHARED = ['TaiKhoan', 'CaiDat']; // trang dùng chung cho mọi cửa hàng, không có tiền tố
-const NUMBER_COLS = ['BaoTruocNgay', 'ThangGiaHan', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien'];
+const NUMBER_COLS = ['Dot', 'BaoTruocNgay', 'ThangGiaHan', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien'];
 const SESSION_TTL = 6 * 60 * 60; // giây; tối đa của CacheService, tự gia hạn khi còn dùng
-const SCHEMA = '4'; // tăng số này khi thêm bảng/cột ở TABLES: app tự thêm phần thiếu ở lần gọi đầu sau khi triển khai
+const SCHEMA = '5'; // tăng số này khi thêm bảng/cột ở TABLES: app tự thêm phần thiếu ở lần gọi đầu sau khi triển khai
 
 // Loại chứng từ có dòng hàng. Số chứng từ dạng 001-2026/DH, mỗi năm đánh lại từ 001 (riêng từng cửa hàng).
 const CT = {
@@ -305,7 +306,7 @@ function taiDuLieu(token) {
     user: user, congTy: ch.congTy,
     cuaHang: { id: CUR_SHOP, ten: ch.ten, moTa: ch.moTa, icon: s.icon, mau: s.mau }, dsCuaHang: ds,
     khach: readTable_('KhachHang'), hang: hang, baoGia: readTable_('BaoGia'), donHang: donHang,
-    phieuKho: readTable_('PhieuKho'), thuTien: readTable_('ThuTien'), hopDong: readTable_('HopDong').map(h => hdChoUser_(user, h)), mauHD: user.vaiTro === 'admin' ? mauHD : [], loaiHD: loaiHopDong_(mauHD), nganHang: NGAN_HANG,
+    phieuKho: readTable_('PhieuKho'), thuTien: readTable_('ThuTien'), hopDong: readTable_('HopDong').map(h => hdChoUser_(user, h)), mauHD: user.vaiTro === 'admin' ? mauHD : [], loaiHD: loaiHopDong_(mauHD), hopDongLich: readTable_('HopDongLich'), nganHang: NGAN_HANG,
     ton: tonKho_(), thongKe: thongKe_(donHang, hang, Utilities.formatDate(new Date(Date.now() - 90 * 864e5), tz_(), 'yyyy-MM-dd'), '', 8),
   };
 }
@@ -595,6 +596,10 @@ function dsBaoHanh(token) {
 // ===== Thu tiền =====
 function luuThuTien(token, pt) {
   const user = user_(token);
+  return withLock_(() => ghiPhieuThu_(user, pt));
+}
+// Kiểm tra và ghi một phiếu thu. Gọi bên trong withLock_ (khóa không lồng nhau được, nên các hàm đã giữ khóa dùng thẳng hàm này).
+function ghiPhieuThu_(user, pt) {
   pt.SoTien = Math.round(+pt.SoTien || 0);
   if (pt.SoTien <= 0) throw new Error('Nhập số tiền thu.');
   if (pt.SoDH) {
@@ -604,13 +609,11 @@ function luuThuTien(token, pt) {
   }
   if (!pt.MaKH) throw new Error('Chọn khách hàng.');
   if (!pt.TenKH) { const kh = findObj_('KhachHang', pt.MaKH); pt.TenKH = kh ? kh.TenKH : ''; }
-  return withLock_(() => {
-    const moi = !pt.SoPT;
-    if (moi) { pt.NguoiTao = user.ten; pt.NgayTao = now_(); }
-    upsert_('ThuTien', pt, () => nextSo_('ThuTien', 'PT', pt.Ngay), ['NguoiTao', 'NgayTao']);
-    log_(user, (moi ? 'Thêm' : 'Sửa') + ' phiếu thu', pt.SoPT, pt.TenKH + ' · ' + pt.SoTien + ' đ' + (pt.SoDH ? ' · đơn ' + pt.SoDH : ''));
-    return pt;
-  });
+  const moi = !pt.SoPT;
+  if (moi) { pt.NguoiTao = user.ten; pt.NgayTao = now_(); }
+  upsert_('ThuTien', pt, () => nextSo_('ThuTien', 'PT', pt.Ngay), ['NguoiTao', 'NgayTao']);
+  log_(user, (moi ? 'Thêm' : 'Sửa') + ' phiếu thu', pt.SoPT, pt.TenKH + ' · ' + pt.SoTien + ' đ' + (pt.SoDH ? ' · đơn ' + pt.SoDH : ''));
+  return pt;
 }
 function xoaThuTien(token, soPT) {
   const user = user_(token, true);

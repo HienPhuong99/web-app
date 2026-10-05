@@ -325,7 +325,7 @@ table.lines { width: 100%; border-collapse: collapse; min-width: 1040px; }
 
 <script>
 // ===================== Trạng thái & tiện ích =====================
-const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], hopDong: [], mauHD: [], loaiHD: [], nganHang: [], hd: null, ton: {},
+const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], hopDong: [], hopDongLich: [], mauHD: [], loaiHD: [], nganHang: [], hd: null, ton: {},
   thongKe: { topHang: [], theoNhom: [] }, taiKhoan: null, baoHanh: null, nhatKy: null, view: 'home', loai: '', doc: null, extra: {}, dirty: false, q: {}, onNew: null };
 const D = { thuDH: {}, thuKH: {}, muaKH: {}, noKH: {}, dhBG: {} }; // số liệu suy ra: đã thu, công nợ, báo giá đã chốt
 const LG = { si: 'Giá sỉ', le: 'Giá lẻ', tuy: 'Giá tùy chọn' };
@@ -572,7 +572,7 @@ $('#btnPass').onclick = () => modal({
 const NAV = [
   ['', [['home', 'Tổng quan', 'home'], ['baocao', 'Báo cáo & sổ doanh thu', 'chart']]],
   ['Bán hàng', [['baogia', 'Báo giá', 'file'], ['donhang', 'Đơn hàng', 'cart'], ['congno', 'Thu tiền & công nợ', 'card'], ['baohanh', 'Bảo hành', 'award']]],
-  ['Hợp đồng', [['hopdong', 'Hợp đồng', 'clipboard'], ['hdhan', 'Sắp hết hạn', 'alert']]],
+  ['Hợp đồng', [['hopdong', 'Hợp đồng', 'clipboard'], ['hdhan', 'Sắp hết hạn', 'alert'], ['hdlich', 'Lịch thanh toán', 'card']]],
   ['Kho hàng', [['hang', 'Hàng hóa & bảng giá', 'box'], ['kho', 'Nhập – xuất kho', 'truck'], ['ton', 'Tồn kho', 'layers']]],
   ['Danh mục', [['khach', 'Khách hàng', 'users']]],
   ['Hệ thống', [['caidat', 'Cài đặt', 'settings'], ['taikhoan', 'Tài khoản', 'shield', true], ['nhatky', 'Nhật ký', 'clock', true]]],
@@ -590,6 +590,7 @@ function drawNav() {
     donhang: S.donHang.filter(d => d.TrangThai === 'Chờ giao' || d.TrangThai === 'Giao một phần').length,
     ton: S.hang.filter(isLow).length,
     hdhan: S.hopDong.filter(h => hanHD(h)).length,
+    hdlich: dotCanThu().length,
   };
   $('#nav').innerHTML = NAV.map(([sec, items]) => {
     const vis = items.filter(it => !it[3] || isAdmin());
@@ -740,6 +741,7 @@ function vHome(el) {
   const low = S.hang.filter(isLow);
   const hdHan = S.hopDong.map(h => ({ h, x: hanHD(h) })).filter(o => o.x).sort((a, b) => String(a.h.NgayHetHan).localeCompare(String(b.h.NgayHetHan)));
   const hdSapN = hdHan.filter(o => o.x.sap).length, hdHetN = hdHan.filter(o => o.x.het).length;
+  const dotThu = dotCanThu(), hdTheoSo = {}; S.hopDong.forEach(h => { hdTheoSo[h.SoHD] = h; });
   const pct = dsTruoc ? Math.round((dsThang - dsTruoc) / dsTruoc * 100) : null;
 
   const months = [];
@@ -786,6 +788,8 @@ function vHome(el) {
       ${miniTable(low.slice(0, 6).map(h => `<tr data-go="hh:${esc(h.MaHH)}"><td><b>${esc(h.TenHang)}</b><span class="sub">${esc([h.MaHH, h.Model].filter(Boolean).join(' · '))}</span></td><td class="num">Tồn <b class="red">${money(tonOf(h.MaHH))}</b><span class="sub">tối thiểu ${money(+h.TonToiThieu || 0)}</span></td></tr>`), 'Chưa có mặt hàng nào dưới mức tồn tối thiểu.')}</div></div>
     <div class="card"><div class="card-h"><h3>Hợp đồng cần chú ý</h3><a class="more" data-go="hdhan">Tất cả</a></div><div class="card-b">
       ${miniTable(hdHan.slice(0, 6).map(o => `<tr data-go="hd:${esc(o.h.SoHD)}"><td><b>${esc(o.h.SoHD)}</b><span class="sub">${esc(o.h.TenDN)}</span></td><td class="num">${o.x.het ? `<span class="red">Quá ${o.x.n} ngày</span>` : o.x.n ? `Còn ${o.x.n} ngày` : 'Hết hạn hôm nay'}<span class="sub">${dmy(o.h.NgayHetHan)}</span></td></tr>`), 'Không có hợp đồng nào sắp hết hạn.')}</div></div>
+    <div class="card"><div class="card-h"><h3>Đợt thanh toán cần thu</h3><a class="more" data-go="hdlich">Tất cả</a></div><div class="card-b">
+      ${miniTable(dotThu.slice(0, 6).map(r => `<tr data-go="hd:${esc(r.SoHD)}"><td><b>${esc(r.Nhan)} · ${esc(r.SoHD)}</b><span class="sub">${esc((hdTheoSo[r.SoHD] || {}).TenDN)}</span></td><td class="num">${money(r.SoTien)} ₫<span class="sub">${trangThaiDot(r) === 'quahan' ? `<span class="red">Quá ${-dotConLai(r)} ngày</span>` : dotConLai(r) ? `Còn ${dotConLai(r)} ngày` : 'Hôm nay'}</span></td></tr>`), 'Không có đợt nào quá hạn hoặc đến hạn trong 7 ngày.')}</div></div>
     <div class="card"><div class="card-h"><h3>Bán chạy 90 ngày</h3><a class="more" data-go="hang">Hàng hóa</a></div><div class="card-b">
       ${miniTable(S.thongKe.topHang.slice(0, 6).map(h => `<tr${h.MaHH ? ` data-go="hh:${esc(h.MaHH)}"` : ''}><td><b>${esc(h.TenHang)}</b><span class="sub">${money(h.SoLuong)} ${esc(h.DVT)}</span></td><td class="num">${money(h.ThanhTien)} ₫</td></tr>`), 'Chưa có đơn hàng trong 90 ngày.')}</div></div>
   </div>`;
@@ -1684,7 +1688,7 @@ function vHopDong(el) {
       { t: 'Số hợp đồng', f: r => `<span class="code">${esc(r.SoHD)}</span><span class="sub">Ký ${dmy(r.Ngay)}${r.FileId ? ' · có file' : ''}</span>` },
       { t: 'Khách hàng (bên A)', cls: 'wrap', f: r => `<b>${esc(r.TenDN)}</b><span class="sub">${esc([r.NguoiDaiDien, r.SDT].filter(Boolean).join(' · '))}</span>` },
       { t: 'Loại hợp đồng', cls: 'wrap', k: 'LoaiHD' },
-      { t: 'Giá trị', cls: 'num', f: r => +r.TongCong ? `<b>${money(r.TongCong)}</b>` : '<span class="muted">—</span>' },
+      { t: 'Giá trị', cls: 'num', f: r => (+r.TongCong ? `<b>${money(r.TongCong)}</b>` : '<span class="muted">—</span>') + tienDoThu(r) },
       { t: 'Hết hạn', f: r => r.NgayHetHan ? `${dmy(r.NgayHetHan)}${r.NgayHieuLuc ? `<span class="sub">Hiệu lực từ ${dmy(r.NgayHieuLuc)}</span>` : ''}` : '<span class="muted">—</span>' },
       { t: 'Trạng thái', f: r => `${ttHD(r)}${r.NguoiPhuTrach ? `<span class="sub">${esc(r.NguoiPhuTrach)}</span>` : ''}` },
     ],
@@ -1778,6 +1782,179 @@ function openNhac({ ten, sdt, email, tieuDe, tin }) {
   if (zl) zl.onclick = () => { copyText(ta.value, ta).then(ok => toast(ok ? 'Đã sao chép tin: dán vào Zalo để gửi.' : 'Chưa sao chép được tin: bấm "Sao chép tin" rồi dán vào Zalo.')); };
 }
 
+// ===================== Lịch thanh toán / trả góp =====================
+// Mỗi đợt: { Dot, Nhan, NgayDen, SoTien, SoPT, NgayThu }. Ghi nhận thu một đợt = tạo phiếu thu theo đơn hàng của hợp đồng (công nợ tự khớp).
+function trangThaiDot(r) { // 'thu' | 'quahan' | 'sap' (còn tối đa 7 ngày) | 'cho'. Phải giống trangThaiDot_ trong HopDong.gs
+  if (r.SoPT) return 'thu';
+  const n = Math.round((Date.parse(r.NgayDen) - Date.parse(today())) / 864e5);
+  return n < 0 ? 'quahan' : n <= 7 ? 'sap' : 'cho';
+}
+const dotConLai = r => Math.round((Date.parse(r.NgayDen) - Date.parse(today())) / 864e5);
+function ttDot(r) {
+  const k = trangThaiDot(r);
+  return k === 'thu' ? badge('Đã thu ' + dmyRaw(r.NgayThu), 'b-green') : k === 'quahan' ? badge('Quá hạn ' + (-dotConLai(r)) + ' ngày', 'b-red')
+    : k === 'sap' ? badge(dotConLai(r) ? 'Còn ' + dotConLai(r) + ' ngày' : 'Đến hạn hôm nay', 'b-amber') : badge('Chờ', 'b-gray');
+}
+// Các đợt chưa thu đã quá hạn hoặc đến hạn trong 7 ngày (của hợp đồng còn tồn tại), sớm nhất trước
+function dotCanThu() {
+  const so = new Set(S.hopDong.map(h => h.SoHD));
+  return S.hopDongLich.filter(r => so.has(r.SoHD) && ['quahan', 'sap'].includes(trangThaiDot(r))).sort((a, b) => String(a.NgayDen).localeCompare(String(b.NgayDen)));
+}
+function tienDoThu(h) { // dòng nhỏ dưới giá trị hợp đồng ở danh sách: đã thu bao nhiêu đợt
+  const l = S.hopDongLich.filter(r => r.SoHD === h.SoHD);
+  return l.length ? `<span class="sub">Đã thu ${l.filter(r => r.SoPT).length}/${l.length} đợt</span>` : '';
+}
+
+// Tạo lịch trả góp đều: trả trước (nếu có) + n kỳ cách nhau chu kỳ tháng; số dư lẻ dồn vào kỳ cuối. Đã có đợt thu thì tính trên phần còn lại.
+function taoLichTraGop({ tong, traTruoc, soKy, ngayDau, chuKy, ngayKy, daThu }) {
+  const rows = [], con = tong - daThu - (daThu ? 0 : traTruoc);
+  if (!(soKy >= 1 && soKy <= 36)) throw new Error('Số kỳ từ 1 đến 36.');
+  if (!(chuKy >= 1 && chuKy <= 12)) throw new Error('Chu kỳ từ 1 đến 12 tháng.');
+  if (!ngayDau) throw new Error('Chọn ngày đến hạn của kỳ đầu.');
+  if (con <= 0) throw new Error('Trả trước đã đủ hoặc vượt giá trị hợp đồng, không còn gì để chia kỳ.');
+  if (!daThu && traTruoc > 0) rows.push({ Nhan: 'Trả trước', NgayDen: ngayKy, SoTien: traTruoc, SoPT: '', NgayThu: '' });
+  const moi = Math.floor(con / soKy);
+  for (let k = 1; k <= soKy; k++) rows.push({ Nhan: `Kỳ ${k}/${soKy}`, NgayDen: congThangISO(ngayDau, (k - 1) * chuKy), SoTien: moi + (k === soKy ? con - moi * soKy : 0), SoPT: '', NgayThu: '' });
+  return rows;
+}
+
+function drawHDLich(el) {
+  const box = $('[data-lich]', el), d = S.hd, khoa = !!S.extra.khoa, saved = !!d.SoHD;
+  if (!box) return;
+  const tong = hdTotal().tong, tongLich = sum(d.lich, r => r.SoTien), chenh = tong - tongLich;
+  const hang = d.lich.map((r, i) => {
+    if (r.SoPT) return `<tr data-lr="${i}"><td class="c muted">${i + 1}</td><td>${esc(r.Nhan)}</td><td>${dmy(r.NgayDen)}</td><td class="num">${money(r.SoTien)}</td><td>${ttDot(r)}<span class="sub">Phiếu ${esc(r.SoPT)}</span></td>
+      <td class="num">${isAdmin() ? `<button class="btn sm" data-act="lich-huy" data-i="${i}" title="Xóa phiếu thu đã tạo, đưa đợt về chưa thu">Hủy thu</button>` : ''}</td></tr>`;
+    const ro = khoa ? ' readonly' : '';
+    return `<tr data-lr="${i}"><td class="c muted">${i + 1}</td><td><input data-lf="Nhan" value="${esc(r.Nhan)}"${ro} aria-label="Nội dung đợt ${i + 1}"></td>
+      <td><input data-lf="NgayDen" type="date" value="${esc(r.NgayDen)}"${ro} aria-label="Ngày đến hạn đợt ${i + 1}"></td>
+      <td><input data-lf="SoTien" class="num money" inputmode="numeric" value="${money(r.SoTien)}"${ro} aria-label="Số tiền đợt ${i + 1}"></td>
+      <td data-st>${r.NgayDen ? ttDot(r) : ''}</td>
+      <td class="num" style="white-space:nowrap">${saved && r.Dot ? `<button class="btn sm" data-act="lich-thu" data-i="${i}">${icon('check')}Thu</button> ` : ''}${saved && r.Dot ? `<button class="btn sm" data-act="lich-nhac" data-i="${i}">${icon('alert')}Nhắc</button> ` : ''}${khoa ? '' : `<button class="icon-btn" data-act="lich-rm" data-i="${i}" title="Bỏ đợt này" aria-label="Bỏ đợt ${i + 1}">${icon('x')}</button>`}</td></tr>`;
+  }).join('');
+  const daThu = sum(d.lich.filter(r => r.SoPT), r => r.SoTien);
+  box.innerHTML = `${d.lich.length ? `<div class="tbl-wrap"><table class="lines" style="min-width:720px"><thead><tr><th style="width:40px">#</th><th>Nội dung</th><th style="width:160px">Ngày đến hạn</th><th class="num" style="width:150px">Số tiền</th><th style="width:170px">Tình trạng</th><th style="width:270px"></th></tr></thead><tbody>${hang}</tbody></table></div>`
+      : '<p class="muted" style="margin-top:0">Chưa có lịch. Hợp đồng trả một lần thì để trống; trả góp hoặc chia đợt thì tạo lịch bên dưới.</p>'}
+    <div data-lichfoot style="display:flex;gap:6px 22px;flex-wrap:wrap;margin:10px 0">
+      <span>Tổng các đợt <b data-lt>${money(tongLich)} ₫</b></span><span>Giá trị hợp đồng <b data-lg>${money(tong)} ₫</b></span>
+      <span data-lc class="${chenh ? 'warn' : 'green'}">${chenh ? `Chênh ${money(chenh)} ₫ so với giá trị hợp đồng` : 'Khớp giá trị hợp đồng'}</span><span>Đã thu <b class="green" data-ld>${money(daThu)} ₫</b></span></div>
+    ${khoa ? '' : `<div class="fgrid" style="align-items:end;margin-top:6px">
+      <label class="field"><span class="lb">Trả trước (₫)</span><input data-gen="traTruoc" class="money num" inputmode="numeric" value="0"></label>
+      <label class="field"><span class="lb">Số kỳ</span><input data-gen="soKy" type="number" min="1" max="36" value="3"></label>
+      <label class="field"><span class="lb">Ngày đến hạn kỳ đầu</span><input data-gen="ngayDau" type="date" value="${esc(congThangISO(today(), 1))}"></label>
+      <label class="field"><span class="lb">Chu kỳ (tháng)</span><input data-gen="chuKy" type="number" min="1" max="12" value="1"></label>
+      <span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="lich-tao">${icon('refresh')}Tạo lịch trả góp đều</button><button class="btn" data-act="lich-add">${icon('plus')}Thêm đợt</button></span></div>
+      <p class="muted" style="margin-bottom:0;font-size:12.5px">Chia đều phần còn lại thành các kỳ (số dư lẻ dồn vào kỳ cuối); sửa từng đợt sau khi tạo. Thay thế các đợt chưa thu hiện có. Trả góp trực tiếp, không tính lãi trả góp. Muốn ghi nhận thu thì gắn hợp đồng với đơn hàng. Lịch được lưu cùng lúc bấm Lưu hợp đồng.</p>`}`;
+}
+
+function onLichInput(el, t) {
+  const tr = t.closest('tr[data-lr]'), r = S.hd.lich[+tr.dataset.lr];
+  r[t.dataset.lf] = t.dataset.lf === 'SoTien' ? parseMoney(t.value) : t.value;
+  S.hd.lichSua = true;
+  capNhatFootLich(el);
+  $('[data-st]', tr).innerHTML = r.NgayDen ? ttDot(r) : '';
+  setDirty(true);
+}
+function capNhatFootLich(el) { // tổng các đợt, giá trị hợp đồng, chênh lệch
+  const lt = $('[data-lt]', el); if (!lt) return;
+  const tong = hdTotal().tong, tl = sum(S.hd.lich, x => x.SoTien), chenh = tong - tl;
+  lt.textContent = money(tl) + ' ₫'; $('[data-lg]', el).textContent = money(tong) + ' ₫';
+  const lc = $('[data-lc]', el); lc.textContent = chenh ? `Chênh ${money(chenh)} ₫ so với giá trị hợp đồng` : 'Khớp giá trị hợp đồng'; lc.className = chenh ? 'warn' : 'green';
+}
+
+async function lichAct(el, a) {
+  const d = S.hd, act = a.dataset.act, i = +a.dataset.i;
+  if (act === 'lich-add') {
+    const cuoi = d.lich[d.lich.length - 1];
+    d.lich.push({ Nhan: 'Đợt ' + (d.lich.length + 1), NgayDen: cuoi && cuoi.NgayDen ? congThangISO(cuoi.NgayDen, 1) : today(), SoTien: Math.max(0, hdTotal().tong - sum(d.lich, r => r.SoTien)), SoPT: '', NgayThu: '' });
+    d.lichSua = true; drawHDLich(el); setDirty(true);
+  } else if (act === 'lich-rm') {
+    d.lich.splice(i, 1); d.lichSua = true; drawHDLich(el); setDirty(true);
+  } else if (act === 'lich-tao') {
+    const g = k => $(`[data-gen="${k}"]`, el);
+    const daThu = d.lich.filter(r => r.SoPT), moi = taoLichTraGop({ tong: hdTotal().tong, traTruoc: parseMoney(g('traTruoc').value) || 0, soKy: +g('soKy').value, ngayDau: g('ngayDau').value, chuKy: +g('chuKy').value,
+      ngayKy: d.Ngay || today(), daThu: sum(daThu, r => r.SoTien) });
+    d.lich = daThu.concat(moi); d.lichSua = true; drawHDLich(el); setDirty(true);
+    toast(`Đã tạo ${moi.length} đợt. Kiểm tra rồi bấm Lưu.`);
+  } else if (act === 'lich-thu') {
+    if (S.dirty) throw new Error('Lưu hợp đồng trước khi ghi nhận thu.');
+    openThuDot(d, d.lich[i]);
+  } else if (act === 'lich-nhac') {
+    nhacDot(d, d.lich[i]);
+  } else if (act === 'lich-huy') {
+    const r = d.lich[i];
+    if (!confirm(`Hủy ghi nhận thu ${r.Nhan} của ${d.SoHD}? Phiếu thu ${r.SoPT} sẽ bị xóa và đợt về chưa thu.`)) return;
+    const k = await api('huyThuDotHopDong', d.SoHD, r.Dot);
+    capNhatSauThu({ lich: k.lich }, d.SoHD);
+    S.thuTien = S.thuTien.filter(p => p.SoPT !== k.soPT); derive(); render();
+    toast('Đã hủy ghi nhận thu của đợt.');
+  }
+}
+// Sau khi thu / hủy thu một đợt: cập nhật lịch cục bộ (cả bản đang soạn nếu đang mở đúng hợp đồng)
+function capNhatSauThu(r, soHD) {
+  S.hopDongLich = S.hopDongLich.filter(x => x.SoHD !== soHD).concat(r.lich);
+  if (S.view === 'hd' && S.hd && S.hd.SoHD === soHD) S.hd.lich = r.lich.map(x => Object.assign({}, x));
+}
+
+function openThuDot(h, r) {
+  if (!h.SoDH) throw new Error('Gắn hợp đồng với một đơn hàng (ô "Theo đơn hàng") để ghi nhận thu tiền và công nợ tự khớp.');
+  const hinhThuc = S.congTy.hinhThuc || ['Chuyển khoản', 'Tiền mặt'];
+  const m = modal({
+    title: `Thu ${r.Nhan} – ${h.SoHD}`,
+    body: `<div class="fgrid"><label class="field"><span class="lb">Số tiền</span><input value="${money(r.SoTien)} ₫" readonly></label>
+      <label class="field"><span class="lb">Ngày thu</span><input name="Ngay" type="date" value="${esc(today())}"></label>
+      <label class="field"><span class="lb">Hình thức</span><select name="HinhThuc">${hinhThuc.map(x => `<option>${esc(x)}</option>`).join('')}</select></label>
+      <label class="field"><span class="lb">Ghi chú</span><input name="GhiChu" placeholder="vd: khách chuyển khoản"></label></div>
+      <p class="muted">Tạo phiếu thu cho đơn ${esc(h.SoDH)} (${esc(h.TenDN)}); công nợ của khách tự giảm.</p>
+      ${S.congTy.qrSoTK ? `<div class="qr"><button type="button" class="btn sm" data-qr>${icon('card')}Mã QR chuyển khoản</button><div class="qr-box" data-qrbox></div></div>` : ''}`,
+    buttons: [{ t: 'Ghi nhận đã thu', ic: 'check', cls: 'primary', save: true, fn: run(async mm => {
+      const k = await api('thuDotHopDong', h.SoHD, r.Dot, formData(mm));
+      capNhatSauThu(k, h.SoHD); upsertLocal('thuTien', 'SoPT', k.phieu); sortAll(); derive();
+      closeModal(); render(); toast(`Đã ghi nhận thu ${r.Nhan}: ${money(k.phieu.SoTien)} ₫ (phiếu ${k.phieu.SoPT}).`);
+    }) }],
+  });
+  const qb = $('[data-qr]', m);
+  if (qb) qb.onclick = () => {
+    const ck = [...$('[name=HinhThuc]', m).options].find(o => /chuyển khoản/i.test(o.value)); if (ck) ck.selected = true;
+    $('[data-qrbox]', m).innerHTML = `<img alt="Mã QR chuyển khoản" src="${esc(qrUrl(r.SoTien, 'HD ' + h.SoHD + ' dot ' + r.Dot))}"><div>Khách quét bằng app ngân hàng: có sẵn số tiền <b>${money(r.SoTien)} ₫</b> và nội dung. Thấy tiền về thì bấm Ghi nhận đã thu.</div>`;
+  };
+}
+
+function tinNhacDot(h, r) {
+  const c = S.congTy, bank = (S.nganHang.find(b => b[0] === c.qrNganHang) || [])[1], ten = h.NguoiDaiDien || h.TenDN, n = dotConLai(r);
+  let s = `Chào anh/chị ${ten}, ${S.cuaHang.ten} xin nhắc ${r.Nhan} của hợp đồng ${h.SoHD}: số tiền ${money(r.SoTien)} đồng, hạn ${dmyRaw(r.NgayDen)}`;
+  s += n < 0 ? ` (đã quá hạn ${-n} ngày).` : n === 0 ? ' (hôm nay).' : '.';
+  if (c.qrSoTK) s += ` Anh/chị chuyển khoản vào tài khoản ${c.qrSoTK}${bank ? ' ' + bank : ''}${c.qrChuTK ? ', chủ tài khoản ' + c.qrChuTK : ''}, nội dung "${h.SoHD}".`;
+  return s + ' Xin cảm ơn!';
+}
+function nhacDot(h, r) {
+  const kh = S.khach.find(k => k.MaKH === h.MaKH) || {};
+  openNhac({ ten: h.TenDN, sdt: h.SDT || kh.SDT, email: kh.Email, tieuDe: `Nhắc thanh toán ${r.Nhan} - hợp đồng ${h.SoHD}`, tin: tinNhacDot(h, r) });
+}
+
+function vHDLich(el) {
+  setTop('Hợp đồng', 'Lịch thanh toán', []);
+  const hd = {}; S.hopDong.forEach(h => { hd[h.SoHD] = h; });
+  listCard(el, {
+    id: 'hdlich', ph: 'Tìm số hợp đồng, khách hàng, nội dung đợt…',
+    filters: [{ id: 'loc', def: 'can', options: [['can', 'Quá hạn và đến hạn 7 ngày'], ['quahan', 'Quá hạn'], ['chua', 'Tất cả chưa thu'], ['thu', 'Đã thu'], ['', 'Tất cả']] }],
+    filter: (r, f) => !f.loc || (f.loc === 'can' ? ['quahan', 'sap'].includes(trangThaiDot(r)) : f.loc === 'chua' ? !r.SoPT : trangThaiDot(r) === f.loc),
+    cols: [
+      { t: 'Hạn', f: r => dmy(r.NgayDen) },
+      { t: 'Hợp đồng', cls: 'wrap', f: r => `<span class="code">${esc(r.SoHD)}</span><span class="sub">${esc((hd[r.SoHD] || {}).TenDN)}</span>` },
+      { t: 'Nội dung', k: 'Nhan' }, { t: 'Số tiền', cls: 'num', f: r => `<b>${money(r.SoTien)}</b>` },
+      { t: 'Tình trạng', f: r => ttDot(r) + (r.SoPT ? `<span class="sub">Phiếu ${esc(r.SoPT)}</span>` : '') },
+      { t: '', f: r => r.SoPT ? '' : `<button class="btn sm" data-act="thu">${icon('check')}Thu</button> <button class="btn sm" data-act="nhac">${icon('alert')}Nhắc</button>` },
+    ],
+    data: () => S.hopDongLich.filter(r => hd[r.SoHD]).slice().sort((a, b) => String(a.NgayDen).localeCompare(String(b.NgayDen))),
+    text: r => [r.SoHD, (hd[r.SoHD] || {}).TenDN, r.Nhan, r.SoPT].join(' '),
+    open: run(r => openHD(hd[r.SoHD])),
+    act: run((r, act) => act === 'thu' ? openThuDot(hd[r.SoHD], r) : nhacDot(hd[r.SoHD], r)),
+    foot: rows => `<span>${rows.length} đợt</span><span>Chưa thu <b>${money(sum(rows.filter(r => !r.SoPT), r => r.SoTien))} ₫</b></span><span>Quá hạn <b class="red">${money(sum(rows.filter(r => trangThaiDot(r) === 'quahan'), r => r.SoTien))} ₫</b></span>`,
+  });
+  el.insertAdjacentHTML('beforeend', '<p class="muted" style="margin-top:14px">Lịch lập trong từng hợp đồng (mục 4). Bấm Thu để tạo phiếu thu theo đơn hàng của hợp đồng; bấm Nhắc để soạn tin gửi khách qua Zalo hoặc email. Zalo ZNS (tin thông báo của doanh nghiệp) không cho nhắc nợ nhiều lần, nên nhắc vừa phải.</p>');
+}
+
 const hdTitle = () => S.hd.SoHD ? 'Hợp đồng ' + S.hd.SoHD : 'Hợp đồng mới';
 const blankHDLine = () => ({ MaHH: '', TenHang: '', DVT: '', SoLuong: '', DonGia: '', IMEI: '' });
 const hdTotal = () => { const t = sum(S.hd.lines, lineTotal), v = Math.min(100, Math.max(0, +S.hd.VAT || 0)), tv = Math.round(t * v / 100); return { tien: t, vat: v, tienVat: tv, tong: t + tv }; };
@@ -1785,7 +1962,7 @@ function hdTail() { const ls = S.hd.lines; if (!ls.length || String(ls[ls.length
 
 function newHD(init) {
   const base = { SoHD: '', Ngay: today(), LoaiHD: S.loaiHD[0] || '', SoDH: '', MaKH: '', NgayHieuLuc: '', NgayHetHan: '', BaoTruocNgay: 30, TuGiaHan: '', ThangGiaHan: 12, NguoiPhuTrach: S.user.ten, TrangThai: 'Soạn thảo',
-    VAT: S.congTy.vatMacDinh ?? 0, GhiChu: '', lines: [] };
+    VAT: S.congTy.vatMacDinh ?? 0, GhiChu: '', lines: [], lich: [] };
   HD_BEN_A.forEach(k => { base[k] = ''; });
   return editHD(Object.assign(base, init || {}));
 }
@@ -1802,7 +1979,7 @@ async function openHD(h) {
   if (dangSoan() && !confirm('Chứng từ đang soạn chưa lưu. Bỏ thay đổi?')) return;
   const r = await api('layHopDong', h.SoHD);
   S.dirty = false;
-  editHD(Object.assign({}, h, { lines: r.lines.map(l => Object.assign({}, l)) }));
+  editHD(Object.assign({}, h, { lines: r.lines.map(l => Object.assign({}, l)), lich: (r.lich || []).map(x => Object.assign({}, x)) }));
 }
 
 function vHD(el) {
@@ -1863,13 +2040,15 @@ function vHD(el) {
         <div><span>Tiền thuế</span><b data-t="tienVat">${money(t.tienVat)} ₫</b></div>
         <div class="sum"><span>Tổng thanh toán</span><span data-t="tong">${money(t.tong)} ₫</span></div></div></div>
     <div class="doc-head" style="padding-top:0">${fld('Bằng chữ', `<input data-t="chu" value="${esc(docSo(t.tong) + ' chẵn.')}" readonly>`, 'full')}${fld('Ghi chú', inp('GhiChu', 'placeholder="Điều khoản bổ sung, ghi chú nội bộ"'), 'full')}</div></div>
+  <div class="card" style="margin-top:16px"><div class="card-h"><h3>4. Lịch thanh toán (trả góp, chia đợt)</h3>${khoa ? '<span class="muted" style="margin-left:auto;font-size:12.5px">Hợp đồng đã hiệu lực: chỉ quản trị đổi lịch chưa thu</span>' : ''}</div><div class="card-b" data-lich></div></div>
   ${saved ? '<details class="card" style="margin-top:16px" data-ls><summary class="card-h" style="cursor:pointer"><h3>Lịch sử thay đổi của hợp đồng</h3></summary><div class="card-b" data-lsbody>Đang tải…</div></details>' : ''}`;
-  drawHDLines(el);
+  drawHDLines(el); drawHDLich(el);
 
   el.onclick = run(async e => {
     const a = e.target.closest('[data-act]');
     if (!a) return;
     const b = S.hd;
+    if (a.dataset.act.startsWith('lich-')) return lichAct(el, a);
     if (a.dataset.act === 'newkh') openKhach(null, pickHDKhach);
     else if (a.dataset.act === 'taofile') await taoFileHD();
     else if (a.dataset.act === 'pdf') await taiPdfHD();
@@ -1917,10 +2096,13 @@ function drawHDTotals(el) {
   $('[data-t="tienVat"]', el).textContent = money(t.tienVat) + ' ₫';
   $('[data-t="tong"]', el).textContent = money(t.tong) + ' ₫';
   $('[data-t="chu"]', el).value = docSo(t.tong) + ' chẵn.';
+  capNhatFootLich(el);
 }
 
 function onHDInput(el, t) {
   const d = S.hd;
+  if (t.dataset.lf) return onLichInput(el, t);
+  if (t.dataset.gen) return;
   if (t.dataset.h) {
     d[t.dataset.h] = t.value;
     if (t.dataset.h === 'TenDN') {
@@ -1988,7 +2170,7 @@ async function hdTuDon(dh) {
 function nhanBanHD() {
   const b = S.hd;
   if (S.dirty) throw new Error('Lưu hợp đồng trước khi nhân bản.');
-  if (editHD(Object.assign({}, b, { SoHD: '', FileId: '', LinkFile: '', NgayFile: '', FileCu: '', NguoiTao: '', NgayTao: '', NgaySua: '', TrangThai: 'Soạn thảo', Ngay: today(), NgayHieuLuc: '', NgayHetHan: '',
+  if (editHD(Object.assign({}, b, { SoHD: '', FileId: '', LinkFile: '', NgayFile: '', FileCu: '', NguoiTao: '', NgayTao: '', NgaySua: '', TrangThai: 'Soạn thảo', Ngay: today(), NgayHieuLuc: '', NgayHetHan: '', lich: [], lichSua: false,
     lines: filled(b.lines).map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, DVT: l.DVT, SoLuong: l.SoLuong, DonGia: l.DonGia, IMEI: '' })) }))) { // máy khác nhau nên không chép IMEI
     setDirty(true);
     toast('Đã tạo bản sao: sửa rồi bấm Lưu để có số hợp đồng mới.');
@@ -2051,6 +2233,7 @@ async function saveHD() {
   if (!String(d.TenDN).trim()) throw new Error('Nhập tên khách hàng (bên A).');
   if (lines.some(l => !(+l.SoLuong > 0))) throw new Error('Nhập số lượng lớn hơn 0 cho mọi dòng hàng.');
   if (d.NgayHieuLuc && d.NgayHetHan && d.NgayHetHan < d.NgayHieuLuc) throw new Error('Ngày hết hạn phải sau ngày hiệu lực.');
+  if (d.lichSua) d.lich.forEach((r, i) => { if (!r.SoPT && !(r.NgayDen && +r.SoTien > 0)) throw new Error(`Lịch thanh toán: đợt ${i + 1} cần ngày đến hạn và số tiền lớn hơn 0.`); });
   if (lines.some(l => l.DonGia === '' || l.DonGia == null) && !confirm('Có dòng chưa có đơn giá (sẽ tính 0 ₫). Vẫn lưu?')) return;
   saving = true;
   try {
@@ -2066,10 +2249,20 @@ async function saveHD() {
       if (kh) ['SDT', 'DiaChi', 'MST', 'NguoiDaiDien', 'ChucVu', 'VanPhongGD', 'SoTK', 'NganHang'].forEach(k => { if (!String(kh[k] || '').trim() && String(benA[k] || '').trim()) them[k] = benA[k]; });
       if (kh && Object.keys(them).length && confirm(`Lưu thêm thông tin vừa nhập vào khách hàng "${kh.TenKH}" để lần sau tự điền?`)) upsertLocal('khach', 'MaKH', await api('luuKhach', Object.assign({}, kh, them)));
     }
-    const r = await api('luuHopDong', Object.assign({}, d, { lines }));
+    const r = await api('luuHopDong', Object.assign({}, d, { lines, lich: undefined }));
     const head = Object.assign({}, r.doc); delete head.lines;
     upsertLocal('hopDong', 'SoHD', head); sortAll();
-    S.hd = Object.assign({}, head, { lines: r.doc.lines.map(l => Object.assign({}, l)) });
+    let lich = d.lich;
+    if (d.lichSua) { // lịch lưu sau khi hợp đồng đã có số; lỗi (vd. hợp đồng đã ký) thì giữ lại phần đang sửa để người dùng thấy
+      try { lich = (await api('luuLichHopDong', head.SoHD, d.lich.map(x => ({ Nhan: x.Nhan, NgayDen: x.NgayDen, SoTien: x.SoTien, SoPT: x.SoPT })))).lich; }
+      catch (err) {
+        S.hd = Object.assign({}, head, { lines: r.doc.lines.map(l => Object.assign({}, l)), lich: d.lich, lichSua: true });
+        S.extra = { khoa: HD_DA_KY.includes(head.TrangThai) && !isAdmin() }; S.dirty = true; hdTail(); render();
+        throw new Error('Đã lưu hợp đồng nhưng chưa lưu được lịch thanh toán: ' + errMsg(err));
+      }
+      S.hopDongLich = S.hopDongLich.filter(x => x.SoHD !== head.SoHD).concat(lich);
+    }
+    S.hd = Object.assign({}, head, { lines: r.doc.lines.map(l => Object.assign({}, l)), lich: lich.map(x => Object.assign({}, x)) });
     S.extra = { khoa: HD_DA_KY.includes(head.TrangThai) && !isAdmin() };
     S.dirty = false; hdTail();
     render();
@@ -2105,7 +2298,7 @@ async function delHD() {
   const so = S.hd.SoHD;
   if (!confirm(`Xóa hợp đồng ${so}? Không thể hoàn tác.`)) return;
   await api('xoaHopDong', so);
-  S.hopDong = S.hopDong.filter(x => x.SoHD !== so);
+  S.hopDong = S.hopDong.filter(x => x.SoHD !== so); S.hopDongLich = S.hopDongLich.filter(x => x.SoHD !== so);
   S.dirty = false; go('hopdong');
   toast(`Đã xóa hợp đồng ${so}.`);
 }
@@ -2397,7 +2590,7 @@ function openCuaHang() {
 }
 
 // ===================== Phím tắt: F2 mới, F3 tìm, F8 lưu, Esc đóng =====================
-const VIEWS = { home: vHome, baogia: vBaoGia, donhang: vDonHang, congno: vCongNo, hang: vHang, kho: vKho, ton: vTon, khach: vKhach, taikhoan: vTaiKhoan, caidat: vCaiDat, baohanh: vBaoHanh, hopdong: vHopDong, hd: vHD, hdhan: vHDHan, baocao: vBaoCao, nhatky: vNhatKy, doc: vDoc };
+const VIEWS = { home: vHome, baogia: vBaoGia, donhang: vDonHang, congno: vCongNo, hang: vHang, kho: vKho, ton: vTon, khach: vKhach, taikhoan: vTaiKhoan, caidat: vCaiDat, baohanh: vBaoHanh, hopdong: vHopDong, hd: vHD, hdhan: vHDHan, hdlich: vHDLich, baocao: vBaoCao, nhatky: vNhatKy, doc: vDoc };
 document.addEventListener('keydown', e => {
   if ($('#app').classList.contains('hidden')) return;
   const modalOpen = !$('#modal').classList.contains('hidden');

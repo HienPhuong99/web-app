@@ -19,17 +19,21 @@ function loaiHopDong_(mau) { // mau = các dòng MauHopDong đã đọc sẵn (�
 
 function layHopDong(token, soHD) {
   user_(token);
-  return { lines: dongHopDong_(soHD) };
+  return { lines: dongHopDong_(soHD), lich: lichHopDong_(soHD) };
 }
 // Nhân viên chỉ cần biết hợp đồng đã có file hay chưa (không mở được Drive): giấu mã và link file
 function hdChoUser_(user, hd) { return user.vaiTro === 'admin' ? hd : Object.assign({}, hd, { FileId: hd.FileId ? '1' : '', LinkFile: '' }); }
 // Nội dung hợp đồng xuất hiện trong file Docs (các trường HD_TRONG_FILE + dòng hàng): so hai bản để biết file có cũ không
-function noiDungHD_(hd, lines) {
-  return JSON.stringify([HD_TRONG_FILE.map(k => String(hd[k] == null ? '' : hd[k])), lines.map(l => [String(l.MaHH), String(l.TenHang), String(l.DVT), +l.SoLuong, +l.DonGia, String(l.IMEI || '')])]);
+function noiDungHD_(hd, lines, lich) {
+  return JSON.stringify([HD_TRONG_FILE.map(k => String(hd[k] == null ? '' : hd[k])), lines.map(l => [String(l.MaHH), String(l.TenHang), String(l.DVT), +l.SoLuong, +l.DonGia, String(l.IMEI || '')]),
+    (lich || []).map(r => [String(r.Nhan), String(r.NgayDen), +r.SoTien])]);
 }
 function dongHopDong_(soHD) {
   return readTable_('HopDongCT').filter(l => String(l.SoHD) === String(soHD)).sort((a, b) => a.STT - b.STT);
 }
+
+const ngayHopLe_ = v => { v = String(v == null ? '' : v).trim().slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(v) && new Date(v + 'T00:00:00Z').toISOString().slice(0, 10) === v ? v : ''; };
+const dmyHD_ = s => /^\d{4}-\d{2}-\d{2}/.test(String(s)) ? String(s).slice(8, 10) + '/' + String(s).slice(5, 7) + '/' + String(s).slice(0, 4) : '';
 
 /** Lập hoặc sửa hợp đồng (chưa tạo file Docs). Tiền và bằng chữ luôn tính lại ở máy chủ. */
 function luuHopDong(token, doc) {
@@ -103,11 +107,113 @@ function xoaHopDong(token, soHD) {
   withLock_(() => {
     const hd = findObj_('HopDong', soHD);
     if (!hd) throw new Error('Không tìm thấy hợp đồng ' + soHD + '.');
+    if (lichHopDong_(soHD).some(r => r.SoPT)) throw new Error('Hợp đồng đã ghi nhận thu tiền theo lịch thanh toán. Hủy các phiếu thu đó trước (Lịch thanh toán → Hủy thu) rồi mới xóa.');
     deleteWhere_('HopDong', soHD);
     deleteWhere_('HopDongCT', soHD);
+    deleteWhere_('HopDongLich', soHD);
     if (hd.FileId) { try { DriveApp.getFileById(hd.FileId).setTrashed(true); } catch (e) {} } // vào thùng rác Drive, còn khôi phục được
     log_(user, 'Xóa hợp đồng', soHD, hd.TenDN + ' · ' + hd.LoaiHD);
   });
+}
+
+// ===== Lịch thanh toán / trả góp =====
+// Mỗi đợt một dòng ở trang HopDongLich. Ghi nhận thu một đợt = tạo phiếu thu gắn với đơn hàng của hợp đồng (công nợ tự khớp) và lưu số phiếu vào đợt.
+const HD_DOT_TOI_DA = 36;
+function lichHopDong_(soHD) {
+  return readTable_('HopDongLich').filter(r => String(r.SoHD) === String(soHD)).sort((a, b) => a.Dot - b.Dot);
+}
+function timDongLich_(soHD, dot) {
+  const sh = sheet_('HopDongLich'), h = headers_(sh), n = sh.getLastRow();
+  if (n >= 2) {
+    const v = sh.getRange(2, 1, n - 1, h.length).getValues(), a = h.indexOf('SoHD'), b = h.indexOf('Dot');
+    for (let i = 0; i < v.length; i++) if (String(v[i][a]) === String(soHD) && +v[i][b] === +dot) return { sh: sh, r: i + 2 };
+  }
+  return { sh: sh, r: 0 };
+}
+
+/**
+ * Lưu toàn bộ lịch thanh toán của hợp đồng (thay thế lịch cũ). Đợt đã thu (có SoPT) phải gửi lại nguyên vẹn và không bỏ được;
+ * hợp đồng đã ký thì nhân viên không đổi các đợt chưa thu (chỉ quản trị). Trả về lịch đã lưu (đánh số lại theo ngày đến hạn).
+ */
+function luuLichHopDong(token, soHD, rows) {
+  const user = user_(token);
+  rows = Array.isArray(rows) ? rows : [];
+  if (rows.length > HD_DOT_TOI_DA) throw new Error('Tối đa ' + HD_DOT_TOI_DA + ' đợt thanh toán.');
+  return withLock_(() => {
+    const hd = findObj_('HopDong', soHD);
+    if (!hd) throw new Error('Không tìm thấy hợp đồng ' + soHD + '.');
+    const cu = lichHopDong_(soHD), daThu = cu.filter(r => r.SoPT), dung = {};
+    const moi = rows.map((r, i) => {
+      if (r.SoPT) {
+        const g = daThu.find(x => String(x.SoPT) === String(r.SoPT));
+        if (!g || dung[g.SoPT]) throw new Error('Đợt ' + (i + 1) + ': không khớp với đợt đã thu tiền đang lưu.');
+        dung[g.SoPT] = 1;
+        return Object.assign({}, g);
+      }
+      const ngay = ngayHopLe_(r.NgayDen), soTien = Math.round(+r.SoTien || 0);
+      if (!ngay) throw new Error('Đợt ' + (i + 1) + ': ngày đến hạn không hợp lệ.');
+      if (soTien <= 0) throw new Error('Đợt ' + (i + 1) + ': số tiền phải lớn hơn 0.');
+      return { SoHD: soHD, Nhan: String(r.Nhan || '').trim().slice(0, 60) || 'Đợt ' + (i + 1), NgayDen: ngay, SoTien: soTien, SoPT: '', NgayThu: '' };
+    });
+    if (daThu.some(g => !dung[g.SoPT])) throw new Error('Không bỏ được đợt đã thu tiền. Hủy phiếu thu của đợt đó trước (quản trị).');
+    const chuaThu = ls => JSON.stringify(ls.filter(x => !x.SoPT).map(x => [String(x.Nhan), String(x.NgayDen), +x.SoTien]));
+    if (user.vaiTro !== 'admin' && HD_DA_KY.includes(hd.TrangThai) && chuaThu(cu) !== chuaThu(moi)) throw new Error('Hợp đồng đã hiệu lực: chỉ quản trị được đổi lịch thanh toán.');
+    moi.sort((a, b) => String(a.NgayDen).localeCompare(String(b.NgayDen)) || (a.SoPT ? -1 : 1)).forEach((r, i) => { r.Dot = i + 1; });
+    deleteWhere_('HopDongLich', soHD);
+    if (moi.length) {
+      const sh = sheet_('HopDongLich'), out = moi.map(r => toRow_(sh, r));
+      sh.getRange(sh.getLastRow() + 1, 1, out.length, out[0].length).setValues(out);
+    }
+    const khoa = ls => JSON.stringify(ls.map(x => [String(x.Nhan), String(x.NgayDen), +x.SoTien]));
+    if (hd.FileId && khoa(cu) !== khoa(moi)) { // lịch có trong file nên file cũ
+      const sh = sheet_('HopDong'); writeRow_(sh, findRow_(sh, soHD), Object.assign({}, hd, { FileCu: '1' }));
+    }
+    log_(user, 'Sửa lịch thanh toán', soHD, moi.length + ' đợt · tổng ' + moi.reduce((t, r) => t + (+r.SoTien || 0), 0) + ' đ');
+    return { lich: moi };
+  });
+}
+
+/** Ghi nhận khách đã trả một đợt: tạo phiếu thu theo đơn hàng của hợp đồng và đánh dấu đợt đã thu. Nhân viên làm được. */
+function thuDotHopDong(token, soHD, dot, tt) {
+  const user = user_(token);
+  tt = tt || {};
+  return withLock_(() => {
+    const hd = findObj_('HopDong', soHD);
+    if (!hd) throw new Error('Không tìm thấy hợp đồng ' + soHD + '.');
+    if (!hd.SoDH) throw new Error('Gắn hợp đồng với một đơn hàng (ô "Theo đơn hàng") để ghi nhận thu tiền và công nợ tự khớp.');
+    const f = timDongLich_(soHD, dot);
+    if (!f.r) throw new Error('Không tìm thấy đợt ' + dot + ' của hợp đồng ' + soHD + '.');
+    const row = rowObj_(f.sh, f.r);
+    if (row.SoPT) throw new Error('Đợt ' + dot + ' đã thu (phiếu ' + row.SoPT + ').');
+    const hinhThuc = String(tt.HinhThuc || '').trim() || (cuaHang_(CUR_SHOP).congTy.hinhThuc || [])[0] || 'Chuyển khoản';
+    const pt = ghiPhieuThu_(user, { Ngay: ngayHopLe_(tt.Ngay) || now_().slice(0, 10), SoDH: hd.SoDH, SoTien: row.SoTien, HinhThuc: hinhThuc,
+      GhiChu: ('Hợp đồng ' + soHD + ' – ' + row.Nhan + (tt.GhiChu ? ' – ' + String(tt.GhiChu).trim() : '')).slice(0, 200) });
+    writeRow_(f.sh, f.r, Object.assign({}, row, { SoPT: pt.SoPT, NgayThu: pt.Ngay }));
+    log_(user, 'Thu đợt hợp đồng', soHD, row.Nhan + ' · ' + row.SoTien + ' đ · phiếu ' + pt.SoPT);
+    return { lich: lichHopDong_(soHD), phieu: pt };
+  });
+}
+
+/** Quản trị hủy ghi nhận thu của một đợt: xóa phiếu thu đã tạo và đưa đợt về chưa thu. */
+function huyThuDotHopDong(token, soHD, dot) {
+  const user = user_(token, true);
+  return withLock_(() => {
+    const f = timDongLich_(soHD, dot);
+    if (!f.r) throw new Error('Không tìm thấy đợt ' + dot + ' của hợp đồng ' + soHD + '.');
+    const row = rowObj_(f.sh, f.r);
+    if (!row.SoPT) throw new Error('Đợt ' + dot + ' chưa thu tiền.');
+    deleteWhere_('ThuTien', row.SoPT);
+    writeRow_(f.sh, f.r, Object.assign({}, row, { SoPT: '', NgayThu: '' }));
+    log_(user, 'Hủy thu đợt hợp đồng', soHD, row.Nhan + ' · xóa phiếu ' + row.SoPT);
+    return { lich: lichHopDong_(soHD), soPT: row.SoPT };
+  });
+}
+
+/** Tình trạng một đợt (homNay dạng yyyy-MM-dd): 'thu' | 'quahan' | 'sap' (còn ≤ 7 ngày) | 'cho'. Phải giống trangThaiDot trong Index.html. */
+function trangThaiDot_(r, homNay) {
+  if (r.SoPT) return 'thu';
+  const n = Math.round((Date.parse(r.NgayDen) - Date.parse(homNay)) / 864e5);
+  return n < 0 ? 'quahan' : n <= 7 ? 'sap' : 'cho';
 }
 
 /** Gia hạn một chạm: cộng thêm số tháng vào ngày hết hạn của hợp đồng đang hiệu lực (không đụng hàng hóa, số tiền). Nhân viên làm được. */
@@ -187,6 +293,7 @@ const HD_BIEN = [
   ['NGUOIDAIDIEN', 'Bên A: người đại diện'], ['CHUCVU', 'Bên A: chức vụ'], ['DIENTHOAI', 'Bên A: số điện thoại'], ['SOTAIKHOAN', 'Bên A: số tài khoản'], ['NGANHANG', 'Bên A: ngân hàng'],
   ['B_TEN', 'Bên B (cửa hàng): tên in trên chứng từ'], ['B_DIACHI', 'Bên B: địa chỉ'], ['B_MST', 'Bên B: mã số thuế'], ['B_DAIDIEN', 'Bên B: người đại diện (chủ hộ)'], ['B_CHUCVU', 'Bên B: chức danh người ký'],
   ['B_LIENHE', 'Bên B: điện thoại, email'], ['B_STK', 'Bên B: số tài khoản nhận tiền'], ['B_NGANHANG', 'Bên B: ngân hàng'], ['B_CHUTK', 'Bên B: chủ tài khoản'], ['B_BAOHANH', 'Bên B: số tháng bảo hành mặc định'],
+  ['BANGLICH', 'Bảng lịch thanh toán / trả góp (đợt, nội dung, ngày đến hạn, số tiền) – đặt riêng một dòng'], ['SOKY', 'Số kỳ trả góp (không tính đợt "Trả trước")'], ['TONGLICH', 'Tổng số tiền các đợt trong lịch'], ['TRATRUOC', 'Số tiền đợt "Trả trước"'],
   ['BANGHANG', 'Bảng hàng hóa (STT, tên hàng, ĐVT, SL, đơn giá, thành tiền, cộng, VAT, tổng) – đặt riêng một dòng'],
   ['CONGTIENHANG', 'Cộng tiền hàng'], ['VAT', 'Thuế GTGT (%)'], ['TIENVAT', 'Tiền thuế GTGT'], ['TONGTHANHTOAN', 'Tổng thanh toán'], ['BANGCHU', 'Tổng thanh toán bằng chữ'], ['GHICHU', 'Ghi chú'],
 ];
@@ -327,9 +434,28 @@ const HD_MAU_SUA_CHUA = hdMoDau('HỢP ĐỒNG DỊCH VỤ SỬA CHỮA – BẢ
   ['li', 'Thiết bị đã từng vào nước, rơi vỡ hoặc bị can thiệp có thể phát sinh thêm lỗi khi mở máy; Bên B không bảo đảm khả năng phục hồi hoàn toàn trong các trường hợp này.']],
   hdViPham(), hdBatKhaKhang(), hdTranhChap(), hdDuLieuCaNhan(), hdHieuLuc(), [['ky', 'ĐẠI DIỆN BÊN A (KHÁCH HÀNG)', 'ĐẠI DIỆN BÊN B (ĐƠN VỊ DỊCH VỤ)']]));
 
+const HD_MAU_TRA_GOP = hdMoDau('HỢP ĐỒNG MUA BÁN TRẢ GÓP', 'BÊN MUA', 'BÊN BÁN', 'Căn cứ thỏa thuận của hai bên về việc mua bán hàng hóa trả chậm, trả dần.').concat([
+  ['dieu', 'Hàng hóa và giá'], ['p', 'Bên B bán và Bên A mua các hàng hóa sau:'], ['bang'],
+  ['p', 'Tổng giá trị hợp đồng (gồm thuế GTGT {{VAT}}%): {{TONGTHANHTOAN}} đồng. Bằng chữ: {{BANGCHU}}'],
+  ['dieu', 'Phương thức thanh toán trả góp'],
+  ['li', 'Bên A thanh toán giá trị hợp đồng theo lịch dưới đây. Trả góp trực tiếp với Bên B, không tính lãi trả góp:'], ['bang_lich'],
+  ['li', 'Số tiền trả trước: {{TRATRUOC}} đồng; số kỳ trả góp: {{SOKY}}; tổng các đợt: {{TONGLICH}} đồng.']]
+  .concat(hdThanhToanTK, [
+  ['dieu', 'Giao nhận hàng'],
+  ['li', 'Bên B giao hàng cho Bên A sau khi Bên A thanh toán khoản trả trước (nếu có) tại: ……………………………………; Bên A kiểm tra ngoại quan, số lượng, IMEI/serial, kích hoạt thử và ký xác nhận vào phiếu giao hàng.'],
+  ['dieu', 'Quyền sở hữu'],
+  ['li', 'Hai bên thỏa thuận Bên B bảo lưu quyền sở hữu hàng hóa cho đến khi Bên A thanh toán đủ giá trị hợp đồng, theo quy định của Bộ luật Dân sự. Trong thời gian này Bên A được sử dụng hàng hóa nhưng không được bán, cầm cố, thế chấp, cho thuê hoặc chuyển giao cho người khác.'],
+  ['dieu', 'Thanh toán chậm'],
+  ['li', 'Nếu Bên A chậm thanh toán một đợt quá ……… ngày, Bên B có quyền: tính lãi chậm trả theo mức ……… %/ngày trên số tiền chậm trả (không vượt mức pháp luật cho phép); yêu cầu thanh toán ngay toàn bộ số tiền còn lại; và thu hồi hàng hóa theo thỏa thuận bảo lưu quyền sở hữu.'],
+  ['dieu', 'Bảo hành và xử lý máy lỗi'],
+  ['li', 'Hàng hóa được bảo hành {{B_BAOHANH}} tháng theo chính sách của nhà sản xuất và của Bên B; số IMEI/serial ghi trong phiếu giao hàng kiêm phiếu bảo hành là căn cứ bảo hành.'],
+  ['li', 'Máy phát sinh lỗi do nhà sản xuất: Bên B đổi, sửa chữa hoặc hoàn tiền theo chính sách. Nếu Bên B không xử lý được trong ……… ngày kể từ khi tiếp nhận, hai bên thỏa thuận tạm dừng hoặc điều chỉnh các đợt chưa đến hạn.']],
+  hdViPham(), hdBatKhaKhang(), hdTranhChap(), hdDuLieuCaNhan(), hdHieuLuc(), [['ky', 'ĐẠI DIỆN BÊN A (BÊN MUA)', 'ĐẠI DIỆN BÊN B (BÊN BÁN)']]));
+
 // Loại hợp đồng có sẵn (ngành điện thoại). caiDat tạo file Google Docs mẫu cho từng loại rồi ghi vào trang MauHopDong; quản trị thêm/xóa loại ở đó.
 const HD_LOAI_MAC_DINH = [
   { ten: 'Hợp đồng mua bán', moTa: 'Bán lẻ/bán sỉ điện thoại, phụ kiện: bảng hàng, giá, thanh toán, giao nhận, bảo hành.', mau: HD_MAU_MUA_BAN },
+  { ten: 'Hợp đồng mua bán trả góp', moTa: 'Bán trả chậm/trả góp trực tiếp cho khách: lịch thanh toán theo đợt, bảo lưu quyền sở hữu, xử lý chậm trả và máy lỗi.', mau: HD_MAU_TRA_GOP },
   { ten: 'Hợp đồng nguyên tắc', moTa: 'Khung cho khách mua thường xuyên: chính sách giá, thanh toán, công nợ; từng đơn mua theo phụ lục hoặc đơn hàng.', mau: HD_MAU_NGUYEN_TAC },
   { ten: 'Hợp đồng đại lý – phân phối', moTa: 'Đại lý/cộng tác viên nhận hàng bán lại: chiết khấu, công nợ, bảo hành, đổi trả.', mau: HD_MAU_DAI_LY },
   { ten: 'Hợp đồng thu cũ đổi mới', moTa: 'Mua lại máy cũ của khách (định giá, IMEI, xác nhận quyền sở hữu, xóa dữ liệu) để đổi máy mới.', mau: HD_MAU_THU_CU },
@@ -362,6 +488,7 @@ function dungMau_(doc, muc) {
     else if (k === 'dieu') them('Điều ' + (++dieu) + '. ' + m[1], A.LEFT, { dam: true });
     else if (k === 'bl') them('', A.LEFT);
     else if (k === 'bang') them('{{BANGHANG}}', A.LEFT);
+    else if (k === 'bang_lich') them('{{BANGLICH}}', A.LEFT);
     else if (k === 'kv') { const p = them(m[1] + m[2], A.LEFT); p.editAsText().setBold(0, m[1].length - 1, true); }
     else if (k === 'ky') {
       const t = body.appendTable([[m[1], m[2]], ['(Ký, ghi rõ họ tên, đóng dấu)', '(Ký, ghi rõ họ tên, đóng dấu)']]);
@@ -434,11 +561,12 @@ function mauHopDong_(loai) {
 }
 
 // Giá trị các biến {{…}} của một hợp đồng
-function bienHopDong_(hd) {
+function bienHopDong_(hd, lich) {
+  lich = lich || [];
   const c = cuaHang_(CUR_SHOP).congTy;
   const t = v => { v = String(v == null ? '' : v).replace(/\{\{|\}\}/g, '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ' ').trim().slice(0, 500); return v || HD_TRONG; };
   const so = tien_;
-  const ngay = s => /^\d{4}-\d{2}-\d{2}/.test(String(s)) ? String(s).slice(8, 10) + '/' + String(s).slice(5, 7) + '/' + String(s).slice(0, 4) : '';
+  const ngay = dmyHD_;
   const ngayDai = s => /^\d{4}-\d{2}-\d{2}/.test(String(s)) ? 'ngày ' + String(s).slice(8, 10) + ' tháng ' + String(s).slice(5, 7) + ' năm ' + String(s).slice(0, 4) : 'ngày ….. tháng ….. năm …….';
   const thoiHan = hd.NgayHieuLuc && hd.NgayHetHan ? 'từ ngày ' + ngay(hd.NgayHieuLuc) + ' đến hết ngày ' + ngay(hd.NgayHetHan)
     : hd.NgayHieuLuc ? 'kể từ ngày ' + ngay(hd.NgayHieuLuc) : hd.NgayHetHan ? 'kể từ ngày ký đến hết ngày ' + ngay(hd.NgayHetHan) : 'kể từ ngày ký';
@@ -454,6 +582,7 @@ function bienHopDong_(hd) {
     CHUCVU: t(hd.ChucVu), DIENTHOAI: t(hd.SDT), SOTAIKHOAN: t(hd.SoTK), NGANHANG: t(hd.NganHang),
     B_TEN: t(c.ten), B_DIACHI: t((c.diaChi || []).join('; ')), B_MST: t(c.mst), B_DAIDIEN: t(c.chuHo), B_CHUCVU: t(c.kyTen), B_LIENHE: t(c.lienHe),
     B_STK: t(c.qrSoTK), B_NGANHANG: t(nh ? nh[1] : ''), B_CHUTK: t(c.qrChuTK), B_BAOHANH: t(c.baoHanhThang),
+    SOKY: String(lich.filter(r => r.Nhan !== 'Trả trước').length), TONGLICH: so(lich.reduce((t, r) => t + (+r.SoTien || 0), 0)), TRATRUOC: so(lich.filter(r => r.Nhan === 'Trả trước').reduce((t, r) => t + (+r.SoTien || 0), 0)),
     CONGTIENHANG: so(hd.TienHang), VAT: String(+hd.VAT || 0), TIENVAT: so(hd.TienVAT), TONGTHANHTOAN: so(hd.TongCong), BANGCHU: t(hd.BangChu), GHICHU: t(hd.GhiChu),
   };
 }
@@ -470,6 +599,15 @@ function bangHang_(hd, lines) {
   return rows;
 }
 
+// Ô bảng lịch thanh toán: tiêu đề, từng đợt, tổng. Không có lịch thì null.
+function bangLich_(lich) {
+  if (!lich || !lich.length) return null;
+  const rows = [['Đợt', 'Nội dung', 'Ngày đến hạn', 'Số tiền (đồng)']];
+  lich.forEach(r => rows.push([String(r.Dot), String(r.Nhan), dmyHD_(r.NgayDen), tien_(r.SoTien)]));
+  rows.push(['', 'Tổng cộng', '', tien_(lich.reduce((t, r) => t + (+r.SoTien || 0), 0))]);
+  return rows;
+}
+
 // Thay một biến. Giá trị chứa \ hoặc $ thì không đi qua replaceText (hàm này hiểu $1 là nhóm bắt) mà chèn trực tiếp.
 function thayBien_(body, ten, giaTri) {
   const mau = '\\{\\{' + ten + '\\}\\}';
@@ -481,26 +619,30 @@ function thayBien_(body, ten, giaTri) {
   }
 }
 
+// Chèn một bảng vào chỗ đặt biến {{ten}} (riêng một dòng); không có dữ liệu thì thay bằng câu ghi chú. cot = { rong: [..], canPhai: cột bắt đầu căn phải, dam: số dòng cuối in đậm }
+function chenBang_(body, ten, rows, ghiChu, cot) {
+  const mau = '\\{\\{' + ten + '\\}\\}', vitri = body.findText(mau);
+  if (!vitri) return;
+  let idx = -1;
+  try { idx = body.getChildIndex(vitri.getElement().getParent()); } catch (e) {} // biến nằm trong ô bảng hoặc chỗ lạ: bỏ qua việc chèn bảng
+  body.replaceText(mau, rows ? '' : ghiChu);
+  if (!rows || idx < 0) return;
+  const A = DocumentApp.HorizontalAlignment, t = body.insertTable(idx, rows);
+  const kieu = {}; kieu[DocumentApp.Attribute.FONT_FAMILY] = 'Times New Roman'; kieu[DocumentApp.Attribute.FONT_SIZE] = 12;
+  t.setAttributes(kieu); t.setBorderWidth(1);
+  cot.rong.forEach((w, c) => t.setColumnWidth(c, w));
+  rows.forEach((r, i) => r.forEach((_, c) => {
+    const cell = t.getCell(i, c);
+    if (c >= cot.canPhai) cell.getChild(0).asParagraph().setAlignment(A.RIGHT);
+    if (i === 0 || i >= rows.length - cot.dam) cell.editAsText().setBold(true);
+  }));
+}
+
 // Điền dữ liệu vào bản sao của mẫu. Trả về danh sách biến còn sót trong mẫu mà app không biết (để báo cho người dùng).
-function dienMau_(doc, bien, bang) {
+function dienMau_(doc, bien, bang, lich) {
   const body = doc.getBody();
-  const vitri = body.findText('\\{\\{BANGHANG\\}\\}');
-  if (vitri) {
-    let idx = -1;
-    try { idx = body.getChildIndex(vitri.getElement().getParent()); } catch (e) {} // biến nằm trong ô bảng hoặc chỗ lạ: bỏ qua việc chèn bảng
-    body.replaceText('\\{\\{BANGHANG\\}\\}', bang ? '' : '(Theo báo giá, đơn đặt hàng hoặc phụ lục từng lần)');
-    if (bang && idx >= 0) {
-      const A = DocumentApp.HorizontalAlignment, t = body.insertTable(idx, bang);
-      const kieu = {}; kieu[DocumentApp.Attribute.FONT_FAMILY] = 'Times New Roman'; kieu[DocumentApp.Attribute.FONT_SIZE] = 12;
-      t.setAttributes(kieu); t.setBorderWidth(1);
-      [0, 1, 2, 3, 4, 5].forEach(c => t.setColumnWidth(c, [30, 175, 40, 50, 80, 85][c]));
-      bang.forEach((r, i) => r.forEach((_, c) => {
-        const cell = t.getCell(i, c);
-        if (c >= 3) cell.getChild(0).asParagraph().setAlignment(A.RIGHT);
-        if (i === 0 || i >= bang.length - 3) cell.editAsText().setBold(true);
-      }));
-    }
-  }
+  chenBang_(body, 'BANGHANG', bang, '(Theo báo giá, đơn đặt hàng hoặc phụ lục từng lần)', { rong: [30, 175, 40, 50, 80, 85], canPhai: 3, dam: 3 });
+  chenBang_(body, 'BANGLICH', lich, '(Chưa lập lịch thanh toán: hai bên thỏa thuận bằng phụ lục)', { rong: [35, 175, 100, 110], canPhai: 3, dam: 1 });
   Object.keys(bien).forEach(k => thayBien_(body, k, bien[k]));
   const con = [];
   for (let r = body.findText('\\{\\{[A-Z0-9_]+\\}\\}'), i = 0; r && i < 20; r = body.findText('\\{\\{[A-Z0-9_]+\\}\\}', r), i++) {
@@ -516,13 +658,13 @@ function taoFileHopDong(token, soHD) {
   const user = user_(token);
   const hd = findObj_('HopDong', soHD);
   if (!hd) throw new Error('Không tìm thấy hợp đồng ' + soHD + '.');
-  const lines = dongHopDong_(soHD);
-  const noiDung = noiDungHD_(hd, lines); // nội dung dùng để tạo file: người khác sửa trong lúc tạo thì file coi là cũ
+  const lines = dongHopDong_(soHD), lich = lichHopDong_(soHD);
+  const noiDung = noiDungHD_(hd, lines, lich); // nội dung dùng để tạo file: người khác sửa trong lúc tạo thì file coi là cũ
   let file, conSot;
   try {
     file = DriveApp.getFileById(mauHopDong_(hd.LoaiHD)).makeCopy(tenFile_(hd), thuMuc_());
     const doc = DocumentApp.openById(file.getId());
-    conSot = dienMau_(doc, bienHopDong_(hd), bangHang_(hd, lines));
+    conSot = dienMau_(doc, bienHopDong_(hd, lich), bangHang_(hd, lines), bangLich_(lich));
     doc.saveAndClose();
   } catch (e) {
     if (file) { try { file.setTrashed(true); } catch (x) {} }
@@ -532,7 +674,7 @@ function taoFileHopDong(token, soHD) {
     const sh = sheet_('HopDong'), r = findRow_(sh, soHD);
     if (!r) { try { file.setTrashed(true); } catch (e) {} throw new Error('Hợp đồng ' + soHD + ' đã bị xóa trong lúc tạo file.'); }
     const cu = rowObj_(sh, r);
-    const moi = Object.assign({}, cu, { FileId: file.getId(), LinkFile: file.getUrl(), NgayFile: now_(), FileCu: noiDungHD_(cu, dongHopDong_(soHD)) === noiDung ? '' : '1' });
+    const moi = Object.assign({}, cu, { FileId: file.getId(), LinkFile: file.getUrl(), NgayFile: now_(), FileCu: noiDungHD_(cu, dongHopDong_(soHD), lichHopDong_(soHD)) === noiDung ? '' : '1' });
     writeRow_(sh, r, moi);
     if (cu.FileId) { try { DriveApp.getFileById(cu.FileId).setTrashed(true); } catch (e) {} }
     log_(user, (cu.FileId ? 'Tạo lại' : 'Tạo') + ' file hợp đồng', soHD, hd.LoaiHD);

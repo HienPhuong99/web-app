@@ -151,7 +151,7 @@ module.exports = BUOC => {
   BUOC.push(['Cài đặt: mẫu hợp đồng, danh sách biến, ngân hàng lấy từ máy chủ', async page => {
     await page.click('#nav a[data-go="caidat"]');
     await page.waitForSelector('text=Mẫu hợp đồng (Google Docs)');
-    assert.strictEqual(await page.locator('.card:has-text("Mẫu hợp đồng (Google Docs)") table.mini tr').count(), 5);
+    assert.strictEqual(await page.locator('.card:has-text("Mẫu hợp đồng (Google Docs)") table.mini tr').count(), 6);
     await shot(page, 'hd-6-cai-dat-mau');
     await page.click('[data-act="mau-bien"]');
     await page.waitForSelector('code:has-text("{{TENDOANHNGHIEP}}")');
@@ -296,6 +296,82 @@ module.exports = BUOC => {
     await page.waitForSelector('#modal', { state: 'hidden' }); // chờ hộp thoại đóng (thông báo của bước trước có thể còn hiện nên không dựa vào nó)
     assert.match(await page.locator('#title').textContent(), /sắp hết hạn/);
     assert.strictEqual(await page.locator('tbody tr[data-i]', { hasText: 'Công ty Báo Trước' }).count(), 0); // gia hạn 6 tháng: còn 230 ngày, rời danh sách
+  }]);
+
+  BUOC.push(['Lịch thanh toán: tạo trả góp, lưu, ghi nhận thu thành phiếu thu, nhắc, màn hình riêng, hủy thu', async page => {
+    const so = await page.evaluate(() => S.hopDong.find(h => h.SoDH && h.TrangThai === 'Soạn thảo').SoHD);
+    await page.evaluate(h => openHD(S.hopDong.find(x => x.SoHD === h)), so);
+    await page.waitForSelector('[data-gen="soKy"]');
+    const tong = await page.evaluate(() => hdTotal().tong);
+    assert.strictEqual(tong, 37290000);
+    await page.fill('[data-gen="traTruoc"]', '10000000');
+    await page.fill('[data-gen="soKy"]', '3');
+    await page.fill('[data-gen="ngayDau"]', await page.evaluate(() => iso(new Date(Date.now() - 864e5)))); // kỳ 1 đã quá hạn 1 ngày
+    await page.click('[data-act="lich-tao"]');
+    const so4 = await page.locator('[data-lich] tbody tr').count();
+    assert.strictEqual(so4, 4);
+    const tien = await page.locator('[data-lf="SoTien"]').evaluateAll(els => els.map(e => e.value.replace(/\D/g, '')));
+    assert.deepStrictEqual(tien, ['10000000', '9096666', '9096666', '9096668']); // số dư lẻ dồn vào kỳ cuối
+    assert.match(await page.locator('[data-lc]').textContent(), /Khớp giá trị hợp đồng/);
+    const oTien = page.locator('tr[data-lr="2"] [data-lf="SoTien"]');
+    await oTien.fill(''); await oTien.fill('9000000'); // sửa tay một đợt: hiện chênh lệch ngay (ô tiền của app bỏ vùng chọn khi bấm vào, nên xóa trước rồi nhập)
+    assert.match(await page.locator('[data-lc]').textContent(), /Chênh 96\.666/);
+    await oTien.fill(''); await oTien.fill('9096666');
+    await nut(page, 'Lưu').click();
+    await page.waitForFunction(() => !S.dirty && S.hd.lich.every(r => r.Dot), null, { timeout: 8000 });
+    assert.strictEqual(await page.evaluate(h => S.hopDongLich.filter(r => r.SoHD === h).length, so), 4);
+    await shot(page, 'hd-13-lich-thanh-toan');
+    // Tổng quan và menu có đợt cần thu (kỳ 1 quá hạn)
+    await page.evaluate(() => go('home'));
+    assert.strictEqual((await page.locator('#nav a[data-go="hdlich"] .cnt').textContent()).trim(), '2'); // Trả trước đến hạn hôm nay + Kỳ 1 quá hạn 1 ngày
+    assert.ok(/Kỳ 1\/3/.test(await page.locator('.card:has-text("Đợt thanh toán cần thu")').textContent()));
+    await page.evaluate(h => openHD(S.hopDong.find(x => x.SoHD === h)), so);
+    await page.waitForSelector('[data-act="lich-thu"]');
+    // Ghi nhận thu đợt Trả trước -> phiếu thu theo đơn hàng, công nợ giảm
+    const thuTruoc = await page.evaluate(h => { const d = S.hopDong.find(x => x.SoHD === h); return [S.thuTien.length, D.thuDH[d.SoDH] || 0]; }, so);
+    // sau khi lưu lịch xếp theo ngày đến hạn: hàng 0 = Kỳ 1/3 (hôm qua), hàng 1 = Trả trước (hôm nay)
+    await page.locator('tr[data-lr="1"] [data-act="lich-thu"]').click();
+    await page.waitForSelector('#modal [name=HinhThuc]');
+    assert.match(await page.locator('#modal .box-h').textContent(), /Thu Trả trước/);
+    await page.fill('#modal [name=GhiChu]', 'khách chuyển khoản');
+    await page.click('#modal [data-save]');
+    await page.waitForSelector('#modal', { state: 'hidden' });
+    const thuSau = await page.evaluate(h => { const d = S.hopDong.find(x => x.SoHD === h); return [S.thuTien.length, D.thuDH[d.SoDH] || 0, S.hd.lich[1].SoPT]; }, so);
+    assert.strictEqual(thuSau[0], thuTruoc[0] + 1);
+    assert.strictEqual(thuSau[1], thuTruoc[1] + 10000000); // công nợ của đơn giảm đúng 10 triệu
+    assert.match(thuSau[2], /^\d{3}-\d{4}\/PT$/);
+    assert.ok(/Đã thu/.test(await page.locator('tr[data-lr="1"]').textContent()) && await page.locator('tr[data-lr="1"] input').count() === 0, 'Đợt đã thu không sửa được');
+    // Nhắc đợt quá hạn
+    await page.locator('tr[data-lr="0"] [data-act="lich-nhac"]').click();
+    await page.waitForSelector('#modal [data-tin]');
+    const tin = await page.inputValue('#modal [data-tin]');
+    assert.ok(/Kỳ 1\/3/.test(tin) && /đã quá hạn 1 ngày/.test(tin) && /9\.096\.666 đồng/.test(tin), tin);
+    await page.keyboard.press('Escape');
+    // Màn hình Lịch thanh toán: thu ngay từ danh sách
+    await page.click('#nav a[data-go="hdlich"]');
+    await page.waitForSelector('tbody tr[data-i]');
+    assert.strictEqual(await page.locator('tbody tr[data-i]').count(), 1);
+    assert.match(await page.locator('tbody tr[data-i]').first().textContent(), /Kỳ 1\/3.*Quá hạn 1 ngày/s);
+    await page.locator('tbody tr[data-i] [data-act="thu"]').click();
+    assert.match(await page.locator('#title').textContent(), /Lịch thanh toán/); // nút trong dòng không mở hợp đồng
+    await page.waitForSelector('#modal [name=HinhThuc]');
+    await page.click('#modal [data-save]');
+    await page.waitForSelector('#modal', { state: 'hidden' });
+    await page.waitForSelector('text=Không có dữ liệu phù hợp');
+    assert.strictEqual(await page.evaluate(() => dotCanThu().length), 0);
+    await page.selectOption('select[data-f="loc"]', 'thu');
+    assert.strictEqual(await page.locator('tbody tr[data-i]').count(), 2);
+    await page.selectOption('select[data-f="loc"]', 'can');
+    // Danh sách hợp đồng có tiến độ thu; hủy thu (quản trị) đưa đợt về chưa thu và xóa phiếu
+    await page.evaluate(() => go('hopdong'));
+    assert.ok(await page.locator('tbody tr', { hasText: 'Đã thu 2/4 đợt' }).count() === 1);
+    await page.evaluate(h => openHD(S.hopDong.find(x => x.SoHD === h)), so);
+    await page.waitForSelector('[data-act="lich-huy"]');
+    const truocHuy = await page.evaluate(() => S.thuTien.length);
+    await page.locator('tr[data-lr="0"] [data-act="lich-huy"]').click(); // hủy thu Kỳ 1/3; hộp thoại xác nhận được tự chấp nhận
+    await page.waitForFunction(n => S.thuTien.length === n - 1, truocHuy);
+    assert.strictEqual(await page.evaluate(() => S.hd.lich.filter(r => r.SoPT).length), 1);
+    assert.strictEqual(await page.evaluate(() => dotCanThu().length), 1); // kỳ 1 quá hạn trở lại
   }]);
 
   BUOC.push(['Hợp đồng: màn hình điện thoại không tràn ngang', async page => {
