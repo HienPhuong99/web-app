@@ -22,7 +22,7 @@ function layHopDong(token, soHD) {
   return { lines: dongHopDong_(soHD), lich: lichHopDong_(soHD) };
 }
 // Nhân viên chỉ cần biết hợp đồng đã có file hay chưa (không mở được Drive): giấu mã và link file
-function hdChoUser_(user, hd) { return user.vaiTro === 'admin' ? hd : Object.assign({}, hd, { FileId: hd.FileId ? '1' : '', LinkFile: '' }); }
+function hdChoUser_(user, hd) { return user.vaiTro === 'admin' ? hd : Object.assign({}, hd, { FileId: hd.FileId ? '1' : '', LinkFile: '', KyFileId: hd.KyFileId ? '1' : '' }); }
 // Nội dung hợp đồng xuất hiện trong file Docs (các trường HD_TRONG_FILE + dòng hàng): so hai bản để biết file có cũ không
 function noiDungHD_(hd, lines, lich) {
   return JSON.stringify([HD_TRONG_FILE.map(k => String(hd[k] == null ? '' : hd[k])), lines.map(l => [String(l.MaHH), String(l.TenHang), String(l.DVT), +l.SoLuong, +l.DonGia, String(l.IMEI || '')]),
@@ -81,6 +81,9 @@ function luuHopDong(token, doc) {
     if (!(old && old.LoaiHD === head.LoaiHD) && !loaiHopDong_().includes(head.LoaiHD)) throw new Error('Loại hợp đồng "' + head.LoaiHD + '" chưa có mẫu. Chọn loại khác, hoặc quản trị thêm ở Cài đặt → Mẫu hợp đồng.');
     const khoa = ls => JSON.stringify(ls.map(l => [String(l.MaHH), String(l.TenHang), String(l.DVT), +l.SoLuong, +l.DonGia, String(l.IMEI || '')]));
     const cu = old ? dongHopDong_(head.SoHD) : [];
+    if (old && old.KyFileId && noiDungKy_(old, cu, lichHopDong_(head.SoHD)) !== noiDungKy_(head, lines, lichHopDong_(head.SoHD))) {
+      throw new Error('Hợp đồng đã có chữ ký điện tử: sửa bên A, hàng hóa, số tiền hoặc điều khoản sẽ làm chữ ký mất giá trị. Quản trị bấm "Hủy chữ ký" trước nếu thật sự cần sửa (rồi cho khách ký lại).');
+    }
     if (old && HD_DA_KY.includes(old.TrangThai) && user.vaiTro !== 'admin') {
       if (head.TrangThai === HD_TRANG_THAI[0]) throw new Error('Hợp đồng đã ký không đưa về Soạn thảo được (chỉ quản trị). Cần thay đổi thì nhân bản thành hợp đồng mới.');
       if (khoa(cu) !== khoa(lines) || +old.VAT !== head.VAT) throw new Error('Hợp đồng đã hiệu lực: chỉ quản trị được sửa hàng hóa và số tiền. Có thay đổi thì nhân bản thành hợp đồng mới.');
@@ -89,7 +92,7 @@ function luuHopDong(token, doc) {
     // File Docs đã tạo mà nội dung hợp đồng vừa đổi thì đánh dấu file cũ (giao diện sẽ tạo lại trước khi tải PDF)
     const doiNoiDung = old && noiDungHD_(old, cu) !== noiDungHD_(head, lines);
     head.FileCu = old && old.FileId && (doiNoiDung || old.FileCu === '1') ? '1' : '';
-    upsert_('HopDong', head, () => nextSo_('HopDong', 'HD', head.Ngay), ['NguoiTao', 'NgayTao', 'FileId', 'LinkFile', 'NgayFile']);
+    upsert_('HopDong', head, () => nextSo_('HopDong', 'HD', head.Ngay), ['NguoiTao', 'NgayTao', 'FileId', 'LinkFile', 'NgayFile', 'KyFileId', 'NguoiKy', 'NgayKyDT', 'MaXacThuc']);
     deleteWhere_('HopDongCT', head.SoHD);
     if (lines.length) {
       const sh = sheet_('HopDongCT');
@@ -112,6 +115,7 @@ function xoaHopDong(token, soHD) {
     deleteWhere_('HopDongCT', soHD);
     deleteWhere_('HopDongLich', soHD);
     if (hd.FileId) { try { DriveApp.getFileById(hd.FileId).setTrashed(true); } catch (e) {} } // vào thùng rác Drive, còn khôi phục được
+    if (hd.KyFileId) { try { DriveApp.getFileById(hd.KyFileId).setTrashed(true); } catch (e) {} }
     log_(user, 'Xóa hợp đồng', soHD, hd.TenDN + ' · ' + hd.LoaiHD);
   });
 }
@@ -157,6 +161,7 @@ function luuLichHopDong(token, soHD, rows) {
     });
     if (daThu.some(g => !dung[g.SoPT])) throw new Error('Không bỏ được đợt đã thu tiền. Hủy phiếu thu của đợt đó trước (quản trị).');
     const chuaThu = ls => JSON.stringify(ls.filter(x => !x.SoPT).map(x => [String(x.Nhan), String(x.NgayDen), +x.SoTien]));
+    if (hd.KyFileId && chuaThu(cu) !== chuaThu(moi)) throw new Error('Hợp đồng đã có chữ ký điện tử: đổi lịch thanh toán làm chữ ký mất giá trị. Quản trị hủy chữ ký trước nếu thật sự cần đổi.');
     if (user.vaiTro !== 'admin' && HD_DA_KY.includes(hd.TrangThai) && chuaThu(cu) !== chuaThu(moi)) throw new Error('Hợp đồng đã hiệu lực: chỉ quản trị được đổi lịch thanh toán.');
     moi.sort((a, b) => String(a.NgayDen).localeCompare(String(b.NgayDen)) || (a.SoPT ? -1 : 1)).forEach((r, i) => { r.Dot = i + 1; });
     deleteWhere_('HopDongLich', soHD);
@@ -214,6 +219,85 @@ function trangThaiDot_(r, homNay) {
   if (r.SoPT) return 'thu';
   const n = Math.round((Date.parse(r.NgayDen) - Date.parse(homNay)) / 864e5);
   return n < 0 ? 'quahan' : n <= 7 ? 'sap' : 'cho';
+}
+
+// ===== Ký tại quầy (chữ ký điện tử bằng tay trên màn hình) =====
+// Giá trị pháp lý của loại chữ ký này dựa trên thỏa thuận của hai bên (Luật Giao dịch điện tử 2023): mẫu hợp đồng có điều khoản đồng ý ký điện tử, app ghi người ký,
+// thời điểm và mã xác thực (SHA-256 của nội dung đã ký + ảnh chữ ký). Hợp đồng giá trị lớn hoặc cần giá trị pháp lý cao nên dùng chữ ký số của nhà cung cấp được cấp phép.
+// Nội dung đã ký = bên A, hàng hóa và IMEI, số tiền, lịch thanh toán, điều khoản chính; không gồm ngày hết hạn (để còn gia hạn), ghi chú, người phụ trách, trạng thái, đơn hàng.
+const HD_NOI_DUNG_KY = ['LoaiHD', 'Ngay', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'SoCCCD', 'CCCDCap', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang', 'NgayHieuLuc', 'BaoTruocNgay', 'TuGiaHan', 'ThangGiaHan', 'VAT'];
+function noiDungKy_(hd, lines, lich) {
+  return JSON.stringify([HD_NOI_DUNG_KY.map(k => String(hd[k] == null ? '' : hd[k])), lines.map(l => [String(l.MaHH), String(l.TenHang), String(l.DVT), +l.SoLuong, +l.DonGia, String(l.IMEI || '')]),
+    (lich || []).map(r => [String(r.Nhan), String(r.NgayDen), +r.SoTien])]);
+}
+const hex_ = bytes => bytes.map(b => ('0' + (b & 255).toString(16)).slice(-2)).join('');
+const sha256Hex_ = v => hex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, v, Utilities.Charset.UTF_8));
+const nhomMa_ = ma => String(ma).toUpperCase().slice(0, 16).replace(/(.{4})(?=.)/g, '$1-'); // 8F2A-91C3-77D0-12AB
+
+/**
+ * Khách ký tại quầy: pngBase64 là ảnh chữ ký (PNG). Hợp đồng phải đã có file Docs và file không cũ (khách ký đúng bản đã xem).
+ * Lưu ảnh vào thư mục Drive, ghi người ký, thời điểm, mã xác thực; chuyển Soạn thảo thành Đang hiệu lực; tạo lại file có chữ ký.
+ * Từ đây nội dung đã ký không sửa được (kể cả quản trị) trừ khi quản trị hủy chữ ký.
+ */
+function kyHopDong(token, soHD, pngBase64, tenNguoiKy) {
+  const user = user_(token);
+  const ten = String(tenNguoiKy || '').trim().slice(0, 100);
+  if (!ten) throw new Error('Nhập họ tên người ký.');
+  const b64 = String(pngBase64 || '').replace(/^data:image\/png;base64,/, '');
+  if (b64.length > 400000) throw new Error('Ảnh chữ ký quá lớn.');
+  let bytes;
+  try { bytes = Utilities.base64Decode(b64); } catch (e) { throw new Error('Ảnh chữ ký không hợp lệ.'); }
+  if (bytes.length < 600 || (bytes[0] & 255) !== 0x89 || bytes[1] !== 80 || bytes[2] !== 78 || bytes[3] !== 71) throw new Error('Chưa có chữ ký (ảnh trống hoặc không phải PNG). Cho khách ký lại.');
+  const ma = withLock_(() => {
+    const sh = sheet_('HopDong'), r = findRow_(sh, soHD);
+    if (!r) throw new Error('Không tìm thấy hợp đồng ' + soHD + '.');
+    const hd = rowObj_(sh, r);
+    if (hd.KyFileId) throw new Error('Hợp đồng đã có chữ ký điện tử. Quản trị hủy chữ ký trước nếu cần ký lại.');
+    if (!hd.FileId) throw new Error('Tạo file hợp đồng trước khi ký, để khách xem đúng nội dung sẽ ký.');
+    if (hd.FileCu === '1') throw new Error('File hợp đồng đã cũ so với nội dung hiện tại. Tạo lại file rồi mới cho khách ký.');
+    const luc = now_(), maXT = sha256Hex_(JSON.stringify([noiDungKy_(hd, dongHopDong_(soHD), lichHopDong_(soHD)), ten, luc, sha256Hex_(bytes)])).toUpperCase();
+    let file;
+    try { file = thuMuc_().createFile(Utilities.newBlob(bytes, 'image/png', 'Chữ ký ' + tenFile_(hd) + '.png')); } catch (e) { throw loiDocs_(e); }
+    writeRow_(sh, r, Object.assign({}, hd, { KyFileId: file.getId(), NguoiKy: ten, NgayKyDT: luc, MaXacThuc: maXT, FileCu: '1', NgaySua: luc,
+      TrangThai: hd.TrangThai === HD_TRANG_THAI[0] ? HD_TRANG_THAI[1] : hd.TrangThai }));
+    log_(user, 'Ký điện tử hợp đồng', soHD, ten + ' · mã ' + nhomMa_(maXT));
+    return maXT;
+  });
+  const kq = { ma: ma };
+  try { kq.doc = taoFileHopDong(token, soHD).doc; } // tạo lại file để có hình chữ ký; lỗi thì chữ ký vẫn được giữ, báo loiFile
+  catch (e) { kq.loiFile = String((e && e.message) || e); kq.doc = hdChoUser_(user, findObj_('HopDong', soHD)); }
+  return kq;
+}
+
+/** Quản trị hủy chữ ký (để sửa nội dung hoặc cho ký lại): xóa ảnh chữ ký (vào thùng rác Drive), file hợp đồng đánh dấu cũ. */
+function huyChuKyHopDong(token, soHD) {
+  const user = user_(token, true);
+  return withLock_(() => {
+    const sh = sheet_('HopDong'), r = findRow_(sh, soHD);
+    if (!r) throw new Error('Không tìm thấy hợp đồng ' + soHD + '.');
+    const hd = rowObj_(sh, r);
+    if (!hd.KyFileId) throw new Error('Hợp đồng chưa có chữ ký điện tử.');
+    try { DriveApp.getFileById(hd.KyFileId).setTrashed(true); } catch (e) {}
+    const o = Object.assign({}, hd, { KyFileId: '', NguoiKy: '', NgayKyDT: '', MaXacThuc: '', FileCu: hd.FileId ? '1' : '', NgaySua: now_() });
+    writeRow_(sh, r, o);
+    log_(user, 'Hủy chữ ký điện tử', soHD, hd.NguoiKy + ' · ' + nhomMa_(hd.MaXacThuc));
+    return { doc: o };
+  });
+}
+
+/** Kiểm tra chữ ký còn nguyên: tính lại mã xác thực từ nội dung hiện tại + ảnh chữ ký đã lưu và so với mã lúc ký. */
+function xacThucChuKyHopDong(token, soHD) {
+  user_(token);
+  const hd = findObj_('HopDong', soHD);
+  if (!hd) throw new Error('Không tìm thấy hợp đồng ' + soHD + '.');
+  if (!hd.KyFileId) return { coChuKy: false };
+  const kq = { coChuKy: true, nguoi: hd.NguoiKy, luc: hd.NgayKyDT, ma: nhomMa_(hd.MaXacThuc), hopLe: false, lyDo: '' };
+  let bytes;
+  try { bytes = DriveApp.getFileById(hd.KyFileId).getBlob().getBytes(); } catch (e) { kq.lyDo = 'Không đọc được ảnh chữ ký đã lưu.'; return kq; }
+  const lai = sha256Hex_(JSON.stringify([noiDungKy_(hd, dongHopDong_(soHD), lichHopDong_(soHD)), hd.NguoiKy, hd.NgayKyDT, sha256Hex_(bytes)])).toUpperCase();
+  kq.hopLe = lai === String(hd.MaXacThuc);
+  if (!kq.hopLe) kq.lyDo = 'Nội dung hợp đồng hoặc ảnh chữ ký đã thay đổi sau khi ký.';
+  return kq;
 }
 
 /** Gia hạn một chạm: cộng thêm số tháng vào ngày hết hạn của hợp đồng đang hiệu lực (không đụng hàng hóa, số tiền). Nhân viên làm được. */
@@ -294,6 +378,7 @@ const HD_BIEN = [
   ['B_TEN', 'Bên B (cửa hàng): tên in trên chứng từ'], ['B_DIACHI', 'Bên B: địa chỉ'], ['B_MST', 'Bên B: mã số thuế'], ['B_DAIDIEN', 'Bên B: người đại diện (chủ hộ)'], ['B_CHUCVU', 'Bên B: chức danh người ký'],
   ['B_LIENHE', 'Bên B: điện thoại, email'], ['B_STK', 'Bên B: số tài khoản nhận tiền'], ['B_NGANHANG', 'Bên B: ngân hàng'], ['B_CHUTK', 'Bên B: chủ tài khoản'], ['B_BAOHANH', 'Bên B: số tháng bảo hành mặc định'],
   ['BANGLICH', 'Bảng lịch thanh toán / trả góp (đợt, nội dung, ngày đến hạn, số tiền) – đặt riêng một dòng'], ['SOKY', 'Số kỳ trả góp (không tính đợt "Trả trước")'], ['TONGLICH', 'Tổng số tiền các đợt trong lịch'], ['TRATRUOC', 'Số tiền đợt "Trả trước"'],
+  ['CHUKYA', 'Chỗ chèn hình chữ ký điện tử của Bên A (đặt trong ô chữ ký)'], ['XACTHUCKYA', 'Dòng ghi người ký, thời điểm và mã xác thực của chữ ký điện tử Bên A'], ['CHUKYB', 'Chỗ ký của Bên B (để trống ký tay)'], ['XACTHUCKYB', 'Dòng xác thực của Bên B (để trống)'],
   ['BANGHANG', 'Bảng hàng hóa (STT, tên hàng, ĐVT, SL, đơn giá, thành tiền, cộng, VAT, tổng) – đặt riêng một dòng'],
   ['CONGTIENHANG', 'Cộng tiền hàng'], ['VAT', 'Thuế GTGT (%)'], ['TIENVAT', 'Tiền thuế GTGT'], ['TONGTHANHTOAN', 'Tổng thanh toán'], ['BANGCHU', 'Tổng thanh toán bằng chữ'], ['GHICHU', 'Ghi chú'],
 ];
@@ -321,7 +406,9 @@ const hdDuLieuCaNhan = () => [['dieu', 'Bảo vệ dữ liệu cá nhân'],
   ['p', 'Hai bên đồng ý để bên kia xử lý thông tin cá nhân nêu trong hợp đồng (họ tên, số CCCD/CMND, địa chỉ, điện thoại, số tài khoản) cho mục đích lập, thực hiện, bảo hành và lưu trữ hợp đồng theo quy định của pháp luật về bảo vệ dữ liệu cá nhân. Mỗi bên chỉ dùng thông tin của bên kia cho các mục đích trên và có trách nhiệm bảo mật thông tin đó.']];
 const hdHieuLuc = () => [['dieu', 'Hiệu lực hợp đồng'], ['li', 'Hợp đồng có hiệu lực {{THOIHAN}} và chấm dứt khi hai bên hoàn thành nghĩa vụ, hoặc khi hết thời hạn nêu trên: lúc đó hợp đồng {{GIAHAN}}. Thời hạn báo trước khi chấm dứt hoặc không gia hạn: {{BAOTRUOC}} ngày.'],
   ['li', 'Mọi sửa đổi, bổ sung hợp đồng phải được lập thành văn bản và có chữ ký của hai bên.'],
-  ['li', 'Hợp đồng được lập thành 02 bản có giá trị pháp lý như nhau, mỗi bên giữ 01 bản.'], ['p', 'Ghi chú thêm: {{GHICHU}}'], ['bl']];
+  ['li', 'Hợp đồng được lập thành 02 bản có giá trị pháp lý như nhau, mỗi bên giữ 01 bản.'],
+  ['li', 'Hai bên đồng ý hợp đồng có thể được ký bằng chữ ký điện tử (ký tay trên thiết bị cảm ứng tại quầy, kèm người ký, thời điểm ký và mã xác thực ghi trong hợp đồng); chữ ký điện tử này có giá trị như chữ ký trên bản giấy theo thỏa thuận của hai bên.'],
+  ['p', 'Ghi chú thêm: {{GHICHU}}'], ['bl']];
 const hdThanhToanTK = [['li', 'Thông tin nhận chuyển khoản của Bên B: số tài khoản {{B_STK}} tại {{B_NGANHANG}}, chủ tài khoản {{B_CHUTK}}; nội dung chuyển khoản ghi số hợp đồng {{MAHOPDONG}}.']];
 
 const HD_MAU_MUA_BAN = hdMoDau('HỢP ĐỒNG MUA BÁN HÀNG HÓA', 'BÊN MUA', 'BÊN BÁN', 'Căn cứ nhu cầu và khả năng của hai bên.').concat([
@@ -366,6 +453,7 @@ const HD_MAU_NGUYEN_TAC = hdMoDau('HỢP ĐỒNG NGUYÊN TẮC MUA BÁN HÀNG H�
   ['li', 'Mỗi bên có quyền chấm dứt hợp đồng bằng thông báo bằng văn bản trước {{BAOTRUOC}} ngày; các đơn hàng đã xác nhận vẫn tiếp tục được thực hiện.']],
   hdViPham(), hdBatKhaKhang(), hdTranhChap(), hdDuLieuCaNhan(),
   [['dieu', 'Điều khoản chung'], ['li', 'Mọi sửa đổi, bổ sung phải được lập thành văn bản và có chữ ký của hai bên. Hợp đồng được lập thành 02 bản có giá trị như nhau, mỗi bên giữ 01 bản.'],
+  ['li', 'Hai bên đồng ý hợp đồng có thể được ký bằng chữ ký điện tử (ký tay trên thiết bị cảm ứng tại quầy, kèm người ký, thời điểm ký và mã xác thực ghi trong hợp đồng); chữ ký điện tử này có giá trị như chữ ký trên bản giấy theo thỏa thuận của hai bên.'],
   ['p', 'Ghi chú thêm: {{GHICHU}}'], ['bl'], ['ky', 'ĐẠI DIỆN BÊN A (BÊN MUA)', 'ĐẠI DIỆN BÊN B (BÊN BÁN)']]));
 
 const HD_MAU_DAI_LY = hdMoDau('HỢP ĐỒNG ĐẠI LÝ – PHÂN PHỐI', 'ĐẠI LÝ', 'NHÀ CUNG CẤP', 'Căn cứ nhu cầu và khả năng của hai bên.').concat([
@@ -491,10 +579,10 @@ function dungMau_(doc, muc) {
     else if (k === 'bang_lich') them('{{BANGLICH}}', A.LEFT);
     else if (k === 'kv') { const p = them(m[1] + m[2], A.LEFT); p.editAsText().setBold(0, m[1].length - 1, true); }
     else if (k === 'ky') {
-      const t = body.appendTable([[m[1], m[2]], ['(Ký, ghi rõ họ tên, đóng dấu)', '(Ký, ghi rõ họ tên, đóng dấu)']]);
+      const t = body.appendTable([[m[1], m[2]], ['(Ký, ghi rõ họ tên, đóng dấu)', '(Ký, ghi rõ họ tên, đóng dấu)'], ['{{CHUKYA}}', '{{CHUKYB}}'], ['{{XACTHUCKYA}}', '{{XACTHUCKYB}}']]);
       const kieu = {}; kieu[AT.FONT_FAMILY] = 'Times New Roman'; kieu[AT.FONT_SIZE] = 13;
       t.setAttributes(kieu); t.setBorderWidth(0);
-      [0, 1].forEach(r => [0, 1].forEach(c => { const cell = t.getCell(r, c); cell.getChild(0).asParagraph().setAlignment(A.CENTER); if (r === 0) cell.editAsText().setBold(true); }));
+      [0, 1, 2, 3].forEach(r => [0, 1].forEach(c => { const cell = t.getCell(r, c); cell.getChild(0).asParagraph().setAlignment(A.CENTER); if (r === 0) cell.editAsText().setBold(true); if (r === 2) cell.setPaddingBottom(40); })); // hàng 3: chỗ ký tay hoặc hình chữ ký điện tử
     }
   });
   const dau = body.getChild(0); // đoạn trống có sẵn ở đầu file mới
@@ -561,7 +649,7 @@ function mauHopDong_(loai) {
 }
 
 // Giá trị các biến {{…}} của một hợp đồng
-function bienHopDong_(hd, lich) {
+function bienHopDong_(hd, lich, ky) {
   lich = lich || [];
   const c = cuaHang_(CUR_SHOP).congTy;
   const t = v => { v = String(v == null ? '' : v).replace(/\{\{|\}\}/g, '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ' ').trim().slice(0, 500); return v || HD_TRONG; };
@@ -583,6 +671,8 @@ function bienHopDong_(hd, lich) {
     B_TEN: t(c.ten), B_DIACHI: t((c.diaChi || []).join('; ')), B_MST: t(c.mst), B_DAIDIEN: t(c.chuHo), B_CHUCVU: t(c.kyTen), B_LIENHE: t(c.lienHe),
     B_STK: t(c.qrSoTK), B_NGANHANG: t(nh ? nh[1] : ''), B_CHUTK: t(c.qrChuTK), B_BAOHANH: t(c.baoHanhThang),
     SOKY: String(lich.filter(r => r.Nhan !== 'Trả trước').length), TONGLICH: so(lich.reduce((t, r) => t + (+r.SoTien || 0), 0)), TRATRUOC: so(lich.filter(r => r.Nhan === 'Trả trước').reduce((t, r) => t + (+r.SoTien || 0), 0)),
+    CHUKYA: '', CHUKYB: '', XACTHUCKYB: '',
+    XACTHUCKYA: ky ? 'Đã ký điện tử: ' + ky.nguoi + ' – ' + dmyHD_(String(ky.luc).slice(0, 10)) + ' ' + String(ky.luc).slice(11, 16) + ' – Mã xác thực ' + nhomMa_(ky.ma) : '',
     CONGTIENHANG: so(hd.TienHang), VAT: String(+hd.VAT || 0), TIENVAT: so(hd.TienVAT), TONGTHANHTOAN: so(hd.TongCong), BANGCHU: t(hd.BangChu), GHICHU: t(hd.GhiChu),
   };
 }
@@ -639,10 +729,16 @@ function chenBang_(body, ten, rows, ghiChu, cot) {
 }
 
 // Điền dữ liệu vào bản sao của mẫu. Trả về danh sách biến còn sót trong mẫu mà app không biết (để báo cho người dùng).
-function dienMau_(doc, bien, bang, lich) {
+function dienMau_(doc, bien, bang, lich, ky) {
   const body = doc.getBody();
   chenBang_(body, 'BANGHANG', bang, '(Theo báo giá, đơn đặt hàng hoặc phụ lục từng lần)', { rong: [30, 175, 40, 50, 80, 85], canPhai: 3, dam: 3 });
   chenBang_(body, 'BANGLICH', lich, '(Chưa lập lịch thanh toán: hai bên thỏa thuận bằng phụ lục)', { rong: [35, 175, 100, 110], canPhai: 3, dam: 1 });
+  if (ky) { // chèn hình chữ ký vào chỗ {{CHUKYA}}; mẫu không có chỗ đó thì thêm một khối ở cuối file
+    const vt = body.findText('\\{\\{CHUKYA\\}\\}');
+    const p = vt ? vt.getElement().getParent().asParagraph() : body.appendParagraph('Chữ ký điện tử của Bên A:');
+    p.appendInlineImage(ky.blob).setWidth(150).setHeight(60);
+    if (!vt) body.appendParagraph(bien.XACTHUCKYA);
+  }
   Object.keys(bien).forEach(k => thayBien_(body, k, bien[k]));
   const con = [];
   for (let r = body.findText('\\{\\{[A-Z0-9_]+\\}\\}'), i = 0; r && i < 20; r = body.findText('\\{\\{[A-Z0-9_]+\\}\\}', r), i++) {
@@ -664,7 +760,8 @@ function taoFileHopDong(token, soHD) {
   try {
     file = DriveApp.getFileById(mauHopDong_(hd.LoaiHD)).makeCopy(tenFile_(hd), thuMuc_());
     const doc = DocumentApp.openById(file.getId());
-    conSot = dienMau_(doc, bienHopDong_(hd, lich), bangHang_(hd, lines), bangLich_(lich));
+    const ky = hd.KyFileId ? { blob: DriveApp.getFileById(hd.KyFileId).getBlob(), nguoi: hd.NguoiKy, luc: hd.NgayKyDT, ma: hd.MaXacThuc } : null;
+    conSot = dienMau_(doc, bienHopDong_(hd, lich, ky), bangHang_(hd, lines), bangLich_(lich), ky);
     doc.saveAndClose();
   } catch (e) {
     if (file) { try { file.setTrashed(true); } catch (x) {} }
@@ -745,6 +842,15 @@ function kiemTraTaoHopDong() {
     const pdf = file.getAs(MimeType.PDF).getBytes();
     ghi('Xuất PDF', pdf.length > 1000 && pdf[0] === 37 && pdf[1] === 80 && pdf[2] === 68 && pdf[3] === 70, pdf.length + ' byte');
     ghi('File mẫu gốc không bị sửa', DocumentApp.openById(mau.getId()).getBody().getText().indexOf('{{TENDOANHNGHIEP}}') >= 0);
+    const anhMau = Utilities.newBlob(Utilities.base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8BQDwAEgAF/QualIQAAAABJRU5ErkJggg=='), 'image/png', 'kiemtra.png');
+    const dk = DocumentApp.create('KIEMTRA - chèn chữ ký');
+    try { // chèn hình chữ ký vào chỗ {{CHUKYA}} như khi khách ký tại quầy
+      dk.getBody().appendParagraph('Chữ ký: {{CHUKYA}}');
+      dienMau_(dk, bienHopDong_(hd, [], { blob: anhMau, nguoi: 'Khách thử', luc: '2026-01-02 10:30', ma: 'ABCDEF0123456789ABCDEF' }), null, null, { blob: anhMau, nguoi: 'Khách thử', luc: '2026-01-02 10:30', ma: 'ABCDEF0123456789ABCDEF' });
+      dk.saveAndClose();
+      const bk = DocumentApp.openById(dk.getId()).getBody();
+      ghi('Chèn được hình chữ ký vào file', bk.getImages().length === 1 && bk.getText().indexOf('{{') < 0);
+    } finally { try { DriveApp.getFileById(dk.getId()).setTrashed(true); } catch (e) {} }
     const thu = DocumentApp.create('KIEMTRA - dựng mẫu');
     try { // gọi đủ các hàm định dạng đoạn và bảng chữ ký mà bộ mẫu mặc định dùng
       dungMau_(thu, [['cb', 'A'], ['tt', 'B'], ['ci', 'C'], ['p', 'D'], ['li', 'E'], ['h', 'F'], ['kv', 'G: ', 'H'], ['dieu', 'I'], ['bang'], ['ky', 'J', 'K']]);

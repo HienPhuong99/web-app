@@ -2003,7 +2003,16 @@ function vHD(el) {
       <button class="btn sm primary" data-act="pdf">${icon('download')}Tải PDF</button>
       ${coFile && isAdmin() && d.LinkFile ? `<a class="btn sm" href="${esc(d.LinkFile)}" target="_blank" rel="noopener" title="Chỉ mở được bằng tài khoản Google của chủ file">${icon('file')}Mở Google Docs</a>` : ''}
     </span></div></div>` : `<p class="muted" style="margin:0 0 12px">Lưu hợp đồng xong sẽ có nút tạo file Google Docs từ mẫu và tải PDF.</p>`;
-  el.innerHTML = fileCard + `
+  const daKy = !!d.KyFileId, kyDuocKhong = saved && coFile && !cu && !S.dirty;
+  const kyCard = saved ? `<div class="card" style="margin-bottom:16px"><div class="card-b" style="display:flex;gap:10px 14px;align-items:center;flex-wrap:wrap">
+    <b>Chữ ký điện tử (ký tại quầy)</b>
+    ${daKy ? badge('Đã ký: ' + d.NguoiKy + ' · ' + dmyRaw(String(d.NgayKyDT).slice(0, 10)) + ' ' + String(d.NgayKyDT).slice(11, 16), 'b-green') : badge('Chưa ký', 'b-gray')}
+    ${daKy ? `<span class="muted">Mã xác thực <b>${esc(nhomMaKy(d.MaXacThuc))}</b> · nội dung đã ký bị khóa</span>` : (kyDuocKhong ? '' : `<span class="muted">${!coFile ? 'Tạo file hợp đồng trước để khách xem đúng bản sẽ ký.' : cu ? 'File đã cũ: tạo lại file trước khi ký.' : 'Lưu hợp đồng trước khi ký.'}</span>`)}
+    <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+      ${daKy ? `<button class="btn sm" data-act="ky-xt">${icon('check')}Kiểm tra chữ ký</button>${isAdmin() ? `<button class="btn sm" data-act="ky-huy">${icon('x')}Hủy chữ ký</button>` : ''}`
+        : `<button class="btn sm primary" data-act="ky"${kyDuocKhong ? '' : ' disabled'}>${icon('save')}Ký tại quầy</button>`}
+    </span></div></div>` : '';
+  el.innerHTML = fileCard + kyCard + `
   <div class="card"><div class="card-h"><h3>1. Loại hợp đồng và thông tin chung</h3></div><div class="doc-head">
     ${fld('Số hợp đồng', `<input value="${esc(d.SoHD)}" readonly placeholder="Tự sinh khi lưu">`)}
     ${fld('Loại hợp đồng *', sel('LoaiHD', loaiHDAll(d.LoaiHD)))}
@@ -2051,6 +2060,9 @@ function vHD(el) {
     if (a.dataset.act.startsWith('lich-')) return lichAct(el, a);
     if (a.dataset.act === 'newkh') openKhach(null, pickHDKhach);
     else if (a.dataset.act === 'taofile') await taoFileHD();
+    else if (a.dataset.act === 'ky') openKy(S.hd);
+    else if (a.dataset.act === 'ky-xt') await xacThucKy();
+    else if (a.dataset.act === 'ky-huy') await huyKy();
     else if (a.dataset.act === 'pdf') await taiPdfHD();
     else if (a.dataset.act === 'addline') { b.lines.push(blankHDLine()); drawHDLines(el); focusCell(el, b.lines.length - 1, 'TenHang'); }
     else if (a.dataset.act === 'rm') { b.lines.splice(+a.dataset.i, 1); hdTail(); drawHDLines(el); drawHDTotals(el); setDirty(true); }
@@ -2071,6 +2083,56 @@ function vHD(el) {
     ls.dataset.da = '1';
     $('[data-lsbody]', ls).innerHTML = rows.length ? `<table class="mini">${rows.map(x => `<tr><td><b>${esc(x.HanhDong)}</b><span class="sub">${esc(x.NguoiDung)}</span></td><td>${esc(x.ChiTiet)}</td><td class="num">${esc(x.ThoiGian)}</td></tr>`).join('')}</table>` : '<p class="muted">Chưa có lịch sử.</p>';
   });
+}
+
+// ===================== Ký tại quầy =====================
+// Chữ ký điện tử bằng tay trên màn hình: giá trị pháp lý dựa trên thỏa thuận của hai bên (mẫu hợp đồng có điều khoản đồng ý ký điện tử);
+// hợp đồng giá trị lớn hoặc cần giá trị cao nên dùng chữ ký số của nhà cung cấp được cấp phép.
+const nhomMaKy = ma => String(ma || '').toUpperCase().slice(0, 16).replace(/(.{4})(?=.)/g, '$1-');
+function openKy(h) {
+  if (S.dirty) throw new Error('Lưu hợp đồng trước khi ký.');
+  const m = modal({
+    title: 'Ký tại quầy – ' + h.SoHD, wide: true,
+    body: `<p class="muted" style="margin-top:0">Đưa màn hình cho khách đọc hợp đồng (bấm "Tải PDF" để xem file) rồi ký vào khung bên dưới bằng ngón tay hoặc bút. App ghi người ký, thời điểm và mã xác thực; <b>sau khi ký, nội dung hợp đồng bị khóa</b> (muốn sửa phải hủy chữ ký). Chữ ký này có giá trị theo thỏa thuận của hai bên đã ghi trong hợp đồng; hợp đồng giá trị lớn nên dùng chữ ký số của nhà cung cấp được cấp phép.</p>
+      <label class="field"><span class="lb">Họ tên người ký *</span><input name="ten" value="${esc(h.NguoiDaiDien || h.TenDN)}"></label>
+      <div style="margin:10px 0 4px;display:flex;justify-content:space-between;align-items:center"><b>Chữ ký của khách</b><button type="button" class="btn sm" data-clear>${icon('refresh')}Xóa nét ký</button></div>
+      <canvas data-pad width="600" height="240" style="width:100%;max-width:600px;height:auto;aspect-ratio:5/2;border:1px dashed #98a2b3;border-radius:10px;background:#fff;touch-action:none;display:block"></canvas>
+      <label class="check" style="display:flex;gap:8px;margin-top:12px"><input type="checkbox" name="dongy"><b>Khách đã đọc, đồng ý nội dung hợp đồng và đồng ý ký bằng chữ ký điện tử</b></label>`,
+    buttons: [{ t: 'Ký và hoàn tất', ic: 'check', cls: 'primary', save: true, fn: run(async mm => {
+      const d = formData(mm);
+      if (!d.ten) throw new Error('Nhập họ tên người ký.');
+      if (diem < 15) throw new Error('Khách chưa ký vào khung.');
+      if (!d.dongy) throw new Error('Cần xác nhận khách đã đọc và đồng ý ký điện tử.');
+      const r = await api('kyHopDong', h.SoHD, cv.toDataURL('image/png'), d.ten);
+      const head = Object.assign({}, r.doc); delete head.lines;
+      upsertLocal('hopDong', 'SoHD', head);
+      if (S.hd && S.hd.SoHD === h.SoHD) { Object.assign(S.hd, head); S.extra = { khoa: HD_DA_KY.includes(head.TrangThai) && !isAdmin() }; }
+      closeModal(); render(); toast(`Đã ký điện tử ${h.SoHD} (mã ${nhomMaKy(r.ma)}). Hợp đồng chuyển sang ${head.TrangThai}.`);
+      if (r.loiFile) toast('Chữ ký đã lưu nhưng chưa tạo lại được file: ' + r.loiFile + ' Bấm Tạo lại file sau.', 'err');
+    }) }],
+  });
+  const cv = $('[data-pad]', m), g = cv.getContext('2d');
+  g.lineWidth = 4; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#111';
+  let ve = false, diem = 0;
+  const toa = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * cv.width / r.width, (e.clientY - r.top) * cv.height / r.height]; };
+  cv.onpointerdown = e => { e.preventDefault(); ve = true; cv.setPointerCapture(e.pointerId); const [x, y] = toa(e); g.beginPath(); g.moveTo(x, y); g.lineTo(x + 0.1, y + 0.1); g.stroke(); diem++; };
+  cv.onpointermove = e => { if (!ve) return; const [x, y] = toa(e); g.lineTo(x, y); g.stroke(); diem++; };
+  cv.onpointerup = cv.onpointercancel = () => { ve = false; };
+  $('[data-clear]', m).onclick = () => { g.clearRect(0, 0, cv.width, cv.height); diem = 0; };
+}
+async function xacThucKy() {
+  const r = await api('xacThucChuKyHopDong', S.hd.SoHD);
+  if (!r.coChuKy) return toast('Hợp đồng chưa có chữ ký điện tử.', 'err');
+  if (r.hopLe) toast(`Chữ ký hợp lệ: ${r.nguoi}, ${dmyRaw(String(r.luc).slice(0, 10))} ${String(r.luc).slice(11, 16)}, mã ${r.ma}. Nội dung hợp đồng và ảnh chữ ký còn nguyên như lúc ký.`);
+  else toast('KHÔNG hợp lệ: ' + r.lyDo, 'err');
+}
+async function huyKy() {
+  const d = S.hd;
+  if (S.dirty) throw new Error('Lưu hoặc bỏ thay đổi trước.');
+  if (!confirm(`Hủy chữ ký điện tử của ${d.SoHD}? Ảnh chữ ký bị xóa, nội dung sửa được lại và phải cho khách ký lại.`)) return;
+  const r = await api('huyChuKyHopDong', d.SoHD);
+  const head = Object.assign({}, r.doc); delete head.lines;
+  upsertLocal('hopDong', 'SoHD', head); Object.assign(S.hd, head); render(); toast('Đã hủy chữ ký điện tử.');
 }
 
 // Đơn hàng của khách đã chọn (đơn đang gắn vào hợp đồng luôn có mặt trong danh sách)

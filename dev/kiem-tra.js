@@ -585,6 +585,93 @@ for (let off = -15; off <= 20; off++) for (const so of ['', 'PT1']) {
 }
 assert.deepStrictEqual(['2026-10-04', '2026-10-05', '2026-10-12', '2026-10-13'].map(d => G.trangThaiDot_({ SoPT: '', NgayDen: d }, '2026-10-05')), ['quahan', 'sap', 'sap', 'cho']);
 
+
+// ===== Cải tiến (3): ký tại quầy =====
+const zlib = require('zlib');
+const taoPng = (w, h, seed) => { // PNG RGBA có tính xác định, đủ lớn để qua kiểm tra "ảnh trống"
+  const raw = Buffer.alloc((w * 4 + 1) * h); let x = seed;
+  for (let i = 0; i < raw.length; i++) { x = (x * 1103515245 + 12345) & 0x7fffffff; raw[i] = i % (w * 4 + 1) === 0 ? 0 : (x >> 16) & 255; }
+  const chunk = (tn, d) => { const b = Buffer.alloc(12 + d.length); b.writeUInt32BE(d.length, 0); b.write(tn, 4, 'ascii'); d.copy(b, 8); b.writeUInt32BE(zlib.crc32(Buffer.concat([Buffer.from(tn, 'ascii'), d])) >>> 0, 8 + d.length); return b; };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 6;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+};
+const pngKy = 'data:image/png;base64,' + taoPng(60, 40, 1).toString('base64');
+const hdKyT = cb({ LoaiHD: 'Hợp đồng mua bán', TenDN: 'Khách Ký Tay', NguoiDaiDien: 'Trần Thị Ký', lines: [{ TenHang: 'Máy K', DVT: 'Máy', SoLuong: 1, DonGia: 5000000 }] });
+G.luuLichHopDong(lan, hdKyT.SoHD, [{ Nhan: 'Đợt 1', NgayDen: '2026-12-01', SoTien: 5000000 }]);
+assert.throws(() => G.kyHopDong(lan, 'khong-co', pngKy, 'A'), /Không tìm thấy hợp đồng/);
+assert.throws(() => G.kyHopDong(lan, hdKyT.SoHD, pngKy, 'Trần Thị Ký'), /Tạo file hợp đồng trước/);
+G.taoFileHopDong(lan, hdKyT.SoHD);
+assert.throws(() => G.kyHopDong(lan, hdKyT.SoHD, pngKy, '  '), /họ tên người ký/);
+assert.throws(() => G.kyHopDong(lan, hdKyT.SoHD, 'data:image/png;base64,iVBORw0KGgo=', 'A'), /Chưa có chữ ký/); // ảnh quá nhỏ = trống
+assert.throws(() => G.kyHopDong(lan, hdKyT.SoHD, Buffer.alloc(900, 7).toString('base64'), 'A'), /Chưa có chữ ký/); // không phải PNG
+assert.throws(() => G.kyHopDong(lan, hdKyT.SoHD, '@@@', 'A'), /không hợp lệ/);
+assert.throws(() => G.kyHopDong(lan, hdKyT.SoHD, 'A'.repeat(400001), 'A'), /quá lớn/);
+G.luuHopDong(lan, Object.assign({}, G.findObj_('HopDong', hdKyT.SoHD), { GhiChu: 'đổi sau khi tạo file', lines: plain(G.layHopDong(lan, hdKyT.SoHD).lines) }));
+assert.throws(() => G.kyHopDong(lan, hdKyT.SoHD, pngKy, 'Trần Thị Ký'), /đã cũ so với nội dung hiện tại/); // khách phải ký đúng bản đã xem
+G.taoFileHopDong(lan, hdKyT.SoHD);
+const soDocTruocKy = [...drive.files.values()].filter(f => !f.trashed).length;
+const ky1 = plain(G.kyHopDong(lan, hdKyT.SoHD, pngKy, 'Trần Thị Ký'));
+const hdSauKy = G.findObj_('HopDong', hdKyT.SoHD), pngLuu = drive.files.get(hdSauKy.KyFileId);
+assert.deepStrictEqual([ky1.doc.TrangThai, ky1.doc.KyFileId, ky1.doc.FileCu, ky1.loiFile, /^[0-9A-F]{64}$/.test(ky1.ma), hdSauKy.NguoiKy], ['Đang hiệu lực', '1', '', undefined, true, 'Trần Thị Ký']); // nhân viên chỉ thấy cờ
+assert.deepStrictEqual([pngLuu.mime, pngLuu.bytes.length > 600, tenThuMuc(hdSauKy.KyFileId), hdSauKy.MaXacThuc], ['image/png', true, 'Hợp đồng - phuonghihi', ky1.ma]);
+const fileKy = idDe(ky1);
+assert.ok(docs.get(fileKy).body.getImages().length === 1 && vanBan(fileKy).includes('Đã ký điện tử: Trần Thị Ký – ') && vanBan(fileKy).includes('Mã xác thực ' + ky1.ma.slice(0, 4) + '-') && !vanBan(fileKy).includes('{{'));
+assert.ok(vanBan(fileKy).includes('Hai bên đồng ý hợp đồng có thể được ký bằng chữ ký điện tử'));
+assert.throws(() => G.kyHopDong(lan, hdKyT.SoHD, pngKy, 'Trần Thị Ký'), /đã có chữ ký điện tử/);
+assert.strictEqual(G.taiDuLieu(lan).hopDong.find(h => h.SoHD === hdKyT.SoHD).KyFileId, '1');
+// Sau khi ký: nội dung đã ký bị khóa với mọi người (kể cả quản trị); gia hạn, ghi chú, người phụ trách, trạng thái vẫn sửa được
+const dayDu = Object.assign({}, G.findObj_('HopDong', hdKyT.SoHD), { lines: plain(G.layHopDong(lan, hdKyT.SoHD).lines) });
+for (const ai of [lan, admin]) {
+  assert.throws(() => G.luuHopDong(ai, Object.assign({}, dayDu, { DiaChi: 'Địa chỉ mới' })), /đã có chữ ký điện tử/);
+  assert.throws(() => G.luuHopDong(ai, Object.assign({}, dayDu, { lines: [{ TenHang: 'Máy K', SoLuong: 1, DonGia: 4000000 }] })), /đã có chữ ký điện tử/);
+  assert.throws(() => G.luuHopDong(ai, Object.assign({}, dayDu, { VAT: 5 })), /đã có chữ ký điện tử/);
+}
+assert.throws(() => G.luuLichHopDong(admin, hdKyT.SoHD, [{ Nhan: 'Đợt 1', NgayDen: '2026-12-02', SoTien: 5000000 }]), /đã có chữ ký điện tử/);
+assert.strictEqual(plain(G.luuLichHopDong(admin, hdKyT.SoHD, plain(G.layHopDong(lan, hdKyT.SoHD).lich)).lich).length, 1); // gửi lại y nguyên thì không bị chặn
+const sauKy = G.luuHopDong(lan, Object.assign({}, dayDu, { GhiChu: 'ghi chú mới', NguoiPhuTrach: 'An', NgayHetHan: '2027-06-30', TrangThai: 'Hoàn thành' })).doc;
+assert.deepStrictEqual([sauKy.GhiChu, sauKy.TrangThai, sauKy.KyFileId], ['ghi chú mới', 'Hoàn thành', '1']);
+assert.throws(() => G.giaHanHopDong(lan, hdKyT.SoHD, 1), /đang hiệu lực/); // đã hoàn thành thì không gia hạn
+G.luuHopDong(lan, Object.assign({}, dayDu, { TrangThai: 'Đang hiệu lực', NgayHetHan: '2027-06-30' }));
+assert.strictEqual(plain(G.giaHanHopDong(lan, hdKyT.SoHD, 1)).doc.NgayHetHan, '2027-07-30'); // gia hạn không làm mất chữ ký
+// Kiểm tra chữ ký: đúng, rồi bị phát hiện khi nội dung hoặc ảnh bị sửa thẳng trong Sheet / Drive
+assert.deepStrictEqual(plain(G.xacThucChuKyHopDong(lan, hdPT.SoHD)), { coChuKy: false }); // hợp đồng chưa ký
+const xt = plain(G.xacThucChuKyHopDong(lan, hdKyT.SoHD));
+assert.deepStrictEqual([xt.coChuKy, xt.hopLe, xt.nguoi, /^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/.test(xt.ma), xt.lyDo], [true, true, 'Trần Thị Ký', true, '']);
+const hdKyRow = sheets.PS_HopDong.rows.findIndex(r => r[0] === hdKyT.SoHD), cDC = sheets.PS_HopDong.rows[0].indexOf('DiaChi'), diaCu = sheets.PS_HopDong.rows[hdKyRow][cDC];
+sheets.PS_HopDong.rows[hdKyRow][cDC] = 'Địa chỉ bị sửa lén';
+assert.deepStrictEqual([plain(G.xacThucChuKyHopDong(lan, hdKyT.SoHD)).hopLe, plain(G.xacThucChuKyHopDong(lan, hdKyT.SoHD)).lyDo], [false, 'Nội dung hợp đồng hoặc ảnh chữ ký đã thay đổi sau khi ký.']);
+sheets.PS_HopDong.rows[hdKyRow][cDC] = diaCu;
+assert.strictEqual(plain(G.xacThucChuKyHopDong(lan, hdKyT.SoHD)).hopLe, true);
+const bytesGoc = pngLuu.bytes; pngLuu.bytes = [1, 2, 3];
+assert.strictEqual(plain(G.xacThucChuKyHopDong(lan, hdKyT.SoHD)).hopLe, false);
+pngLuu.bytes = bytesGoc;
+// Hủy chữ ký (quản trị): xóa ảnh, file cũ, sửa được nội dung và ký lại được
+assert.throws(() => G.huyChuKyHopDong(lan, hdKyT.SoHD), /quản trị/);
+assert.throws(() => G.huyChuKyHopDong(admin, hdPT.SoHD), /chưa có chữ ký/);
+const huy = plain(G.huyChuKyHopDong(admin, hdKyT.SoHD)).doc;
+assert.deepStrictEqual([huy.KyFileId, huy.NguoiKy, huy.MaXacThuc, huy.FileCu, !!pngLuu.trashed], ['', '', '', '1', true]);
+assert.strictEqual(G.luuHopDong(lan, Object.assign({}, dayDu, { DiaChi: 'Địa chỉ đã sửa', TrangThai: 'Đang hiệu lực' })).doc.DiaChi, 'Địa chỉ đã sửa');
+G.taoFileHopDong(lan, hdKyT.SoHD);
+const ky2 = plain(G.kyHopDong(lan, hdKyT.SoHD, 'data:image/png;base64,' + taoPng(60, 40, 2).toString('base64'), 'Trần Thị Ký'));
+assert.notStrictEqual(ky2.ma, ky1.ma); // nội dung và ảnh đã khác
+assert.strictEqual(plain(G.xacThucChuKyHopDong(lan, hdKyT.SoHD)).hopLe, true);
+const pngMoi = G.findObj_('HopDong', hdKyT.SoHD).KyFileId;
+G.xoaHopDong(admin, hdKyT.SoHD); // xóa hợp đồng cũng đưa ảnh chữ ký vào thùng rác
+assert.strictEqual(drive.files.get(pngMoi).trashed, true);
+assert.ok(['Ký điện tử hợp đồng', 'Hủy chữ ký điện tử'].every(h => plain(G.dsNhatKy(admin)).some(x => x.HanhDong === h && x.DoiTuong === hdKyT.SoHD)));
+// Mẫu mặc định đều có chỗ ký điện tử
+G.readTable_('MauHopDong').forEach(m => { const vb = vanBan(G.idTuLink_(m.LinkMau)); assert.ok(vb.includes('{{CHUKYA}}') && vb.includes('{{XACTHUCKYA}}'), m.LoaiHD); });
+// Mẫu riêng không có {{CHUKYA}}: hình chữ ký và dòng xác thực được thêm ở cuối file
+const mauKhongKy = G.DocumentApp.create('Mẫu không chỗ ký'); mauKhongKy.getBody().appendParagraph('Hợp đồng {{TENDOANHNGHIEP}}');
+G.DriveApp.getFileById(mauKhongKy.getId()).moveTo(G.DriveApp.getFolderById(thuMucHD.id));
+G.luuMauHopDong(admin, { LoaiHD: 'Mẫu không chỗ ký', LinkMau: mauKhongKy.getUrl() });
+const hdMK = cb({ LoaiHD: 'Mẫu không chỗ ký', TenDN: 'Khách MK', lines: [] });
+G.taoFileHopDong(lan, hdMK.SoHD);
+G.kyHopDong(lan, hdMK.SoHD, pngKy, 'Khách MK');
+const fMK = G.findObj_('HopDong', hdMK.SoHD).FileId;
+assert.ok(docs.get(fMK).body.getImages().length === 1 && vanBan(fMK).includes('Chữ ký điện tử của Bên A:') && vanBan(fMK).includes('Đã ký điện tử: Khách MK'));
+G.xoaMauHopDong(admin, 'Mẫu không chỗ ký');
+
 // Khóa tài khoản / quản trị đặt lại mật khẩu: phiên đang đăng nhập hết hiệu lực ngay; chỉ đổi tên thì không
 const tkLan = { TenDangNhap: 'lan.nguyen', HoTen: 'Lan', VaiTro: 'nhanvien', CuaHang: 'phone' };
 G.luuTaiKhoan(admin, Object.assign({ TrangThai: 'Khóa' }, tkLan));

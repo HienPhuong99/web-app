@@ -47,7 +47,7 @@ const TABLES = {
   NhatKy: ['ThoiGian', 'NguoiDung', 'HanhDong', 'DoiTuong', 'ChiTiet'],
   // Hợp đồng: bên A = khách (các cột TenDN…NganHang), bên B = cửa hàng (lấy từ cài đặt cửa hàng khi tạo file)
   HopDong: ['SoHD', 'Ngay', 'LoaiHD', 'SoDH', 'MaKH', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang', 'SoCCCD', 'CCCDCap', 'IMEI',
-    'NgayHieuLuc', 'NgayHetHan', 'BaoTruocNgay', 'TuGiaHan', 'ThangGiaHan', 'NguoiPhuTrach', 'TrangThai', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'BangChu', 'GhiChu', 'FileId', 'LinkFile', 'NgayFile', 'FileCu', 'NguoiTao', 'NgayTao', 'NgaySua'], // FileCu = '1' khi hợp đồng đã sửa sau lần tạo file gần nhất
+    'NgayHieuLuc', 'NgayHetHan', 'BaoTruocNgay', 'TuGiaHan', 'ThangGiaHan', 'NguoiPhuTrach', 'TrangThai', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'BangChu', 'GhiChu', 'FileId', 'LinkFile', 'NgayFile', 'FileCu', 'KyFileId', 'NguoiKy', 'NgayKyDT', 'MaXacThuc', 'NguoiTao', 'NgayTao', 'NgaySua'], // FileCu = '1' khi hợp đồng đã sửa sau lần tạo file gần nhất
   HopDongCT: ['SoHD', 'STT', 'MaHH', 'TenHang', 'DVT', 'SoLuong', 'DonGia', 'ThanhTien', 'IMEI'],
   HopDongLich: ['SoHD', 'Dot', 'Nhan', 'NgayDen', 'SoTien', 'SoPT', 'NgayThu'], // lịch thanh toán / trả góp: mỗi đợt một dòng; SoPT = phiếu thu đã ghi nhận cho đợt đó
   MauHopDong: ['LoaiHD', 'LinkMau', 'MoTa', 'NgayTao'], // mỗi loại hợp đồng một file Google Docs mẫu
@@ -62,7 +62,7 @@ const NGAN_HANG = [['970436', 'Vietcombank'], ['970415', 'VietinBank'], ['970418
 const SHARED = ['TaiKhoan', 'CaiDat']; // trang dùng chung cho mọi cửa hàng, không có tiền tố
 const NUMBER_COLS = ['Dot', 'BaoTruocNgay', 'ThangGiaHan', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien'];
 const SESSION_TTL = 6 * 60 * 60; // giây; tối đa của CacheService, tự gia hạn khi còn dùng
-const SCHEMA = '5'; // tăng số này khi thêm bảng/cột ở TABLES: app tự thêm phần thiếu ở lần gọi đầu sau khi triển khai
+const SCHEMA = '6'; // tăng số này khi thêm bảng/cột ở TABLES: app tự thêm phần thiếu ở lần gọi đầu sau khi triển khai
 
 // Loại chứng từ có dòng hàng. Số chứng từ dạng 001-2026/DH, mỗi năm đánh lại từ 001 (riêng từng cửa hàng).
 const CT = {

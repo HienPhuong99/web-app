@@ -59,6 +59,7 @@ class MPara {
   setAttributes(st) { this.attr = st; this.bold = !!st.BOLD; if (st.HORIZONTAL_ALIGNMENT) this.align = st.HORIZONTAL_ALIGNMENT; return this; }
   setSpacingAfter() { return this; } setSpacingBefore() { return this; } setLineSpacing() { return this; } setIndentFirstLine() { return this; } setIndentStart() { return this; }
   editAsText() { return new MText(this); }
+  appendInlineImage(blob) { const img = { blob, w: 0, h: 0, setWidth(w) { this.w = w; return this; }, setHeight(h) { this.h = h; return this; } }; (this.images = this.images || []).push(img); return img; }
 }
 class MText { // sửa chữ trong một đoạn
   constructor(p) { this.p = p; }
@@ -69,7 +70,7 @@ class MText { // sửa chữ trong một đoạn
   deleteText(a, b) { this.p.text = this.p.text.slice(0, a) + this.p.text.slice(b + 1); return this; }
   insertText(o, t) { this.p.text = this.p.text.slice(0, o) + t + this.p.text.slice(o); return this; }
 }
-class MCell { constructor(text, table) { this.para = new MPara(text, this); this.table = table; } getText() { return this.para.text; } getChild() { return this.para; } getText() { return this.para.text; } editAsText() { return this.para.editAsText(); } }
+class MCell { constructor(text, table) { this.para = new MPara(text, this); this.table = table; } setPaddingBottom() { return this; } getText() { return this.para.text; } getChild() { return this.para; } getText() { return this.para.text; } editAsText() { return this.para.editAsText(); } }
 class MTable {
   constructor(cells, parent) { this.parent = parent; this.rows = cells.map(r => r.map(t => new MCell(t, this))); this.borderWidth = 1; }
   getType() { return 'TABLE'; } getParent() { return this.parent; } setBorderWidth(w) { this.borderWidth = w; return this; } setColumnWidth() { return this; } setAttributes() { return this; }
@@ -85,6 +86,7 @@ class MBody {
   insertTable(i, cells) { const t = new MTable(cells, this); this.children.splice(i, 0, t); return t; }
   getChildIndex(el) { const i = this.children.indexOf(el); if (i < 0) throw new Error('Phần tử không phải con trực tiếp của body'); return i; }
   getTables() { return this.children.filter(c => c instanceof MTable); }
+  getImages() { return this.allParas().flatMap(p => p.images || []); }
   getNumChildren() { return this.children.length; } getChild(i) { return this.children[i]; }
   setMarginTop() {} setMarginBottom() {} setMarginLeft() {} setMarginRight() {} setAttributes() { return this; }
   allParas() { return this.children.flatMap(c => (c instanceof MTable ? c.paras() : [c])); }
@@ -107,10 +109,11 @@ class MDoc {
 }
 const docs = new Map();
 const quyen = ten => { if (drive.thieuQuyen) throw new Error('You do not have permission to call ' + ten + '. Required permissions: https://www.googleapis.com/auth/drive'); };
-class MFolder { constructor(f) { this.f = f; } getId() { return this.f.id; } getName() { return this.f.name; } isTrashed() { return !!this.f.trashed; } }
+class MFolder { constructor(f) { this.f = f; } createFile(blob) { quyen('Folder.createFile'); const id = newId('G'); drive.files.set(id, { id, name: blob.getName(), mime: blob.getContentType(), folder: this.f.id, bytes: blob.getBytes() }); return new MFile(drive.files.get(id)); } getId() { return this.f.id; } getName() { return this.f.name; } isTrashed() { return !!this.f.trashed; } }
 class MFile {
   constructor(f) { this.f = f; }
   getId() { return this.f.id; } getName() { return this.f.name; } getUrl() { return 'https://docs.google.com/document/d/' + this.f.id + '/edit'; }
+  getBlob() { return { getBytes: () => this.f.bytes || [], getContentType: () => this.f.mime, getName: () => this.f.name }; }
   getMimeType() { return this.f.mime; } isTrashed() { return !!this.f.trashed; } setTrashed(b) { this.f.trashed = !!b; return this; }
   moveTo(folder) { this.f.folder = folder.getId(); return this; }
   getParents() { const f = drive.folders.get(this.f.folder), l = f ? [new MFolder(f)] : []; return { hasNext: () => l.length > 0, next: () => l.shift() }; }
@@ -155,6 +158,8 @@ const ctx = vm.createContext({
     getUuid: () => crypto.randomUUID(),
     DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' },
     computeDigest: (alg, s) => [...crypto.createHash(alg).update(String(s), 'utf8').digest()].map(b => (b > 127 ? b - 256 : b)),
+    base64Decode: s => { if (!/^[A-Za-z0-9+\/=\s]*$/.test(s)) throw new Error('Invalid argument'); return [...Buffer.from(s, 'base64')].map(b => (b > 127 ? b - 256 : b)); },
+    newBlob: (bytes, type, name) => ({ getBytes: () => bytes, getContentType: () => type, getName: () => name }),
     base64Encode: bytes => Buffer.from(bytes.map(b => b & 255)).toString('base64'),
     formatDate: (d, tz, fmt) => {
       const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(d).map(x => [x.type, x.value]));

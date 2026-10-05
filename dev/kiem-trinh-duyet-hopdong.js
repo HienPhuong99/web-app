@@ -374,6 +374,82 @@ module.exports = BUOC => {
     assert.strictEqual(await page.evaluate(() => dotCanThu().length), 1); // kỳ 1 quá hạn trở lại
   }]);
 
+  BUOC.push(['Ký tại quầy: chỉ ký khi đã có file mới, kiểm tra đầu vào, ký, khóa nội dung, kiểm tra và hủy chữ ký', async page => {
+    await page.evaluate(() => newHD());
+    await page.waitForSelector('input[data-h="TenDN"]');
+    await page.fill('input[data-h="TenDN"]', 'Khách Ký Tại Quầy');
+    await page.fill('input[data-h="NguoiDaiDien"]', 'Trần Thị Ký');
+    await page.fill('tr[data-i="0"] [data-f="TenHang"]', 'Máy thử chữ ký');
+    await page.keyboard.press('Escape');
+    await page.fill('tr[data-i="0"] [data-f="SoLuong"]', '1');
+    await page.fill('tr[data-i="0"] [data-f="DonGia"]', '5000000');
+    await nut(page, 'Lưu').click();
+    await page.waitForFunction(() => S.hd && S.hd.SoHD && !S.dirty, null, { timeout: 8000 });
+    const so = await page.evaluate(() => S.hd.SoHD);
+    await page.waitForSelector('[data-act="taofile"]');
+    assert.ok(await page.locator('[data-act="ky"]').isDisabled(), 'Chưa có file thì chưa cho ký');
+    assert.ok(await page.locator('text=Tạo file hợp đồng trước để khách xem đúng bản sẽ ký.').count() >= 1);
+    await page.click('[data-act="taofile"]');
+    await page.waitForSelector('text=/Đã tạo \\d{4}-/');
+    assert.ok(await page.locator('[data-act="ky"]').isEnabled(), 'Có file mới thì được ký');
+    await page.fill('input[data-h="GhiChu"]', 'sửa dở'); // đang sửa dở chưa lưu: không cho ký
+    assert.ok(await page.evaluate(() => S.dirty));
+    await page.click('[data-act="ky"]');
+    await page.waitForSelector('#toast .err');
+    assert.match(await page.locator('#toast .err').last().textContent(), /Lưu hợp đồng trước khi ký/);
+    assert.strictEqual(await page.locator('#modal canvas[data-pad]').count(), 0);
+    await nut(page, 'Lưu').click();
+    await page.waitForFunction(() => !S.dirty, null, { timeout: 8000 });
+    await page.waitForSelector('text=Đã cũ: hợp đồng đã sửa sau lần tạo file'); // lưu GhiChu làm file cũ: phải tạo lại file
+    assert.ok(await page.locator('[data-act="ky"]').isDisabled(), 'File đã cũ thì chưa cho ký');
+    await page.click('[data-act="taofile"]');
+    await page.waitForSelector('text=/Đã tạo \\d{4}-/');
+    await page.click('[data-act="ky"]');
+    await page.waitForSelector('#modal canvas[data-pad]');
+    const ky = () => page.click('#modal [data-save]');
+    const loi = async re => { await page.waitForSelector('#toast .err'); assert.match(await page.locator('#toast .err').last().textContent(), re); await page.evaluate(() => document.querySelectorAll('#toast .err').forEach(x => x.remove())); };
+    await ky(); await loi(/chưa ký vào khung/);
+    const hop = await page.locator('#modal canvas[data-pad]').boundingBox();
+    const ve = async () => { // ký một nét ngoằn ngoèo bằng chuột
+      await page.mouse.move(hop.x + 40, hop.y + 100); await page.mouse.down();
+      for (let i = 0; i <= 30; i++) await page.mouse.move(hop.x + 40 + i * 12, hop.y + 100 + Math.sin(i / 2) * 50);
+      await page.mouse.up();
+    };
+    await ve(); await ky(); await loi(/xác nhận khách đã đọc/);
+    await page.locator('#modal [data-clear]').click(); // xóa nét ký: lại báo chưa ký
+    await ky(); await loi(/chưa ký vào khung/);
+    await ve();
+    await shot(page, 'hd-14-ky-tai-quay');
+    await page.fill('#modal [name=ten]', '');
+    await ky(); await loi(/họ tên người ký/);
+    await page.fill('#modal [name=ten]', 'Trần Thị Ký');
+    await page.check('#modal [name=dongy]');
+    await ky();
+    await page.waitForSelector('#modal', { state: 'hidden' });
+    await page.waitForSelector('text=/Đã ký: Trần Thị Ký/');
+    assert.strictEqual(await page.evaluate(() => S.hd.TrangThai), 'Đang hiệu lực');
+    assert.ok(await page.locator('[data-act="ky"]').count() === 0, 'Đã ký thì không còn nút ký');
+    assert.match(await page.locator('.card:has-text("Chữ ký điện tử")').textContent(), /Mã xác thực [0-9A-F]{4}-[0-9A-F]{4}-/);
+    await shot(page, 'hd-15-da-ky');
+    // Nội dung bị khóa, kể cả với quản trị
+    await page.fill('input[data-h="DiaChi"]', 'Đổi địa chỉ sau khi ký');
+    await nut(page, 'Lưu').click();
+    await page.waitForSelector('#toast .err');
+    assert.match(await page.locator('#toast .err').last().textContent(), /đã có chữ ký điện tử/);
+    await page.evaluate(h => openHD(S.hopDong.find(x => x.SoHD === h)), so); // bỏ thay đổi dở
+    await page.waitForSelector('[data-act="ky-xt"]');
+    await page.click('[data-act="ky-xt"]');
+    await page.waitForSelector('#toast:has-text("Chữ ký hợp lệ")');
+    // Hủy chữ ký (quản trị): nội dung sửa được lại và có thể ký lại
+    await page.click('[data-act="ky-huy"]');
+    await page.waitForSelector('text=Chưa ký');
+    assert.ok(await page.locator('[data-act="ky"]').count() === 1);
+    assert.ok(await page.evaluate(h => !S.hopDong.find(x => x.SoHD === h).KyFileId, so));
+    await page.fill('input[data-h="DiaChi"]', 'Địa chỉ sửa được lại');
+    await nut(page, 'Lưu').click();
+    await page.waitForFunction(() => !S.dirty, null, { timeout: 8000 });
+  }]);
+
   BUOC.push(['Hợp đồng: màn hình điện thoại không tràn ngang', async page => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => newHD());
