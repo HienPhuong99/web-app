@@ -406,6 +406,14 @@ module.exports = BUOC => {
     await page.waitForSelector('text=/Đã tạo \\d{4}-/');
     await page.click('[data-act="ky"]');
     await page.waitForSelector('#modal canvas[data-pad]');
+    await page.setViewportSize({ width: 390, height: 844 }); // khách ký bằng ngón tay trên điện thoại: khung ký phải vừa màn hình, không tràn ngang
+    await page.waitForTimeout(300);
+    const dt = await page.locator('#modal canvas[data-pad]').boundingBox();
+    assert.ok(dt.x >= 0 && dt.x + dt.width <= 390 && dt.width >= 250, 'Khung ký trên điện thoại: ' + JSON.stringify(dt));
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth) <= 1, 'Hộp ký tràn ngang trên điện thoại');
+    await shot(page, 'hd-14b-ky-dien-thoai');
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.waitForTimeout(300);
     const ky = () => page.click('#modal [data-save]');
     const loi = async re => { await page.waitForSelector('#toast .err'); assert.match(await page.locator('#toast .err').last().textContent(), re); await page.evaluate(() => document.querySelectorAll('#toast .err').forEach(x => x.remove())); };
     await ky(); await loi(/chưa ký vào khung/);

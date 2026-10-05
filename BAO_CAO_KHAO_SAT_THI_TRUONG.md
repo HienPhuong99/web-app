@@ -108,15 +108,57 @@ Tiêu chí: có bằng chứng nhu cầu ở mục 3–4, công sức, rủi ro 
 
 ## 7. Đã làm
 
-_(Cập nhật ở cuối đợt làm: mục này ghi từng tính năng, cách dùng ngắn, giới hạn đã biết và cách đã kiểm thử.)_
+Bảy tính năng ở mục 6 được làm trong **4 commit** (mỗi commit đã chạy đủ bộ kiểm tra trước khi đẩy lên). Cách dùng chi tiết nằm ở `HUONG_DAN.md`, mục "Tính năng thêm sau khảo sát thị trường" và "Email tổng hợp mỗi sáng".
+
+| Commit | Tính năng (số ở mục 6) | Dùng thế nào | Giới hạn đã biết |
+|---|---|---|---|
+| Cải tiến 1 | **1** Báo trước + tự gia hạn + gia hạn một chạm · **2** Nhắc khách Zalo/email · **4** Lịch sử theo hợp đồng · **5** IMEI, CCCD, đồng ý dữ liệu cá nhân | Ô *Báo trước (ngày)* (mặc định 30), *Tự động gia hạn*, *Mỗi lần gia hạn (tháng)*; danh sách và Tổng quan hiện **hạn phải quyết định** và nhắc sớm hơn (báo trước + 14 ngày); nút **Gia hạn** chọn số tháng rồi một chạm; nút **Nhắc khách** soạn tin để mở Zalo hoặc email; cột IMEI trong bảng hàng; ô CCCD/ngày cấp; thẻ *Lịch sử thay đổi* | App **không tự gửi** gì cho khách (cố ý, xem mục 4.2). Tự gia hạn chỉ là thông tin trong hợp đồng và cách tính cảnh báo: app **không tự đổi ngày hết hạn**, người dùng bấm Gia hạn. Số CCCD là dữ liệu nhạy cảm: chỉ ghi khi cần và phải xin đồng ý |
+| Cải tiến 2 | **3** Lịch thanh toán / trả góp | Mục *4. Lịch thanh toán*: trả trước + số kỳ + chu kỳ → **Tạo lịch trả góp đều**; hợp đồng gắn đơn hàng thì nút **Thu** từng đợt tạo phiếu thu theo đơn (công nợ tự giảm); menu **Lịch thanh toán** + thẻ Tổng quan cho đợt quá hạn hoặc đến hạn trong 7 ngày; mẫu thứ 6 *Hợp đồng mua bán trả góp* | Trả góp trực tiếp **không tính lãi, phạt chậm trả, không nối đối tác tài chính**. Tối đa 36 đợt/hợp đồng. Hợp đồng đã ký thì đổi lịch chưa thu phải hủy chữ ký trước |
+| Cải tiến 3 | **6** Ký tại quầy | Sau khi Tạo file (còn mới): **Ký tại quầy** → khách ký trên khung, tick đồng ý → ghi người ký, thời điểm, mã xác thực SHA-256 → chèn hình chữ ký và dòng xác thực vào Docs/PDF → hợp đồng thành *Đang hiệu lực* và **khóa nội dung** (cả quản trị). *Kiểm tra chữ ký* phát hiện sửa sau khi ký; *Hủy chữ ký* (quản trị) để sửa và ký lại | **Không phải chữ ký số** của nhà cung cấp được cấp phép và **không xác thực danh tính** người ký (không OTP, không giấy tờ). Giá trị chỉ dựa trên thỏa thuận của hai bên đã ghi trong hợp đồng (mẫu có điều khoản này). Ảnh chữ ký lưu trong thư mục Drive của cửa hàng. Quản trị có thể hủy chữ ký (có ghi nhật ký) |
+| Cải tiến 4 | **7** Email tổng hợp mỗi sáng | *Cài đặt → Email tổng hợp mỗi sáng*: bật, chọn giờ, email nhận; **Gửi thư thử ngay**. Thư gồm hợp đồng sắp/quá hạn và hạn báo trước, đợt thanh toán cần thu, đơn quá hạn giao, hàng sắp hết, khách còn nợ, doanh số và tiền thu hôm qua. Không có việc thì không gửi; mỗi ngày tối đa một thư | Cần quyền **gửi email** và **hẹn giờ** (cấp bằng cách chạy lại `caiDat`); Google gửi trong khoảng một giờ quanh giờ đã chọn; thư chứa tên và số điện thoại khách còn nợ nên chỉ gửi cho người trong cửa hàng; chỉ có một bộ hẹn giờ (đủ cho một cửa hàng). Không gửi cho khách |
+
+**Cách đã kiểm thử.** Mỗi tính năng có test máy chủ (`node dev/kiem-tra.js`) và test giao diện trên Chromium (`NODE_PATH=$(npm root -g) node dev/kiem-trinh-duyet.js`) chạy trên **bản giả lập Google Sheet, Docs, Drive, MailApp, ScriptApp**. Một số điểm đáng nói:
+- Các hàm tính hạn và tình trạng đợt được viết hai lần (máy chủ và giao diện) nên có test **đối chiếu hai bản cho cùng đầu vào**; số thành chữ so với 3.000 số ngẫu nhiên.
+- Công nợ, hạn hợp đồng, hàng sắp hết trong email sáng được đối chiếu với cách màn hình Tổng quan tính.
+- Chữ ký: ảnh PNG thử được sinh đúng chuẩn; thử ảnh trống, sai định dạng, quá lớn, ký hai lần, sửa nội dung sau khi ký, sửa ảnh/Sheet sau khi ký (phải bị phát hiện), hủy rồi ký lại.
+- Sau khi viết test tôi **cố ý làm hỏng code** (bỏ kiểm tra, đổi điều kiện, bỏ chống chèn HTML...) để chắc test bắt được; một chỗ lọt (đơn "Giao một phần" quá hạn) đã bổ sung test.
+- Ảnh chụp màn hình các bước chính đã được xem lại bằng mắt (khung ký, thẻ đã ký, thẻ email sáng, màn hình điện thoại không tràn ngang).
+- **Chưa kiểm thử trên Google thật:** toàn bộ phần Docs/Drive/Mail/hẹn giờ. Mô phỏng chỉ đúng với hiểu biết của tôi về hành vi các API đó (xem mục 9).
 
 ## 8. Chưa làm và gợi ý bước tiếp theo
 
-_(Cập nhật ở cuối đợt làm.)_
+Theo thứ tự tôi đề xuất, dựa trên bằng chứng nhu cầu ở mục 3–4:
+1. **Phiếu nhận máy sửa chữa + mã QR cho khách tra tình trạng** (mục 8 của bảng đề xuất): đối thủ nào làm hợp đồng dịch vụ cũng có; đây là nghiệp vụ lớn (trạng thái sửa, kỹ thuật viên, linh kiện, chi phí) nên cần mô-đun riêng. Mẫu "dịch vụ sửa chữa – bảo hành" hiện chỉ là hợp đồng, chưa có phiếu theo dõi.
+2. **Trả góp có lãi, phạt chậm trả và theo dõi đối tác tài chính** nếu cửa hàng thực sự bán trả góp lớn; hiện chỉ có trả góp trực tiếp không lãi.
+3. **Thu cũ đổi mới như một nghiệp vụ**: định giá máy cũ, lưu ảnh giấy tờ người bán và kết quả kiểm tra IMEI vào hồ sơ (hiện có mẫu hợp đồng và ô IMEI/CCCD, chưa có quy trình).
+4. **Tem bảo hành điện tử / QR tra cứu bảo hành** cho khách (phụ thuộc mục 1).
+5. **Điểm thưởng, hoa hồng nhân viên, chấm công**: ngoài phạm vi hợp đồng, chỉ làm nếu bạn thấy cần.
+6. **Zalo ZNS tự động**: cần Zalo OA, mẫu tin được duyệt, trả phí; tính năng *Nhắc khách* là bước đệm.
+7. **Hóa đơn điện tử máy tính tiền** (Nghị định 70/2025): chỉ cần khi hộ kinh doanh doanh thu từ 1 tỷ đồng/năm; phải nối nhà cung cấp hóa đơn được cấp phép.
+8. **Ký số thật (OTP, USB token, chứng thư)** qua nhà cung cấp: dùng khi hợp đồng giá trị lớn hoặc đối tác doanh nghiệp yêu cầu.
+9. Hệ thống **đại lý / nhiều cửa hàng**: mã nguồn đã hỗ trợ nhiều cửa hàng, nhưng email sáng hiện chỉ dùng một bộ hẹn giờ chung.
+Không đề xuất làm: phê duyệt nhiều cấp, thư viện điều khoản, AI đọc hợp đồng, cầm đồ, chuyển/rút tiền hộ (mục 6).
 
 ## 9. Rủi ro và việc cần bạn kiểm tra
 
-_(Cập nhật ở cuối đợt làm.)_
+**Việc nên làm trước khi dùng thật (theo thứ tự):**
+1. Dán `Code.gs`, `HopDong.gs`, **`EmailSang.gs` (tệp mới)**, `Index.html`, chạy `caiDat`, bấm **Cho phép** các quyền mới (Docs, Drive, gửi email, hẹn giờ). Hoặc `node dev/trien-khai.js`.
+2. Chạy hàm **`kiemTraTaoHopDong`**: Nhật ký thực thi phải ghi **TẤT CẢ ĐẠT**. Phần này kiểm tra cả chèn hình chữ ký vào file. Có dòng LỖI thì chép nhật ký lại.
+3. **Thử trên link `/dev`** (Thử nghiệm các lần triển khai) trước khi triển khai: Apps Script xử lý `Index.html` khác trình duyệt thường.
+4. Lập một hợp đồng thử → Tạo file → mở Google Docs xem định dạng, bảng hàng, hình chữ ký → Tải PDF → thử **Ký tại quầy** trên điện thoại hoặc máy tính bảng thật (cảm ứng, kích thước khung ký).
+5. *Cài đặt → Email tổng hợp mỗi sáng*: bật và bấm **Gửi thư thử ngay**, kiểm tra thư (cả mục Spam); hôm sau xem thư sáng có đến đúng giờ không.
+6. **Nhờ luật sư rà soát** 6 mẫu hợp đồng, điều khoản ký điện tử, điều khoản trả góp (lãi/phạt/giữ quyền sở hữu), điều khoản đồng ý xử lý dữ liệu cá nhân và việc thu CCCD. Các mẫu chỉ là khung tham khảo.
+
+**Rủi ro và giới hạn tôi biết:**
+- **Chưa thử trên Google thật.** Tôi không có quyền truy cập Google trong môi trường làm việc nên Docs, Drive, MailApp, ScriptApp chỉ được thử trên bản giả lập do tôi viết. Rủi ro lớn nhất nằm ở chỗ này: hành vi thật của `replaceText`, chèn ảnh trong ô bảng, xuất PDF, `Session.getEffectiveUser()`, bộ hẹn giờ có thể khác điều tôi hiểu. Hàm `kiemTraTaoHopDong` và nút *Gửi thư thử* tồn tại để bạn kiểm tra nhanh.
+- **Quyền mới.** Lần đầu sau khi cập nhật, nếu chưa cấp quyền thì tạo file hợp đồng và email sáng sẽ báo lỗi kèm cách xử lý. Tôi **chưa kiểm chứng** việc phần còn lại của app có chạy bình thường khi chưa cấp quyền mới hay không, nên đã bỏ câu khẳng định đó khỏi hướng dẫn: hãy cấp quyền ngay khi cập nhật.
+- **Chữ ký điện tử**: xem giới hạn pháp lý ở mục 7. Quản trị hủy được chữ ký (có nhật ký); dữ liệu Sheet/Drive vẫn có thể bị chủ file sửa trực tiếp, `Kiểm tra chữ ký` chỉ **phát hiện** chứ không ngăn được.
+- **Dữ liệu cá nhân**: số CCCD, tên và SĐT khách trong Sheet, file Docs, ảnh chữ ký và (tên, SĐT khách còn nợ) trong email sáng. Chỉ chia sẻ Sheet và thư mục Drive cho người cần; xin đồng ý của khách khi ghi CCCD.
+- **Xóa cửa hàng PCCC là không hoàn tác trong app** (khôi phục bằng lịch sử phiên bản của Google Sheet). File `du-lieu/DuLieu.xlsx` trong repo **vẫn còn dữ liệu khách PCCC**: nên xóa các trang `PCCC_…` hoặc bỏ file khỏi repo và đừng chia sẻ công khai.
+- `dev/trien-khai.js` chưa chạy thử được vì môi trường làm việc không có `clasp`.
+- Hạn mức Google: email 100 thư/ngày với tài khoản thường (dùng 1 thư/ngày), thời gian chạy hẹn giờ có hạn mức mỗi ngày (mỗi lần gửi chỉ vài giây). Sheet lớn (hàng chục nghìn dòng) sẽ chậm vì app đọc cả trang tính mỗi lần gọi.
+- Hàm `guiEmailSang` là hàm công khai của web app (ai có link gọi được); đã chặn: chỉ chạy khi do bộ hẹn giờ gọi, mỗi ngày tối đa một thư, không trả dữ liệu. Chưa kiểm chứng trường hợp Google đổi dạng đối tượng sự kiện của bộ hẹn giờ (nếu thư sáng không đến sau khi bật, đây là chỗ nên xem đầu tiên).
+- **Về bản khảo sát**: dựa trên tài liệu công khai, không dùng thử đối thủ, không khảo sát người dùng thật (mục 2). Ưu tiên ở mục 6 là nhận định của tôi: hãy đối chiếu với thực tế cửa hàng của bạn (khách có thật sự trả góp không, có nhận sửa chữa không...) trước khi đầu tư thêm.
 
 ## 10. Nguồn
 

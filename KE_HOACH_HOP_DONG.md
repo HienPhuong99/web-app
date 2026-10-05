@@ -1,6 +1,6 @@
 # Kế hoạch: thêm module "Hợp đồng tự động" vào web app bán hàng
 
-> Bản nháp để bạn duyệt. **Chưa có dòng code nào được sửa.** Sau khi bạn chốt các mục ở phần 8, tôi mới bắt tay làm theo từng giai đoạn ở phần 5.
+> Kế hoạch ban đầu (05/10/2026). Đã làm xong theo kế hoạch này và thêm các cải tiến sau khảo sát thị trường; tình trạng thực tế nằm ở bảng ngay dưới. Phần 0 trở đi giữ nguyên như bản kế hoạch để đối chiếu, nên có chỗ khác với bản đã làm (ví dụ tên trang tính, số mẫu).
 
 ## Tình trạng thực hiện (cập nhật 06/10/2026)
 
@@ -9,10 +9,19 @@
 | 0 | Bỏ cửa hàng PCCC và dữ liệu | Xong. `caiDat` xóa trang `PCCC_…`, cấu hình, quyền; khóa nhân viên chỉ vào PCCC |
 | 1 | Nền dữ liệu hợp đồng, số thành chữ | Xong |
 | 2 | Giao diện danh sách + form | Xong |
-| 3 | Tạo file Docs từ mẫu, 5 mẫu tự tạo, PDF, quản lý mẫu | Xong trên bản giả lập; **chờ chạy `kiemTraTaoHopDong` trên Google thật** |
+| 3 | Tạo file Docs từ mẫu, 6 mẫu tự tạo (5 mẫu ban đầu + trả góp), PDF, quản lý mẫu | Xong trên bản giả lập; **chờ chạy `kiemTraTaoHopDong` trên Google thật** |
 | 4 | Từ đơn hàng, nhân bản, tạo hàng loạt | Xong |
-| 5 | Theo dõi hạn | Xong, **trừ email nhắc hạn** (cần thêm quyền gửi mail cho cả script; làm khi bạn muốn) |
+| 5 | Theo dõi hạn | Xong; email nhắc hạn làm ở cải tiến 4 (email tổng hợp sáng, tùy chọn) |
 | 6 | Hoàn thiện, `HUONG_DAN.md`, script triển khai 1 lệnh | Xong (`dev/trien-khai.js` chưa chạy thử được vì môi trường làm việc không có clasp) |
+
+**Cải tiến sau khảo sát thị trường** (`BAO_CAO_KHAO_SAT_THI_TRUONG.md`, theo yêu cầu "làm luôn để tôi kiểm tra sau"), mỗi cải tiến một commit, đều có test:
+
+| # | Cải tiến | Trạng thái |
+|---|---|---|
+| 1 | Báo trước + tự gia hạn, gia hạn một chạm, nhắc khách qua Zalo/email (soạn sẵn, không tự gửi), IMEI và CCCD trong hợp đồng, lịch sử thay đổi | Xong |
+| 2 | Lịch thanh toán / trả góp nối với phiếu thu và công nợ; mẫu *mua bán trả góp*; menu *Lịch thanh toán* | Xong |
+| 3 | Ký tại quầy: chữ ký điện tử vẽ tay, mã xác thực, khóa nội dung sau ký, kiểm tra và hủy chữ ký | Xong; **cần luật sư xác nhận phạm vi dùng** |
+| 4 | Email tổng hợp mỗi sáng cho quản lý (tùy chọn, bật trong Cài đặt) | Xong; **cần cấp quyền gửi mail/hẹn giờ và thử "Gửi thư thử" trên Google thật** |
 
 Khác với bản kế hoạch ban đầu: mã hợp đồng nằm ở `apps-script/HopDong.gs` (tách khỏi `Code.gs`); mẫu tuỳ chỉnh bắt buộc nằm trong thư mục Drive của cửa hàng (chặn quản trị trong app dùng tài liệu riêng của chủ Google làm mẫu); thêm hàm `kiemTraTaoHopDong` để kiểm tra phần Docs/Drive trên Google thật bằng một lần bấm.
 
