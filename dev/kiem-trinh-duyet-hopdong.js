@@ -92,6 +92,40 @@ module.exports = BUOC => {
     await shot(page, 'hd-3-danh-sach');
   }]);
 
+  BUOC.push(['Hợp đồng: menu Sắp hết hạn có số đếm, màn hình riêng và thẻ trên Tổng quan', async page => {
+    await page.evaluate(() => go('home'));
+    await shot(page, 'hd-10-tong-quan');
+    assert.strictEqual((await page.locator('#nav a[data-go="hdhan"] .cnt').textContent()).trim(), '2'); // 1 sắp hết hạn + 1 đã hết hạn
+    const kpi = await page.locator('.kpi[data-go="hdhan"]').textContent();
+    assert.ok(/Hợp đồng sắp hết hạn/.test(kpi) && /1 hợp đồng đã hết hạn/.test(kpi), kpi);
+    const chuY = await page.locator('.card:has-text("Hợp đồng cần chú ý") tr').allTextContents();
+    assert.strictEqual(chuY.length, 2);
+    assert.ok(/Quá 1 ngày/.test(chuY[0]) && /Còn 10 ngày/.test(chuY[1]), 'Quá hạn xếp trước: ' + chuY.join('|'));
+    await page.locator('.card:has-text("Hợp đồng cần chú ý") tr').first().click(); // mở thẳng hợp đồng từ Tổng quan
+    await page.waitForFunction(() => /Hợp đồng \d{3}-\d{4}\/HD/.test(document.querySelector('#title').textContent));
+    await page.click('#nav a[data-go="hdhan"]');
+    await page.waitForSelector('tbody tr[data-i]');
+    assert.strictEqual(await page.locator('tbody tr[data-i]').count(), 2);
+    const dong = await page.locator('tbody tr[data-i]').allTextContents();
+    assert.ok(/Quá Hạn/.test(dong[0]) && /Quá 1 ngày/.test(dong[0]) && /Công ty Hạn/.test(dong[1]) && /Còn 10 ngày/.test(dong[1]), dong.join('|'));
+    await page.selectOption('select[data-f="loc"]', 'sap');
+    assert.strictEqual(await page.locator('tbody tr[data-i]').count(), 1);
+    await page.selectOption('select[data-f="loc"]', 'het');
+    assert.match(await page.locator('tbody tr[data-i]').first().textContent(), /Quá Hạn/);
+    await shot(page, 'hd-9-sap-het-han');
+    // gia hạn: sửa ngày hết hạn thì hợp đồng rời khỏi danh sách
+    await page.locator('tbody tr[data-i]').first().click();
+    await page.waitForSelector('input[data-h="NgayHetHan"]');
+    await page.fill('input[data-h="NgayHetHan"]', await page.evaluate(() => iso(new Date(Date.now() + 365 * 864e5))));
+    await nut(page, 'Lưu').click();
+    await page.waitForFunction(() => !S.dirty);
+    await page.click('#nav a[data-go="hdhan"]');
+    await page.waitForSelector('text=Không có dữ liệu phù hợp'); // bộ lọc "Đã hết hạn" vẫn giữ, mà hợp đồng quá hạn đã được gia hạn
+    await page.selectOption('select[data-f="loc"]', '');
+    assert.strictEqual(await page.locator('tbody tr[data-i]').count(), 1);
+    assert.strictEqual((await page.locator('#nav a[data-go="hdhan"] .cnt').textContent()).trim(), '1');
+  }]);
+
   BUOC.push(['Hợp đồng: tạo file Google Docs, file cũ khi sửa, tải PDF', async page => {
     await page.evaluate(() => go('hopdong'));
     await page.locator('tbody tr[data-i]', { hasText: 'Anh Minh' }).first().click();

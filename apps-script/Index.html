@@ -572,7 +572,7 @@ $('#btnPass').onclick = () => modal({
 const NAV = [
   ['', [['home', 'Tổng quan', 'home'], ['baocao', 'Báo cáo & sổ doanh thu', 'chart']]],
   ['Bán hàng', [['baogia', 'Báo giá', 'file'], ['donhang', 'Đơn hàng', 'cart'], ['congno', 'Thu tiền & công nợ', 'card'], ['baohanh', 'Bảo hành', 'award']]],
-  ['Hợp đồng', [['hopdong', 'Hợp đồng', 'clipboard']]],
+  ['Hợp đồng', [['hopdong', 'Hợp đồng', 'clipboard'], ['hdhan', 'Sắp hết hạn', 'alert']]],
   ['Kho hàng', [['hang', 'Hàng hóa & bảng giá', 'box'], ['kho', 'Nhập – xuất kho', 'truck'], ['ton', 'Tồn kho', 'layers']]],
   ['Danh mục', [['khach', 'Khách hàng', 'users']]],
   ['Hệ thống', [['caidat', 'Cài đặt', 'settings'], ['taikhoan', 'Tài khoản', 'shield', true], ['nhatky', 'Nhật ký', 'clock', true]]],
@@ -589,6 +589,7 @@ function drawNav() {
   const cnt = {
     donhang: S.donHang.filter(d => d.TrangThai === 'Chờ giao' || d.TrangThai === 'Giao một phần').length,
     ton: S.hang.filter(isLow).length,
+    hdhan: S.hopDong.filter(h => hanHD(h)).length,
   };
   $('#nav').innerHTML = NAV.map(([sec, items]) => {
     const vis = items.filter(it => !it[3] || isAdmin());
@@ -732,6 +733,8 @@ function vHome(el) {
   const quaHan = choGiao.filter(d => d.NgayGiao && d.NgayGiao < now);
   const bgThang = inM(S.baoGia, m), chot = bgThang.filter(b => D.dhBG[b.SoBG]).length;
   const low = S.hang.filter(isLow);
+  const hdHan = S.hopDong.map(h => ({ h, x: hanHD(h) })).filter(o => o.x).sort((a, b) => String(a.h.NgayHetHan).localeCompare(String(b.h.NgayHetHan)));
+  const hdSapN = hdHan.filter(o => o.x.sap).length, hdHetN = hdHan.filter(o => o.x.het).length;
   const pct = dsTruoc ? Math.round((dsThang - dsTruoc) / dsTruoc * 100) : null;
 
   const months = [];
@@ -756,6 +759,7 @@ function vHome(el) {
     ${kpi('donhang', 'truck', '#e8f0fe', '#2563eb', 'Đơn chờ giao', choGiao.length, quaHan.length ? `<span class="red">${quaHan.length} đơn quá hẹn giao</span>` : 'Không có đơn quá hẹn')}
     ${kpi('baogia', 'file', '#f1ebfe', '#7c3aed', 'Báo giá tháng này', bgThang.length, bgThang.length ? `Đã chốt ${chot}/${bgThang.length} (${Math.round(chot / bgThang.length * 100)}%)` : 'Chưa có báo giá')}
     ${kpi('ton', 'layers', '#e0f5f9', '#0891b2', 'Hàng sắp hết', low.length, low.length ? 'Cần nhập thêm' : 'Tồn kho ổn định')}
+    ${kpi('hdhan', 'clipboard', '#fdecea', '#b42318', 'Hợp đồng sắp hết hạn', hdSapN, hdHetN ? `<span class="red">${hdHetN} hợp đồng đã hết hạn</span>` : `Báo trước ${HD_SAP} ngày, chưa có hợp đồng quá hạn`)}
   </div>
   <div class="card" style="margin-bottom:16px"><div class="card-h"><h3>Doanh số và tiền thu 12 tháng</h3>
     <div class="chart-legend"><span style="--c:var(--brand)">Doanh số (gồm VAT)</span><span style="--c:#16a34a">Đã thu</span></div></div>
@@ -775,6 +779,8 @@ function vHome(el) {
       ${miniTable(noList.slice(0, 6).map(([ma, v]) => { const k = S.khach.find(x => x.MaKH === ma) || { TenKH: ma }; return `<tr data-go="kh:${esc(ma)}"><td><b>${esc(k.TenKH)}</b><span class="sub">${esc(k.SDT || '')}</span></td><td class="num red"><b>${money(v)} ₫</b></td></tr>`; }), 'Không có khách nào còn nợ.')}</div></div>
     <div class="card"><div class="card-h"><h3>Hàng sắp hết</h3><a class="more" data-go="ton">Tồn kho</a></div><div class="card-b">
       ${miniTable(low.slice(0, 6).map(h => `<tr data-go="hh:${esc(h.MaHH)}"><td><b>${esc(h.TenHang)}</b><span class="sub">${esc([h.MaHH, h.Model].filter(Boolean).join(' · '))}</span></td><td class="num">Tồn <b class="red">${money(tonOf(h.MaHH))}</b><span class="sub">tối thiểu ${money(+h.TonToiThieu || 0)}</span></td></tr>`), 'Chưa có mặt hàng nào dưới mức tồn tối thiểu.')}</div></div>
+    <div class="card"><div class="card-h"><h3>Hợp đồng cần chú ý</h3><a class="more" data-go="hdhan">Tất cả</a></div><div class="card-b">
+      ${miniTable(hdHan.slice(0, 6).map(o => `<tr data-go="hd:${esc(o.h.SoHD)}"><td><b>${esc(o.h.SoHD)}</b><span class="sub">${esc(o.h.TenDN)}</span></td><td class="num">${o.x.het ? `<span class="red">Quá ${o.x.n} ngày</span>` : o.x.n ? `Còn ${o.x.n} ngày` : 'Hết hạn hôm nay'}<span class="sub">${dmy(o.h.NgayHetHan)}</span></td></tr>`), 'Không có hợp đồng nào sắp hết hạn.')}</div></div>
     <div class="card"><div class="card-h"><h3>Bán chạy 90 ngày</h3><a class="more" data-go="hang">Hàng hóa</a></div><div class="card-b">
       ${miniTable(S.thongKe.topHang.slice(0, 6).map(h => `<tr${h.MaHH ? ` data-go="hh:${esc(h.MaHH)}"` : ''}><td><b>${esc(h.TenHang)}</b><span class="sub">${money(h.SoLuong)} ${esc(h.DVT)}</span></td><td class="num">${money(h.ThanhTien)} ₫</td></tr>`), 'Chưa có đơn hàng trong 90 ngày.')}</div></div>
   </div>`;
@@ -785,6 +791,7 @@ function vHome(el) {
     const [kind, id] = g.dataset.go.split(':');
     if (kind === 'dh') await openDoc('DH', S.donHang.find(d => d.SoDH === id));
     else if (kind === 'kh') openKhach(S.khach.find(k => k.MaKH === id));
+    else if (kind === 'hd') await openHD(S.hopDong.find(h => h.SoHD === id));
     else if (kind === 'hh') { const h = S.hang.find(x => x.MaHH === id); if (h) openHang(h); }
     else go(kind);
   });
@@ -1668,6 +1675,26 @@ function vHopDong(el) {
   });
 }
 
+function vHDHan(el) {
+  setTop('Hợp đồng', 'Hợp đồng sắp hết hạn');
+  listCard(el, {
+    id: 'hdhan', ph: 'Tìm số hợp đồng, khách hàng…',
+    filters: [{ id: 'loc', options: [['', 'Sắp hết hạn và đã hết hạn'], ['sap', `Sắp hết hạn (trong ${HD_SAP} ngày)`], ['het', 'Đã hết hạn']] }],
+    filter: (r, f) => { const x = hanHD(r); return !!x && (!f.loc || !!x[f.loc]); },
+    cols: [
+      { t: 'Số hợp đồng', k: 'SoHD', cls: 'code' },
+      { t: 'Khách hàng (bên A)', cls: 'wrap', f: r => `<b>${esc(r.TenDN)}</b><span class="sub">${esc([r.NguoiDaiDien, r.SDT].filter(Boolean).join(' · '))}</span>` },
+      { t: 'Loại hợp đồng', cls: 'wrap', k: 'LoaiHD' }, { t: 'Hết hạn', f: r => dmy(r.NgayHetHan) },
+      { t: 'Còn lại', f: r => { const x = hanHD(r); return x.het ? `<b class="red">Quá ${x.n} ngày</b>` : x.n ? `<b class="warn">Còn ${x.n} ngày</b>` : '<b class="warn">Hết hạn hôm nay</b>'; } },
+      { t: 'Phụ trách', k: 'NguoiPhuTrach' },
+    ],
+    data: () => S.hopDong.slice().sort((a, b) => String(a.NgayHetHan).localeCompare(String(b.NgayHetHan))),
+    text: hdText, open: run(r => openHD(r)),
+    foot: rows => `<span>${rows.length} hợp đồng</span><span>Quá hạn <b class="red">${rows.filter(r => hanHD(r).het).length}</b></span>`,
+  });
+  el.insertAdjacentHTML('beforeend', `<p class="muted" style="margin-top:14px">Chỉ tính hợp đồng ở trạng thái "Đang hiệu lực" có ngày hết hạn; hợp đồng đã hoàn thành hoặc tạm dừng không hiện ở đây. Gia hạn: mở hợp đồng và đổi ngày hết hạn, hoặc nhân bản thành hợp đồng mới. Báo trước ${HD_SAP} ngày.</p>`);
+}
+
 const hdTitle = () => S.hd.SoHD ? 'Hợp đồng ' + S.hd.SoHD : 'Hợp đồng mới';
 const blankHDLine = () => ({ MaHH: '', TenHang: '', DVT: '', SoLuong: '', DonGia: '' });
 const hdTotal = () => { const t = sum(S.hd.lines, lineTotal), v = Math.min(100, Math.max(0, +S.hd.VAT || 0)), tv = Math.round(t * v / 100); return { tien: t, vat: v, tienVat: tv, tong: t + tv }; };
@@ -2257,7 +2284,7 @@ function openCuaHang() {
 }
 
 // ===================== Phím tắt: F2 mới, F3 tìm, F8 lưu, Esc đóng =====================
-const VIEWS = { home: vHome, baogia: vBaoGia, donhang: vDonHang, congno: vCongNo, hang: vHang, kho: vKho, ton: vTon, khach: vKhach, taikhoan: vTaiKhoan, caidat: vCaiDat, baohanh: vBaoHanh, hopdong: vHopDong, hd: vHD, baocao: vBaoCao, nhatky: vNhatKy, doc: vDoc };
+const VIEWS = { home: vHome, baogia: vBaoGia, donhang: vDonHang, congno: vCongNo, hang: vHang, kho: vKho, ton: vTon, khach: vKhach, taikhoan: vTaiKhoan, caidat: vCaiDat, baohanh: vBaoHanh, hopdong: vHopDong, hd: vHD, hdhan: vHDHan, baocao: vBaoCao, nhatky: vNhatKy, doc: vDoc };
 document.addEventListener('keydown', e => {
   if ($('#app').classList.contains('hidden')) return;
   const modalOpen = !$('#modal').classList.contains('hidden');
