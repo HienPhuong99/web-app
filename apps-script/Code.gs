@@ -46,9 +46,9 @@ const TABLES = {
   ThuTien: ['SoPT', 'Ngay', 'MaKH', 'TenKH', 'SoDH', 'SoTien', 'HinhThuc', 'GhiChu', 'NguoiTao', 'NgayTao'],
   NhatKy: ['ThoiGian', 'NguoiDung', 'HanhDong', 'DoiTuong', 'ChiTiet'],
   // Hợp đồng: bên A = khách (các cột TenDN…NganHang), bên B = cửa hàng (lấy từ cài đặt cửa hàng khi tạo file)
-  HopDong: ['SoHD', 'Ngay', 'LoaiHD', 'SoDH', 'MaKH', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang',
-    'NgayHieuLuc', 'NgayHetHan', 'NguoiPhuTrach', 'TrangThai', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'BangChu', 'GhiChu', 'FileId', 'LinkFile', 'NgayFile', 'FileCu', 'NguoiTao', 'NgayTao', 'NgaySua'], // FileCu = '1' khi hợp đồng đã sửa sau lần tạo file gần nhất
-  HopDongCT: ['SoHD', 'STT', 'MaHH', 'TenHang', 'DVT', 'SoLuong', 'DonGia', 'ThanhTien'],
+  HopDong: ['SoHD', 'Ngay', 'LoaiHD', 'SoDH', 'MaKH', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang', 'SoCCCD', 'CCCDCap', 'IMEI',
+    'NgayHieuLuc', 'NgayHetHan', 'BaoTruocNgay', 'TuGiaHan', 'ThangGiaHan', 'NguoiPhuTrach', 'TrangThai', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'BangChu', 'GhiChu', 'FileId', 'LinkFile', 'NgayFile', 'FileCu', 'NguoiTao', 'NgayTao', 'NgaySua'], // FileCu = '1' khi hợp đồng đã sửa sau lần tạo file gần nhất
+  HopDongCT: ['SoHD', 'STT', 'MaHH', 'TenHang', 'DVT', 'SoLuong', 'DonGia', 'ThanhTien', 'IMEI'],
   MauHopDong: ['LoaiHD', 'LinkMau', 'MoTa', 'NgayTao'], // mỗi loại hợp đồng một file Google Docs mẫu
 };
 // Ngân hàng nhận chuyển khoản qua mã VietQR: [mã BIN, tên] (theo danh sách của vietqr.io). Gửi cho giao diện và dùng khi in tên ngân hàng vào hợp đồng.
@@ -59,9 +59,9 @@ const NGAN_HANG = [['970436', 'Vietcombank'], ['970415', 'VietinBank'], ['970418
   ['970438', 'BaoViet Bank'], ['970433', 'VietBank'], ['970430', 'PGBank'], ['970454', 'Viet Capital Bank'], ['970414', 'MBV'], ['970446', 'Co-opBank'],
   ['970424', 'Shinhan Bank'], ['970457', 'Woori Bank'], ['422589', 'CIMB'], ['668888', 'KBank'], ['546034', 'CAKE'], ['546035', 'Ubank'], ['963388', 'Timo']];
 const SHARED = ['TaiKhoan', 'CaiDat']; // trang dùng chung cho mọi cửa hàng, không có tiền tố
-const NUMBER_COLS = ['GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien'];
+const NUMBER_COLS = ['BaoTruocNgay', 'ThangGiaHan', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien'];
 const SESSION_TTL = 6 * 60 * 60; // giây; tối đa của CacheService, tự gia hạn khi còn dùng
-const SCHEMA = '3'; // tăng số này khi thêm bảng/cột ở TABLES: app tự thêm phần thiếu ở lần gọi đầu sau khi triển khai
+const SCHEMA = '4'; // tăng số này khi thêm bảng/cột ở TABLES: app tự thêm phần thiếu ở lần gọi đầu sau khi triển khai
 
 // Loại chứng từ có dòng hàng. Số chứng từ dạng 001-2026/DH, mỗi năm đánh lại từ 001 (riêng từng cửa hàng).
 const CT = {

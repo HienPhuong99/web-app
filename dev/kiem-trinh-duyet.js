@@ -58,7 +58,7 @@ try { require('./kiem-trinh-duyet-hopdong')(BUOC); } catch (e) { if (e.code !== 
     await page.waitForSelector('#nav a, #nav button, #nav [data-go]', { timeout: 10000 });
     for (const [ten, fn] of BUOC) {
       try { await fn(page, { URL, pass }); console.log('  ok   ' + ten); }
-      catch (e) { loi++; console.log('  LỖI  ' + ten + '\n       ' + String(e.message).split('\n')[0]); await page.screenshot({ path: path.join(process.env.TMPDIR || '/tmp', 'loi-' + loi + '.png') }).catch(() => {}); }
+      catch (e) { loi++; console.log('  LỖI  ' + ten + '\n       ' + String(e.message).split('\n').slice(0, 6).join('\n       ')); await page.screenshot({ path: path.join(process.env.TMPDIR || '/tmp', 'loi-' + loi + '.png') }).catch(() => {}); }
     }
     if (loiTrang.length) { loi++; console.log('  LỖI  Trình duyệt báo lỗi:\n       ' + loiTrang.join('\n       ')); }
   } finally { await browser.close(); server.kill(); }

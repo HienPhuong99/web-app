@@ -694,7 +694,12 @@ function listCard(el, cfg) {
   let t;
   q.oninput = () => { st.text = q.value; clearTimeout(t); t = setTimeout(refresh, 120); };
   card.querySelectorAll('[data-f]').forEach(inp => { inp.onchange = () => { st.f[inp.dataset.f] = inp.value; refresh(); }; });
-  body.onclick = e => { const tr = e.target.closest('tr[data-i]'); if (tr) cfg.open(rows[+tr.dataset.i]); };
+  body.onclick = e => {
+    const tr = e.target.closest('tr[data-i]'); if (!tr) return;
+    const a = e.target.closest('[data-act]'); // nút trong dòng (cfg.act) không mở chứng từ
+    if (a && cfg.act) return cfg.act(rows[+tr.dataset.i], a.dataset.act);
+    cfg.open(rows[+tr.dataset.i]);
+  };
   refresh();
   return refresh;
 }
@@ -1632,11 +1637,26 @@ window.addEventListener('scroll', e => { if (e.target !== $('#picker')) hidePick
 const HD_TT = { 'Soạn thảo': 'b-gray', 'Đang hiệu lực': 'b-blue', 'Tạm dừng': 'b-amber', 'Hoàn thành': 'b-green' };
 const HD_DA_KY = ['Đang hiệu lực', 'Hoàn thành', 'Tạm dừng']; // đã ký (mọi trạng thái trừ Soạn thảo): nhân viên không sửa hàng và số tiền, không đưa về Soạn thảo
 const HD_SAP = 30; // báo "sắp hết hạn" trước hạn bấy nhiêu ngày
-const HD_BEN_A = ['TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang'];
-function hanHD(h) { // hợp đồng đang hiệu lực đã quá hạn / sắp hết hạn, còn lại null
+const HD_BEN_A = ['TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'SoCCCD', 'CCCDCap', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang'];
+function hanHD(h) { // hợp đồng đang hiệu lực đã quá hạn / sắp hết hạn, còn lại null. Phải giống hanHD_ trong HopDong.gs
   if (h.TrangThai !== 'Đang hiệu lực' || !h.NgayHetHan) return null;
-  const n = Math.round((Date.parse(h.NgayHetHan) - Date.parse(today())) / 864e5);
-  return n < 0 ? { het: true, n: -n } : n <= HD_SAP ? { sap: true, n } : null;
+  const n = Math.round((Date.parse(h.NgayHetHan) - Date.parse(today())) / 864e5), bao = +h.BaoTruocNgay || 0, quyetDinh = bao ? n - bao : null;
+  if (n < 0) return { het: true, n: -n, bao, quyetDinh };
+  return n <= Math.max(HD_SAP, bao ? bao + 14 : 0) ? { sap: true, n, bao, quyetDinh } : null; // có thời hạn báo trước thì nhắc sớm hơn: báo trước + 14 ngày
+}
+const dmyRaw = s => s ? String(s).slice(0, 10).split('-').reverse().join('/') : '';
+// Hạn phải quyết định gia hạn / chấm dứt = ngày hết hạn trừ số ngày báo trước
+function hanQuyetDinh(h) {
+  const x = hanHD(h);
+  if (!x || !x.bao) return '';
+  const d = new Date(Date.parse(h.NgayHetHan) - x.bao * 864e5);
+  return `${dmyRaw(iso(new Date(d.getTime() + d.getTimezoneOffset() * 6e4)))} ${x.quyetDinh < 0 ? `(<b class="red">quá ${-x.quyetDinh} ngày</b>)` : `(còn ${x.quyetDinh} ngày)`}`;
+}
+// Cộng tháng vào ngày yyyy-mm-dd, về cuối tháng nếu tháng đích ngắn hơn (giống congThang_ ở máy chủ)
+function congThangISO(ngay, thang) {
+  const p = String(ngay).slice(0, 10).split('-').map(Number), m = p[1] - 1 + thang, y = p[0] + Math.floor(m / 12), mm = m % 12;
+  const d = Math.min(p[2], new Date(Date.UTC(y, mm + 1, 0)).getUTCDate());
+  return y + '-' + String(mm + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
 }
 function ttHD(h) {
   const x = hanHD(h);
@@ -1647,7 +1667,7 @@ function ttHD(h) {
 const loaiHDAll = (cur) => [...new Set([...S.loaiHD, ...S.hopDong.map(h => h.LoaiHD), cur].filter(Boolean))]; // gồm cả loại của hợp đồng cũ đã bỏ khỏi danh sách mẫu
 
 // Chuỗi tìm kiếm của hợp đồng: dùng một hàm duy nhất vì kết quả được nhớ theo từng bản ghi (xem matches)
-const hdText = r => [r.SoHD, r.TenDN, r.MST, r.NguoiDaiDien, r.SDT, digits(r.SDT), r.LoaiHD, r.NguoiPhuTrach, r.SoDH, r.GhiChu].join(' ');
+const hdText = r => [r.SoHD, r.TenDN, r.MST, r.NguoiDaiDien, r.SDT, digits(r.SDT), r.LoaiHD, r.NguoiPhuTrach, r.SoDH, r.IMEI, r.GhiChu].join(' ');
 function vHopDong(el) {
   setTop('Hợp đồng', 'Hợp đồng', [{ t: 'Tạo hàng loạt', ic: 'layers', fn: () => openHDHangLoat() }, { t: 'Lập hợp đồng', ic: 'plus', cls: 'primary', fn: () => newHD() }]);
   S.onNew = () => newHD();
@@ -1684,10 +1704,13 @@ function vHDHan(el) {
     cols: [
       { t: 'Số hợp đồng', k: 'SoHD', cls: 'code' },
       { t: 'Khách hàng (bên A)', cls: 'wrap', f: r => `<b>${esc(r.TenDN)}</b><span class="sub">${esc([r.NguoiDaiDien, r.SDT].filter(Boolean).join(' · '))}</span>` },
-      { t: 'Loại hợp đồng', cls: 'wrap', k: 'LoaiHD' }, { t: 'Hết hạn', f: r => dmy(r.NgayHetHan) },
+      { t: 'Loại hợp đồng', cls: 'wrap', k: 'LoaiHD' }, { t: 'Hết hạn', f: r => `${dmy(r.NgayHetHan)}${r.TuGiaHan === '1' ? '<span class="sub">Tự gia hạn ' + (+r.ThangGiaHan || 12) + ' tháng</span>' : ''}` },
       { t: 'Còn lại', f: r => { const x = hanHD(r); return x.het ? `<b class="red">Quá ${x.n} ngày</b>` : x.n ? `<b class="warn">Còn ${x.n} ngày</b>` : '<b class="warn">Hết hạn hôm nay</b>'; } },
+      { t: 'Hạn báo trước', f: r => hanQuyetDinh(r) || '<span class="muted">—</span>' },
       { t: 'Phụ trách', k: 'NguoiPhuTrach' },
+      { t: '', f: () => `<button class="btn sm" data-act="giahan">${icon('refresh')}Gia hạn</button> <button class="btn sm" data-act="nhac">${icon('alert')}Nhắc</button>` },
     ],
+    act: run((r, act) => act === 'giahan' ? openGiaHan(r) : nhacHD(r)),
     data: () => S.hopDong.slice().sort((a, b) => String(a.NgayHetHan).localeCompare(String(b.NgayHetHan))),
     text: hdText, open: run(r => openHD(r)),
     foot: rows => `<span>${rows.length} hợp đồng</span><span>Quá hạn <b class="red">${rows.filter(r => hanHD(r).het).length}</b></span>`,
@@ -1695,13 +1718,73 @@ function vHDHan(el) {
   el.insertAdjacentHTML('beforeend', `<p class="muted" style="margin-top:14px">Chỉ tính hợp đồng ở trạng thái "Đang hiệu lực" có ngày hết hạn; hợp đồng đã hoàn thành hoặc tạm dừng không hiện ở đây. Gia hạn: mở hợp đồng và đổi ngày hết hạn, hoặc nhân bản thành hợp đồng mới. Báo trước ${HD_SAP} ngày.</p>`);
 }
 
+// Gia hạn một chạm: cộng thêm số tháng vào ngày hết hạn (mặc định theo số tháng của hợp đồng, hoặc 12)
+function openGiaHan(h) {
+  if (S.view === 'hd' && S.hd && S.hd.SoHD === h.SoHD && S.dirty) throw new Error('Lưu hợp đồng trước khi gia hạn.');
+  const m = modal({
+    title: 'Gia hạn hợp đồng ' + h.SoHD,
+    body: formHtml([['thang', 'Gia hạn thêm (tháng)', { type: 'number' }]], { thang: +h.ThangGiaHan || 12 }) + '<p class="muted" data-pv></p>',
+    buttons: [{ t: 'Gia hạn', ic: 'refresh', cls: 'primary', save: true, fn: run(async mm => {
+      const thang = +formData(mm).thang;
+      if (!(thang >= 1 && thang <= 120)) throw new Error('Số tháng gia hạn từ 1 đến 120.');
+      const r = await api('giaHanHopDong', h.SoHD, thang);
+      const head = Object.assign({}, r.doc); delete head.lines;
+      upsertLocal('hopDong', 'SoHD', head);
+      if (S.view === 'hd' && S.hd && S.hd.SoHD === h.SoHD) Object.assign(S.hd, { NgayHetHan: head.NgayHetHan, FileCu: head.FileCu });
+      closeModal(); render(); toast(`Đã gia hạn ${h.SoHD} đến ${dmyRaw(head.NgayHetHan)}.`);
+    }) }],
+  });
+  const pv = () => { const t = +$('[name=thang]', m).value; $('[data-pv]', m).textContent = t >= 1 && t <= 120 ? `Hết hạn hiện tại ${dmyRaw(h.NgayHetHan)} → mới ${dmyRaw(congThangISO(h.NgayHetHan, t))}.` : ''; };
+  $('[name=thang]', m).oninput = pv; pv();
+}
+
+// Nhắc khách: soạn sẵn tin để gửi qua Zalo hoặc email (app không tự gửi thay bạn, nên không cần quyền gì thêm)
+const sdtZalo = s => { const p = String(s || '').split(/[\/,;]/).map(digits).find(x => x.length >= 9); return p ? (p[0] === '0' ? '84' + p.slice(1) : p) : ''; };
+function tinNhacHD(h) {
+  const x = hanHD(h) || {}, bao = +h.BaoTruocNgay || 0, ten = h.NguoiDaiDien || h.TenDN;
+  let s = `Chào anh/chị ${ten}, ${S.cuaHang.ten} xin thông báo hợp đồng ${h.SoHD} (${h.LoaiHD}) ${x.het ? 'đã hết hạn từ ngày ' : 'sẽ hết hạn vào ngày '}${dmyRaw(h.NgayHetHan)}.`;
+  if (bao) s += ` Theo hợp đồng, hai bên cần báo trước ${bao} ngày nếu muốn chấm dứt hoặc không gia hạn.`;
+  s += h.TuGiaHan === '1' ? ` Hợp đồng sẽ tự động gia hạn thêm ${+h.ThangGiaHan || 12} tháng nếu không có thông báo khác.` : ' Anh/chị vui lòng liên hệ để chúng tôi hỗ trợ gia hạn hoặc làm hợp đồng mới.';
+  return s + ' Xin cảm ơn!';
+}
+function nhacHD(h) {
+  const kh = S.khach.find(k => k.MaKH === h.MaKH) || {};
+  openNhac({ ten: h.TenDN, sdt: h.SDT || kh.SDT, email: kh.Email, tieuDe: `Hợp đồng ${h.SoHD} - ${S.cuaHang.ten}`, tin: tinNhacHD(h) });
+}
+function copyText(s, ta) {
+  return Promise.resolve().then(() => navigator.clipboard.writeText(s)).then(() => true).catch(() => {
+    try { if (ta) { ta.select(); return document.execCommand('copy'); } } catch (e) {}
+    return false;
+  });
+}
+function openNhac({ ten, sdt, email, tieuDe, tin }) {
+  const zalo = sdtZalo(sdt);
+  const m = modal({
+    title: 'Nhắc khách: ' + ten,
+    body: `<p class="muted" style="margin-top:0">Sửa tin nếu cần, rồi gửi qua Zalo hoặc email. App không tự gửi tin thay bạn.</p><textarea data-tin rows="7" style="width:100%">${esc(tin)}</textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center"><button class="btn" data-copy>${icon('copy')}Sao chép tin</button>
+      ${zalo ? `<a class="btn primary" data-zalo target="_blank" rel="noopener">Mở Zalo của khách</a>` : '<span class="muted">Khách chưa có số điện thoại hợp lệ để mở Zalo.</span>'}
+      <a class="btn" data-mail target="_blank" rel="noopener">Gửi email</a></div>
+      <p class="muted" style="margin-bottom:0">Bấm "Mở Zalo của khách" sẽ tự sao chép tin; dán vào khung chat Zalo rồi gửi.${email ? '' : ' Khách chưa có email: điền người nhận trong trình email.'}</p>`,
+    buttons: [],
+  });
+  const ta = $('[data-tin]', m), zl = $('[data-zalo]', m), ml = $('[data-mail]', m);
+  const cap = () => {
+    if (zl) zl.href = 'https:/' + '/zalo.me/' + zalo;
+    ml.href = 'mailto:' + encodeURIComponent(email || '') + '?subject=' + encodeURIComponent(tieuDe) + '&body=' + encodeURIComponent(ta.value);
+  };
+  cap(); ta.oninput = cap;
+  $('[data-copy]', m).onclick = async () => toast(await copyText(ta.value, ta) ? 'Đã sao chép tin nhắn.' : 'Trình duyệt không cho sao chép tự động: bôi đen và nhấn Ctrl+C.', 'ok');
+  if (zl) zl.onclick = () => { copyText(ta.value, ta).then(ok => toast(ok ? 'Đã sao chép tin: dán vào Zalo để gửi.' : 'Chưa sao chép được tin: bấm "Sao chép tin" rồi dán vào Zalo.')); };
+}
+
 const hdTitle = () => S.hd.SoHD ? 'Hợp đồng ' + S.hd.SoHD : 'Hợp đồng mới';
-const blankHDLine = () => ({ MaHH: '', TenHang: '', DVT: '', SoLuong: '', DonGia: '' });
+const blankHDLine = () => ({ MaHH: '', TenHang: '', DVT: '', SoLuong: '', DonGia: '', IMEI: '' });
 const hdTotal = () => { const t = sum(S.hd.lines, lineTotal), v = Math.min(100, Math.max(0, +S.hd.VAT || 0)), tv = Math.round(t * v / 100); return { tien: t, vat: v, tienVat: tv, tong: t + tv }; };
 function hdTail() { const ls = S.hd.lines; if (!ls.length || String(ls[ls.length - 1].TenHang).trim()) ls.push(blankHDLine()); }
 
 function newHD(init) {
-  const base = { SoHD: '', Ngay: today(), LoaiHD: S.loaiHD[0] || '', SoDH: '', MaKH: '', NgayHieuLuc: '', NgayHetHan: '', NguoiPhuTrach: S.user.ten, TrangThai: 'Soạn thảo',
+  const base = { SoHD: '', Ngay: today(), LoaiHD: S.loaiHD[0] || '', SoDH: '', MaKH: '', NgayHieuLuc: '', NgayHetHan: '', BaoTruocNgay: 30, TuGiaHan: '', ThangGiaHan: 12, NguoiPhuTrach: S.user.ten, TrangThai: 'Soạn thảo',
     VAT: S.congTy.vatMacDinh ?? 0, GhiChu: '', lines: [] };
   HD_BEN_A.forEach(k => { base[k] = ''; });
   return editHD(Object.assign(base, init || {}));
@@ -1725,6 +1808,8 @@ async function openHD(h) {
 function vHD(el) {
   const d = S.hd, saved = !!d.SoHD, khoa = !!S.extra.khoa;
   const btns = [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', fn: run(saveHD) }];
+  if (saved && d.TrangThai === 'Đang hiệu lực' && d.NgayHetHan) btns.push({ t: 'Gia hạn', ic: 'refresh', cls: 'soft', fn: run(() => openGiaHan(S.hd)) });
+  if (saved) btns.push({ t: 'Nhắc khách', ic: 'alert', fn: run(() => nhacHD(S.hd)) });
   if (saved) btns.push({ t: 'Nhân bản', ic: 'copy', fn: run(nhanBanHD) });
   if (isAdmin() && saved) btns.push({ t: 'Xóa', ic: 'trash', cls: 'danger', fn: run(delHD) });
   setTop('Hợp đồng', hdTitle() + (S.dirty ? ' •' : ''), btns);
@@ -1749,6 +1834,9 @@ function vHD(el) {
     ${fld('Trạng thái', sel('TrangThai', Object.keys(HD_TT)))}
     ${fld('Ngày hiệu lực', inp('NgayHieuLuc', 'type="date"'))}
     ${fld('Ngày hết hạn', inp('NgayHetHan', 'type="date"'))}
+    ${fld('Báo trước (ngày)', inp('BaoTruocNgay', 'type="number" min="0" max="365" title="Số ngày phải báo trước nếu muốn chấm dứt hoặc không gia hạn"'))}
+    ${fld('Tự động gia hạn', sel('TuGiaHan', [['', 'Không'], ['1', 'Có']]))}
+    ${fld('Mỗi lần gia hạn (tháng)', inp('ThangGiaHan', 'type="number" min="1" max="120"'))}
     ${fld('Người phụ trách', inp('NguoiPhuTrach'))}
     ${fld('Theo đơn hàng', `<select data-h="SoDH">${hdOrderOptions()}</select>`)}
   </div></div>
@@ -1757,21 +1845,25 @@ function vHD(el) {
     ${fld('Địa chỉ', inp('DiaChi'))}
     ${fld('Văn phòng giao dịch', inp('VanPhongGD'))}
     ${fld('Mã số thuế', inp('MST'))}
+    ${fld('Số CCCD/CMND (cá nhân)', inp('SoCCCD', 'inputmode="numeric"'))}
+    ${fld('Ngày cấp, nơi cấp CCCD/CMND', inp('CCCDCap'))}
     ${fld('Người đại diện', inp('NguoiDaiDien'))}
     ${fld('Chức vụ', inp('ChucVu'))}
     ${fld('Số điện thoại', inp('SDT'))}
     ${fld('Số tài khoản', inp('SoTK'))}
     ${fld('Ngân hàng', inp('NganHang', 'list="dl-nh"'))}${datalist('dl-nh', S.nganHang.map(b => b[1]))}
+    <p class="muted full" style="grid-column:1/-1;margin:0;font-size:12.5px">Chỉ ghi số CCCD/CMND khi hợp đồng cần (vd. thu mua máy cũ, bán cho khách cá nhân). Hãy báo mục đích cho khách và xin sự đồng ý trước khi ghi (Nghị định 13/2023/NĐ-CP); mẫu hợp đồng đã có điều khoản đồng ý xử lý dữ liệu cá nhân.</p>
   </div></div>
   <div class="card" style="margin-top:16px"><div class="card-h"><h3>3. Bảng hàng hóa</h3>${khoa ? '<span class="muted" style="margin-left:auto;font-size:12.5px">Hợp đồng đã hiệu lực: chỉ quản trị sửa hàng và số tiền</span>' : ''}</div>
-    <div class="lines-wrap"><table class="lines" style="min-width:720px"><thead><tr><th style="width:40px">#</th><th>Hàng hóa, dịch vụ</th><th style="width:90px">ĐVT</th><th class="num" style="width:90px">SL</th><th class="num" style="width:130px">Đơn giá</th><th class="num" style="width:140px">Thành tiền</th><th style="width:44px"></th></tr></thead><tbody></tbody></table></div>
+    <div class="lines-wrap"><table class="lines" style="min-width:980px"><thead><tr><th style="width:40px">#</th><th>Hàng hóa, dịch vụ</th><th style="width:230px">IMEI / Serial</th><th style="width:90px">ĐVT</th><th class="num" style="width:90px">SL</th><th class="num" style="width:130px">Đơn giá</th><th class="num" style="width:140px">Thành tiền</th><th style="width:44px"></th></tr></thead><tbody></tbody></table></div>
     <div class="doc-foot">${khoa ? '' : `<button class="btn sm" data-act="addline">${icon('plus')}Thêm dòng</button>`}
       <span class="hint">Gõ tên hoặc model để chọn hàng, đơn giá tự lấy từ bảng giá (giá sỉ nếu có, không thì giá lẻ) và sửa được. Hợp đồng không có hàng (vd. hợp đồng nguyên tắc) thì để trống bảng này.</span>
       <div class="totals"><div><span>Cộng tiền hàng</span><b data-t="tien">${money(t.tien)} ₫</b></div>
         <div><span>Thuế GTGT (%)</span><input data-h="VAT" type="number" min="0" max="100" step="any" value="${esc(d.VAT)}" style="width:84px;text-align:right"${khoa ? ' readonly' : ''}></div>
         <div><span>Tiền thuế</span><b data-t="tienVat">${money(t.tienVat)} ₫</b></div>
         <div class="sum"><span>Tổng thanh toán</span><span data-t="tong">${money(t.tong)} ₫</span></div></div></div>
-    <div class="doc-head" style="padding-top:0">${fld('Bằng chữ', `<input data-t="chu" value="${esc(docSo(t.tong) + ' chẵn.')}" readonly>`, 'full')}${fld('Ghi chú', inp('GhiChu', 'placeholder="Điều khoản bổ sung, ghi chú nội bộ"'), 'full')}</div></div>`;
+    <div class="doc-head" style="padding-top:0">${fld('Bằng chữ', `<input data-t="chu" value="${esc(docSo(t.tong) + ' chẵn.')}" readonly>`, 'full')}${fld('Ghi chú', inp('GhiChu', 'placeholder="Điều khoản bổ sung, ghi chú nội bộ"'), 'full')}</div></div>
+  ${saved ? '<details class="card" style="margin-top:16px" data-ls><summary class="card-h" style="cursor:pointer"><h3>Lịch sử thay đổi của hợp đồng</h3></summary><div class="card-b" data-lsbody>Đang tải…</div></details>' : ''}`;
   drawHDLines(el);
 
   el.onclick = run(async e => {
@@ -1785,6 +1877,21 @@ function vHD(el) {
     else if (a.dataset.act === 'rm') { b.lines.splice(+a.dataset.i, 1); hdTail(); drawHDLines(el); drawHDTotals(el); setDirty(true); }
   });
   el.oninput = e => onHDInput(el, e.target);
+  // Máy quét mã vạch gõ xong IMEI rồi Enter: thêm dấu phẩy để quét tiếp máy kế
+  el.onkeydown = e => {
+    const t = e.target;
+    if (e.key !== 'Enter' || t.dataset.f !== 'IMEI') return;
+    e.preventDefault();
+    t.value = t.value.replace(/[\s,;]+$/, '') + ', ';
+    onHDInput(el, t);
+  };
+  const ls = $('[data-ls]', el);
+  if (ls) ls.ontoggle = run(async () => {
+    if (!ls.open || ls.dataset.da) return;
+    const rows = await api('lichSuHopDong', S.hd.SoHD);
+    ls.dataset.da = '1';
+    $('[data-lsbody]', ls).innerHTML = rows.length ? `<table class="mini">${rows.map(x => `<tr><td><b>${esc(x.HanhDong)}</b><span class="sub">${esc(x.NguoiDung)}</span></td><td>${esc(x.ChiTiet)}</td><td class="num">${esc(x.ThoiGian)}</td></tr>`).join('')}</table>` : '<p class="muted">Chưa có lịch sử.</p>';
+  });
 }
 
 // Đơn hàng của khách đã chọn (đơn đang gắn vào hợp đồng luôn có mặt trong danh sách)
@@ -1797,6 +1904,7 @@ function drawHDLines(el) {
   const ls = S.hd.lines, n = ls.length, khoa = !!S.extra.khoa, ro = khoa ? ' readonly' : '';
   $('tbody', el).innerHTML = ls.map((l, i) => `<tr data-i="${i}"><td class="c muted">${i + 1}</td>
     <td><input data-f="TenHang" value="${esc(l.TenHang)}" autocomplete="off"${ro}${i === n - 1 && !khoa ? ' placeholder="Gõ tên / model để tìm hàng…"' : ''} aria-label="Tên hàng dòng ${i + 1}"></td>
+    <td><input data-f="IMEI" value="${esc(l.IMEI)}"${ro}${i === 0 ? ' placeholder="Mỗi máy một mã, cách nhau dấu phẩy"' : ''} aria-label="IMEI hoặc serial dòng ${i + 1}"></td>
     <td><input data-f="DVT" value="${esc(l.DVT)}"${ro}></td>
     <td><input data-f="SoLuong" class="num" type="number" min="0" step="any" value="${esc(l.SoLuong)}"${ro}></td>
     <td><input data-f="DonGia" class="num money" inputmode="numeric" value="${money(l.DonGia)}"${ro} aria-label="Đơn giá dòng ${i + 1}"></td>
@@ -1820,6 +1928,7 @@ function onHDInput(el, t) {
       showPicker(t, khachSource, pickHDKhach);
     }
     if (t.dataset.h === 'VAT') drawHDTotals(el);
+    if (t.dataset.h === 'TuGiaHan' && t.value === '1' && !(+d.ThangGiaHan)) { d.ThangGiaHan = 12; $('input[data-h="ThangGiaHan"]', el).value = 12; }
     setDirty(true);
     return;
   }
@@ -1829,6 +1938,10 @@ function onHDInput(el, t) {
   if (f === 'DonGia') l.DonGia = parseMoney(t.value);
   else if (f === 'SoLuong') l.SoLuong = t.value === '' ? '' : +t.value;
   else l[f] = t.value;
+  if (f === 'IMEI') { // số lượng đếm theo số mã đã nhập
+    const n = t.value.split(/[\s,;]+/).filter(Boolean).length;
+    if (n) { l.SoLuong = n; $('[data-f="SoLuong"]', tr).value = n; }
+  }
   if (f === 'TenHang') {
     if (!t.value.trim()) l.MaHH = '';
     showPicker(t, hangSource, h => pickHDHang(i, h));
@@ -1876,7 +1989,7 @@ function nhanBanHD() {
   const b = S.hd;
   if (S.dirty) throw new Error('Lưu hợp đồng trước khi nhân bản.');
   if (editHD(Object.assign({}, b, { SoHD: '', FileId: '', LinkFile: '', NgayFile: '', FileCu: '', NguoiTao: '', NgayTao: '', NgaySua: '', TrangThai: 'Soạn thảo', Ngay: today(), NgayHieuLuc: '', NgayHetHan: '',
-    lines: filled(b.lines).map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, DVT: l.DVT, SoLuong: l.SoLuong, DonGia: l.DonGia })) }))) {
+    lines: filled(b.lines).map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, DVT: l.DVT, SoLuong: l.SoLuong, DonGia: l.DonGia, IMEI: '' })) }))) { // máy khác nhau nên không chép IMEI
     setDirty(true);
     toast('Đã tạo bản sao: sửa rồi bấm Lưu để có số hợp đồng mới.');
   }

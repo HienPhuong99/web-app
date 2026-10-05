@@ -464,6 +464,55 @@ assert.throws(() => G.nhanBanHopDong(lan, hdNguon.SoHD, 'Loại chưa có mẫu'
 assert.strictEqual(sheets.PS_HopDong.rows.length, soHDtruocNb5);
 assert.ok(plain(G.dsNhatKy(admin)).some(x => x.HanhDong === 'Thêm hợp đồng' && x.DoiTuong === nb2.doc.SoHD));
 
+
+// ===== Cải tiến sau khảo sát thị trường (1): báo trước + tự gia hạn, IMEI, CCCD, lịch sử, gia hạn một chạm =====
+const cb = (o) => G.luuHopDong(lan, Object.assign({ LoaiHD: 'Hợp đồng mua bán', TenDN: 'Khách CB', VAT: 0, lines: [] }, o)).doc;
+assert.deepStrictEqual([cb({ BaoTruocNgay: 400 }).BaoTruocNgay, cb({ BaoTruocNgay: -5 }).BaoTruocNgay, cb({ BaoTruocNgay: '45' }).BaoTruocNgay], [365, 0, 45]); // kẹp trong 0..365
+assert.deepStrictEqual([cb({ TuGiaHan: true }).ThangGiaHan, cb({ TuGiaHan: '1', ThangGiaHan: 6 }).ThangGiaHan, cb({ TuGiaHan: '', ThangGiaHan: 0 }).TuGiaHan, cb({ TuGiaHan: 'x' }).TuGiaHan], [12, 6, '', '']); // tự gia hạn mà chưa nhập số tháng thì 12
+const dongIM = [{ TenHang: 'iPhone 16', DVT: 'Máy', SoLuong: 2, DonGia: 28000000, IMEI: '356789012345671; f2lxk0abc9' }, { TenHang: 'Ốp', SoLuong: 1, DonGia: 100000 }];
+assert.throws(() => cb({ lines: [{ TenHang: 'X', SoLuong: 1, DonGia: 1, IMEI: 'ab' }] }), /IMEI\/serial "AB" không hợp lệ/);
+const hdIM = cb({ SoCCCD: '079123456789', CCCDCap: '01/01/2021 – CA TP.HCM', lines: dongIM });
+assert.deepStrictEqual([hdIM.IMEI, hdIM.SoCCCD, plain(G.layHopDong(lan, hdIM.SoHD).lines).map(l => l.IMEI)], ['356789012345671, F2LXK0ABC9', '079123456789', ['356789012345671, F2LXK0ABC9', '']]);
+// Các trường mới nằm trong file: đổi thì file cũ; tạo file có đủ câu về gia hạn, báo trước, CCCD, IMEI
+const hdBT = cb({ TuGiaHan: '1', ThangGiaHan: 6, BaoTruocNgay: 45, SoCCCD: '079123456789', CCCDCap: '01/01/2021 – CA TP.HCM', NgayHieuLuc: '2026-01-01', NgayHetHan: '2026-12-31', lines: dongIM });
+const vbBT = vanBan(idDe(G.taoFileHopDong(lan, hdBT.SoHD)));
+assert.ok(vbBT.includes('tự động gia hạn thêm 6 tháng mỗi lần') && vbBT.includes('Thời hạn báo trước khi chấm dứt hoặc không gia hạn: 45 ngày') && vbBT.includes('CCCD/CMND (nếu là cá nhân): 079123456789 – cấp: 01/01/2021 – CA TP.HCM'), vbBT.slice(0, 300));
+assert.ok(JSON.stringify(bangTrong(idDe({ doc: hdBT })).map(x => x.rows.map(r => r.map(c => c.getText())))).includes('iPhone 16 – IMEI/serial: 356789012345671, F2LXK0ABC9'));
+assert.ok(vbBT.includes('Bảo vệ dữ liệu cá nhân'));
+assert.strictEqual(G.luuHopDong(lan, Object.assign({}, hdBT, { BaoTruocNgay: 60 })).doc.FileCu, '1');
+const vbKhongTG = vanBan(idDe(G.taoFileHopDong(lan, cb({ NgayHieuLuc: '2026-01-01', NgayHetHan: '2026-12-31' }).SoHD)));
+assert.ok(vbKhongTG.includes('không tự động gia hạn, muốn tiếp tục phải ký phụ lục hoặc hợp đồng mới') && vbKhongTG.includes('báo trước khi chấm dứt hoặc không gia hạn: ………………'));
+// Gia hạn một chạm
+const hdGH = cb({ TrangThai: 'Đang hiệu lực', NgayHieuLuc: '2026-01-31', NgayHetHan: '2026-01-31' });
+assert.strictEqual(G.giaHanHopDong(lan, hdGH.SoHD, 1).doc.NgayHetHan, '2026-02-28'); // cuối tháng
+assert.strictEqual(G.giaHanHopDong(lan, hdGH.SoHD, 12).doc.NgayHetHan, '2027-02-28');
+assert.throws(() => G.giaHanHopDong(lan, hdGH.SoHD, 0), /từ 1 đến 120/);
+assert.throws(() => G.giaHanHopDong(lan, hdGH.SoHD, 121), /từ 1 đến 120/);
+assert.throws(() => G.giaHanHopDong(lan, 'khong-co', 6), /Không tìm thấy/);
+assert.throws(() => G.giaHanHopDong(lan, cb({ NgayHetHan: '2026-12-31' }).SoHD, 6), /đang hiệu lực/);
+assert.throws(() => G.giaHanHopDong(lan, cb({ TrangThai: 'Đang hiệu lực' }).SoHD, 6), /chưa có ngày hết hạn/);
+const hdGHFile = cb({ TrangThai: 'Đang hiệu lực', NgayHetHan: '2026-12-31', lines: [] });
+G.taoFileHopDong(lan, hdGHFile.SoHD);
+const gh = plain(G.giaHanHopDong(lan, hdGHFile.SoHD, 6));
+assert.deepStrictEqual([gh.doc.NgayHetHan, gh.doc.FileCu, gh.doc.FileId, gh.doc.LinkFile], ['2027-06-30', '1', '1', '']); // ngày hết hạn có trong file nên file cũ; nhân viên không thấy link
+assert.deepStrictEqual(plain(G.luuHopDong(lan, Object.assign({}, gh.doc, { lines: [] })).doc.TrangThai), 'Đang hiệu lực');
+// Lịch sử theo hợp đồng
+const ls = plain(G.lichSuHopDong(lan, hdGHFile.SoHD));
+assert.deepStrictEqual(ls.map(x => x.HanhDong), ['Sửa hợp đồng', 'Gia hạn hợp đồng', 'Tạo file hợp đồng', 'Thêm hợp đồng']);
+assert.ok(ls.every(x => x.DoiTuong === hdGHFile.SoHD) && /thêm 6 tháng: 2026-12-31 → 2027-06-30/.test(ls[1].ChiTiet) && ls[1].NguoiDung.includes('lan.nguyen'));
+assert.deepStrictEqual(plain(G.lichSuHopDong(lan, 'khong-co')), []);
+// hanHD ở máy chủ (nhắc việc) và ở giao diện (Index.html) phải cho cùng kết quả
+for (const homNay of ['2026-10-05', '2026-03-01', '2027-01-01']) {
+  const gd = vm.runInNewContext('const HD_SAP = 30, today = () => ' + JSON.stringify(homNay) + ';\n' + require('fs').readFileSync(require('path').join(__dirname, '..', 'apps-script', 'Index.html'), 'utf8').match(/function hanHD\(h\) \{[\s\S]*?\n\}\n/)[0] + '\nhanHD');
+  for (const bao of [0, 7, 30, 60, 90]) for (let off = -40; off <= 160; off += 3) for (const tt of ['Đang hiệu lực', 'Soạn thảo', 'Hoàn thành']) {
+    const d = new Date(Date.parse(homNay) + off * 864e5).toISOString().slice(0, 10), h = { TrangThai: tt, NgayHetHan: d, BaoTruocNgay: bao };
+    assert.deepStrictEqual(plain(G.hanHD_(h, homNay)), plain(gd(h)), JSON.stringify([homNay, h]));
+  }
+  assert.strictEqual(G.hanHD_({ TrangThai: 'Đang hiệu lực', NgayHetHan: '' }, homNay), null);
+}
+assert.deepStrictEqual(plain(G.hanHD_({ TrangThai: 'Đang hiệu lực', NgayHetHan: '2026-12-01', BaoTruocNgay: 60 }, '2026-10-05')), { sap: true, n: 57, bao: 60, quyetDinh: -3 }); // đã quá hạn phải báo 3 ngày
+assert.deepStrictEqual(plain(G.hanHD_({ TrangThai: 'Đang hiệu lực', NgayHetHan: '2026-12-31', BaoTruocNgay: 60 }, '2026-10-05')), null); // còn 87 ngày > 60 + 14
+
 // Khóa tài khoản / quản trị đặt lại mật khẩu: phiên đang đăng nhập hết hiệu lực ngay; chỉ đổi tên thì không
 const tkLan = { TenDangNhap: 'lan.nguyen', HoTen: 'Lan', VaiTro: 'nhanvien', CuaHang: 'phone' };
 G.luuTaiKhoan(admin, Object.assign({ TrangThai: 'Khóa' }, tkLan));

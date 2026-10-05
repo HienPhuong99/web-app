@@ -27,6 +27,8 @@ module.exports = BUOC => {
     await page.fill('input[data-h="NguoiDaiDien"]', 'Nguyễn Văn Minh');
     await page.fill('input[data-h="ChucVu"]', 'Giám đốc');
     // Chọn hàng: đơn giá lấy từ bảng giá (không có giá sỉ nên lấy giá lẻ)
+    await page.locator('tr[data-i="0"] [data-f="TenHang"]').evaluate(e => e.scrollIntoView({ block: 'center' })); // cuộn ô vào giữa màn hình rồi mới gõ: cuộn trang làm ẩn danh sách gợi ý
+    await page.waitForTimeout(150);
     await page.fill('tr[data-i="0"] [data-f="TenHang"]', 'iphone 15');
     await page.locator('#picker [data-i]').first().click();
     assert.strictEqual(so(await page.inputValue('tr[data-i="0"] [data-f="DonGia"]')), '11300000');
@@ -221,6 +223,79 @@ module.exports = BUOC => {
     await page.click('#modal [data-b="0"]');
     await page.waitForSelector('#toast .err');
     await page.keyboard.press('Escape');
+  }]);
+
+  BUOC.push(['Hợp đồng: báo trước, tự gia hạn, IMEI, CCCD; gia hạn một chạm; lịch sử', async page => {
+    await page.evaluate(() => newHD());
+    await page.waitForSelector('input[data-h="TenDN"]');
+    assert.strictEqual(await page.inputValue('input[data-h="BaoTruocNgay"]'), '30'); // mặc định báo trước 30 ngày
+    await page.fill('input[data-h="TenDN"]', 'Khách Mới Một');
+    await page.fill('input[data-h="SoCCCD"]', '079123456789');
+    await page.fill('input[data-h="CCCDCap"]', '01/01/2021 – CA TP.HCM');
+    await page.fill('input[data-h="BaoTruocNgay"]', '20');
+    await page.selectOption('select[data-h="TuGiaHan"]', '1');
+    assert.strictEqual(await page.inputValue('input[data-h="ThangGiaHan"]'), '12'); // chọn tự gia hạn thì mặc định 12 tháng
+    await page.selectOption('select[data-h="TrangThai"]', 'Đang hiệu lực');
+    await page.fill('input[data-h="NgayHetHan"]', await page.evaluate(() => iso(new Date(Date.now() + 40 * 864e5))));
+    await page.fill('tr[data-i="0"] [data-f="TenHang"]', 'Máy thử IMEI');
+    await page.keyboard.press('Escape');
+    await page.fill('tr[data-i="0"] [data-f="IMEI"]', '356789012345671');
+    await page.press('tr[data-i="0"] [data-f="IMEI"]', 'Enter'); // máy quét: Enter thêm dấu phẩy để quét tiếp
+    assert.strictEqual(await page.inputValue('tr[data-i="0"] [data-f="IMEI"]'), '356789012345671, ');
+    await page.type('tr[data-i="0"] [data-f="IMEI"]', '356789012345672');
+    assert.strictEqual(await page.inputValue('tr[data-i="0"] [data-f="SoLuong"]'), '2'); // số lượng đếm theo số mã
+    await page.fill('tr[data-i="0"] [data-f="DonGia"]', '10000000');
+    await nut(page, 'Lưu').click();
+    await page.waitForFunction(() => S.hd && S.hd.SoHD && !S.dirty, null, { timeout: 8000 });
+    const luu = await page.evaluate(() => { const h = S.hopDong.find(x => x.SoHD === S.hd.SoHD); return [h.BaoTruocNgay, h.TuGiaHan, h.ThangGiaHan, h.SoCCCD, h.IMEI, h.TongCong]; });
+    assert.deepStrictEqual(luu, [20, '1', 12, '079123456789', '356789012345671, 356789012345672', 20000000]);
+    // gia hạn một chạm ngay trong màn hình soạn
+    const hetTruoc = await page.evaluate(() => S.hd.NgayHetHan);
+    await nut(page, 'Gia hạn').click();
+    await page.waitForSelector('#modal [data-pv]');
+    assert.match(await page.locator('#modal [data-pv]').textContent(), /Hết hạn hiện tại .* → mới /);
+    await page.fill('#modal [name=thang]', '3');
+    await page.click('#modal [data-save]');
+    await page.waitForSelector('#modal', { state: 'hidden' }); // chờ hộp thoại đóng (thông báo của bước trước có thể còn hiện nên không dựa vào nó)
+    assert.strictEqual(await page.evaluate(() => S.hd.NgayHetHan), await page.evaluate(h => congThangISO(h, 3), hetTruoc));
+    // lịch sử theo hợp đồng
+    await page.click('details[data-ls] summary');
+    await page.waitForSelector('[data-lsbody] table.mini');
+    const ls = await page.locator('[data-lsbody]').textContent();
+    assert.ok(/Gia hạn hợp đồng/.test(ls) && /Thêm hợp đồng/.test(ls), ls);
+    assert.ok(/thêm 3 tháng/.test(ls));
+    await shot(page, 'hd-11-bao-truoc-imei-lich-su');
+  }]);
+
+  BUOC.push(['Hợp đồng: hạn báo trước, nhắc khách qua Zalo/email, nút trong dòng không mở hợp đồng', async page => {
+    await page.evaluate(async () => {
+      await api('luuHopDong', { LoaiHD: 'Hợp đồng nguyên tắc', TenDN: 'Công ty Báo Trước', NguoiDaiDien: 'Lê Văn C', SDT: '0912 345 678 / 0988000111', TrangThai: 'Đang hiệu lực', BaoTruocNgay: 60, TuGiaHan: '1', ThangGiaHan: 6,
+        NgayHieuLuc: iso(new Date(Date.now() - 300 * 864e5)), NgayHetHan: iso(new Date(Date.now() + 50 * 864e5)), VAT: 0, lines: [] });
+      await loadAll(); go('hdhan');
+    });
+    const dong = page.locator('tbody tr[data-i]', { hasText: 'Công ty Báo Trước' });
+    await dong.waitFor();
+    assert.match(await dong.textContent(), /quá 10 ngày/); // còn 50 ngày nhưng hạn báo trước (60 ngày) đã qua 10 ngày
+    assert.match(await dong.textContent(), /Tự gia hạn 6 tháng/);
+    await dong.locator('[data-act="nhac"]').click();
+    await page.waitForSelector('#modal [data-tin]');
+    assert.match(await page.locator('#title').textContent(), /sắp hết hạn/); // nút trong dòng không mở hợp đồng
+    const tin = await page.inputValue('#modal [data-tin]');
+    assert.ok(/Chào anh\/chị Lê Văn C/.test(tin) && /báo trước 60 ngày/.test(tin) && /tự động gia hạn thêm 6 tháng/.test(tin) && /\d{3}-\d{4}\/HD/.test(tin), tin);
+    assert.strictEqual(await page.getAttribute('#modal [data-zalo]', 'href'), 'https://zalo.me/84912345678'); // lấy số đầu, đổi 0 thành 84
+    await page.fill('#modal [data-tin]', 'Tin đã sửa & có dấu');
+    assert.match(await page.getAttribute('#modal [data-mail]', 'href'), /^mailto:\?subject=.*&body=Tin%20%C4%91%C3%A3%20s%E1%BB%ADa%20%26%20c%C3%B3%20d%E1%BA%A5u$/); // khách chưa có email
+    await page.click('#modal [data-copy]');
+    await page.waitForSelector('#toast >> text=/sao chép|Ctrl\\+C/');
+    await shot(page, 'hd-12-nhac-khach');
+    await page.keyboard.press('Escape');
+    await dong.locator('[data-act="giahan"]').click();
+    await page.waitForSelector('#modal [name=thang]');
+    assert.strictEqual(await page.inputValue('#modal [name=thang]'), '6'); // mặc định theo số tháng của hợp đồng
+    await page.click('#modal [data-save]');
+    await page.waitForSelector('#modal', { state: 'hidden' }); // chờ hộp thoại đóng (thông báo của bước trước có thể còn hiện nên không dựa vào nó)
+    assert.match(await page.locator('#title').textContent(), /sắp hết hạn/);
+    assert.strictEqual(await page.locator('tbody tr[data-i]', { hasText: 'Công ty Báo Trước' }).count(), 0); // gia hạn 6 tháng: còn 230 ngày, rời danh sách
   }]);
 
   BUOC.push(['Hợp đồng: màn hình điện thoại không tràn ngang', async page => {

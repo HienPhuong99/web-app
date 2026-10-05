@@ -9,7 +9,8 @@
 const HD_TRANG_THAI = ['Soạn thảo', 'Đang hiệu lực', 'Tạm dừng', 'Hoàn thành'];
 const HD_DA_KY = ['Đang hiệu lực', 'Hoàn thành', 'Tạm dừng']; // đã ký (mọi trạng thái trừ Soạn thảo): nhân viên không đổi hàng và số tiền, không đưa về Soạn thảo; chỉ quản trị
 // Các cột có mặt trong file hợp đồng: đổi một trong số này (hoặc dòng hàng) sau khi tạo file thì file đã cũ (FileCu = '1')
-const HD_TRONG_FILE = ['Ngay', 'LoaiHD', 'SoDH', 'NguoiPhuTrach', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang', 'NgayHieuLuc', 'NgayHetHan', 'VAT', 'GhiChu'];
+const HD_TRONG_FILE = ['Ngay', 'LoaiHD', 'SoDH', 'NguoiPhuTrach', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'SoCCCD', 'CCCDCap', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang', 'NgayHieuLuc', 'NgayHetHan', 'BaoTruocNgay', 'TuGiaHan', 'ThangGiaHan', 'VAT', 'GhiChu'];
+const HD_SAP = 30; // báo "sắp hết hạn" khi còn chừng này ngày (hoặc thời hạn báo trước + 14 ngày nếu dài hơn)
 
 function loaiHopDong_(mau) { // mau = các dòng MauHopDong đã đọc sẵn (đỡ đọc Sheet lại)
   const ds = (mau || readTable_('MauHopDong')).map(m => String(m.LoaiHD)).filter(Boolean);
@@ -24,7 +25,7 @@ function layHopDong(token, soHD) {
 function hdChoUser_(user, hd) { return user.vaiTro === 'admin' ? hd : Object.assign({}, hd, { FileId: hd.FileId ? '1' : '', LinkFile: '' }); }
 // Nội dung hợp đồng xuất hiện trong file Docs (các trường HD_TRONG_FILE + dòng hàng): so hai bản để biết file có cũ không
 function noiDungHD_(hd, lines) {
-  return JSON.stringify([HD_TRONG_FILE.map(k => String(hd[k] == null ? '' : hd[k])), lines.map(l => [String(l.MaHH), String(l.TenHang), String(l.DVT), +l.SoLuong, +l.DonGia])]);
+  return JSON.stringify([HD_TRONG_FILE.map(k => String(hd[k] == null ? '' : hd[k])), lines.map(l => [String(l.MaHH), String(l.TenHang), String(l.DVT), +l.SoLuong, +l.DonGia, String(l.IMEI || '')])]);
 }
 function dongHopDong_(soHD) {
   return readTable_('HopDongCT').filter(l => String(l.SoHD) === String(soHD)).sort((a, b) => a.STT - b.STT);
@@ -44,9 +45,12 @@ function luuHopDong(token, doc) {
     SoHD: str(doc.SoHD, 40), Ngay: ngay(doc.Ngay, 'Ngày ký') || now_().slice(0, 10), LoaiHD: str(doc.LoaiHD, 80), SoDH: str(doc.SoDH, 40), MaKH: str(doc.MaKH, 20),
     TenDN: str(doc.TenDN, 150), DiaChi: str(doc.DiaChi, 250), VanPhongGD: str(doc.VanPhongGD, 250), MST: str(doc.MST, 20),
     NguoiDaiDien: str(doc.NguoiDaiDien, 100), ChucVu: str(doc.ChucVu, 60), SDT: str(doc.SDT, 40), SoTK: str(doc.SoTK, 40), NganHang: str(doc.NganHang, 100),
+    SoCCCD: str(doc.SoCCCD, 20), CCCDCap: str(doc.CCCDCap, 120),
     NgayHieuLuc: ngay(doc.NgayHieuLuc, 'Ngày hiệu lực'), NgayHetHan: ngay(doc.NgayHetHan, 'Ngày hết hạn'), NguoiPhuTrach: str(doc.NguoiPhuTrach, 60),
+    BaoTruocNgay: Math.min(365, Math.max(0, Math.round(+doc.BaoTruocNgay || 0))), TuGiaHan: doc.TuGiaHan === '1' || doc.TuGiaHan === true ? '1' : '',
     TrangThai: HD_TRANG_THAI.includes(doc.TrangThai) ? doc.TrangThai : HD_TRANG_THAI[0], VAT: Math.min(100, Math.max(0, +doc.VAT || 0)), GhiChu: str(doc.GhiChu, 1000),
   };
+  head.ThangGiaHan = Math.min(120, Math.max(0, Math.round(+doc.ThangGiaHan || 0))) || (head.TuGiaHan ? 12 : 0); // tự gia hạn mà chưa nhập số tháng thì 12 tháng
   if (!head.LoaiHD) throw new Error('Chọn loại hợp đồng.');
   if (!head.TenDN) throw new Error('Nhập tên khách hàng (bên A).');
   if (head.NgayHieuLuc && head.NgayHetHan && head.NgayHetHan < head.NgayHieuLuc) throw new Error('Ngày hết hạn phải sau ngày hiệu lực.');
@@ -54,9 +58,13 @@ function luuHopDong(token, doc) {
     const o = { STT: i + 1, MaHH: str(l.MaHH, 20), TenHang: str(l.TenHang, 200), DVT: str(l.DVT, 30), SoLuong: +l.SoLuong || 0, DonGia: Math.round(+l.DonGia || 0) };
     if (o.SoLuong <= 0) throw new Error('Dòng ' + o.STT + ': số lượng phải lớn hơn 0.');
     if (o.DonGia < 0) throw new Error('Dòng ' + o.STT + ': đơn giá không được âm.');
+    const im = imeiList_(l.IMEI), sai = im.find(x => !/^[A-Z0-9][A-Z0-9._/-]{3,39}$/.test(x));
+    if (sai) throw new Error('Dòng ' + o.STT + ': IMEI/serial "' + sai + '" không hợp lệ (4–40 chữ, số).');
+    o.IMEI = im.join(', ');
     o.ThanhTien = Math.round(o.SoLuong * o.DonGia);
     return o;
   });
+  head.IMEI = lines.map(l => l.IMEI).filter(Boolean).join(', ').slice(0, 1000); // gộp để tìm hợp đồng theo IMEI
   head.TienHang = lines.reduce((t, l) => t + l.ThanhTien, 0);
   head.TienVAT = Math.round(head.TienHang * head.VAT / 100);
   head.TongCong = head.TienHang + head.TienVAT;
@@ -67,7 +75,7 @@ function luuHopDong(token, doc) {
     if (head.SoHD && !old) throw new Error('Không tìm thấy hợp đồng ' + head.SoHD + ' (có thể đã bị xóa).');
     if (head.SoDH && !findObj_('DonHang', head.SoDH)) throw new Error('Không tìm thấy đơn hàng ' + head.SoDH + '.');
     if (!(old && old.LoaiHD === head.LoaiHD) && !loaiHopDong_().includes(head.LoaiHD)) throw new Error('Loại hợp đồng "' + head.LoaiHD + '" chưa có mẫu. Chọn loại khác, hoặc quản trị thêm ở Cài đặt → Mẫu hợp đồng.');
-    const khoa = ls => JSON.stringify(ls.map(l => [String(l.MaHH), String(l.TenHang), String(l.DVT), +l.SoLuong, +l.DonGia]));
+    const khoa = ls => JSON.stringify(ls.map(l => [String(l.MaHH), String(l.TenHang), String(l.DVT), +l.SoLuong, +l.DonGia, String(l.IMEI || '')]));
     const cu = old ? dongHopDong_(head.SoHD) : [];
     if (old && HD_DA_KY.includes(old.TrangThai) && user.vaiTro !== 'admin') {
       if (head.TrangThai === HD_TRANG_THAI[0]) throw new Error('Hợp đồng đã ký không đưa về Soạn thảo được (chỉ quản trị). Cần thay đổi thì nhân bản thành hợp đồng mới.');
@@ -100,6 +108,42 @@ function xoaHopDong(token, soHD) {
     if (hd.FileId) { try { DriveApp.getFileById(hd.FileId).setTrashed(true); } catch (e) {} } // vào thùng rác Drive, còn khôi phục được
     log_(user, 'Xóa hợp đồng', soHD, hd.TenDN + ' · ' + hd.LoaiHD);
   });
+}
+
+/** Gia hạn một chạm: cộng thêm số tháng vào ngày hết hạn của hợp đồng đang hiệu lực (không đụng hàng hóa, số tiền). Nhân viên làm được. */
+function giaHanHopDong(token, soHD, soThang) {
+  const user = user_(token);
+  soThang = Math.round(+soThang || 0);
+  if (soThang < 1 || soThang > 120) throw new Error('Số tháng gia hạn từ 1 đến 120.');
+  return withLock_(() => {
+    const sh = sheet_('HopDong'), r = findRow_(sh, soHD);
+    if (!r) throw new Error('Không tìm thấy hợp đồng ' + soHD + '.');
+    const hd = rowObj_(sh, r);
+    if (hd.TrangThai !== 'Đang hiệu lực') throw new Error('Chỉ gia hạn được hợp đồng đang hiệu lực.');
+    if (!hd.NgayHetHan) throw new Error('Hợp đồng chưa có ngày hết hạn để gia hạn.');
+    const moi = congThang_(hd.NgayHetHan, soThang);
+    const o = Object.assign({}, hd, { NgayHetHan: moi, NgaySua: now_(), FileCu: hd.FileId ? '1' : hd.FileCu });
+    writeRow_(sh, r, o);
+    log_(user, 'Gia hạn hợp đồng', soHD, 'thêm ' + soThang + ' tháng: ' + hd.NgayHetHan + ' → ' + moi);
+    return { doc: hdChoUser_(user, o) };
+  });
+}
+
+/** Lịch sử thao tác của một hợp đồng (mới nhất trước), lấy từ Nhật ký. */
+function lichSuHopDong(token, soHD) {
+  user_(token);
+  return readTable_('NhatKy').filter(x => String(x.DoiTuong) === String(soHD)).reverse().slice(0, 100);
+}
+
+/**
+ * Hợp đồng đang hiệu lực đã quá hạn hoặc sắp hết hạn (homNay dạng yyyy-MM-dd), còn lại null. Phải giống hàm hanHD trong Index.html.
+ * Trả về { het|sap: true, n: số ngày (quá / còn), bao: ngày báo trước, quyetDinh: số ngày còn lại tới hạn phải báo hoặc null }.
+ */
+function hanHD_(h, homNay) {
+  if (h.TrangThai !== 'Đang hiệu lực' || !h.NgayHetHan) return null;
+  const n = Math.round((Date.parse(h.NgayHetHan) - Date.parse(homNay)) / 864e5), bao = +h.BaoTruocNgay || 0, quyetDinh = bao ? n - bao : null;
+  if (n < 0) return { het: true, n: -n, bao: bao, quyetDinh: quyetDinh };
+  return n <= Math.max(HD_SAP, bao ? bao + 14 : 0) ? { sap: true, n: n, bao: bao, quyetDinh: quyetDinh } : null;
 }
 
 /** Số tiền thành chữ tiếng Việt, vd. 112420000 → "Một trăm mười hai triệu bốn trăm hai mươi nghìn đồng chẵn." */
@@ -137,8 +181,9 @@ function docSo3_(n, co) { // n 1..999
 const HD_BIEN = [
   ['MAHOPDONG', 'Số hợp đồng'], ['LOAIHOPDONG', 'Loại hợp đồng'], ['THOIGIANTAO', 'Thời điểm tạo file'],
   ['NGAYKY', 'Ngày ký, dạng 25/01/2026'], ['NGAYKYDAI', 'Ngày ký, dạng "ngày 25 tháng 01 năm 2026"'], ['NGAYHIEULUC', 'Ngày hiệu lực'], ['NGAYHETHAN', 'Ngày hết hạn'],
-  ['THOIHAN', 'Thời hạn viết sẵn: "từ ngày … đến hết ngày …" / "kể từ ngày ký"'], ['SODONHANG', 'Số đơn hàng liên quan'], ['NGUOIPHUTRACH', 'Người phụ trách'],
-  ['TENDOANHNGHIEP', 'Bên A: tên khách hàng / doanh nghiệp'], ['DIACHIDOANHNGHIEP', 'Bên A: địa chỉ'], ['VANPHONGGIAODICH', 'Bên A: văn phòng giao dịch'], ['MASOTHUE', 'Bên A: mã số thuế'],
+  ['THOIHAN', 'Thời hạn viết sẵn: "từ ngày … đến hết ngày …" / "kể từ ngày ký"'], ['BAOTRUOC', 'Số ngày báo trước khi chấm dứt hoặc không gia hạn'],
+  ['GIAHAN', 'Câu viết sẵn về gia hạn: tự động gia hạn thêm N tháng / không tự động gia hạn'], ['SODONHANG', 'Số đơn hàng liên quan'], ['NGUOIPHUTRACH', 'Người phụ trách'],
+  ['TENDOANHNGHIEP', 'Bên A: tên khách hàng / doanh nghiệp'], ['DIACHIDOANHNGHIEP', 'Bên A: địa chỉ'], ['VANPHONGGIAODICH', 'Bên A: văn phòng giao dịch'], ['MASOTHUE', 'Bên A: mã số thuế'], ['SOCCCD', 'Bên A: số CCCD/CMND (cá nhân)'], ['CCCDCAP', 'Bên A: ngày cấp, nơi cấp CCCD/CMND'],
   ['NGUOIDAIDIEN', 'Bên A: người đại diện'], ['CHUCVU', 'Bên A: chức vụ'], ['DIENTHOAI', 'Bên A: số điện thoại'], ['SOTAIKHOAN', 'Bên A: số tài khoản'], ['NGANHANG', 'Bên A: ngân hàng'],
   ['B_TEN', 'Bên B (cửa hàng): tên in trên chứng từ'], ['B_DIACHI', 'Bên B: địa chỉ'], ['B_MST', 'Bên B: mã số thuế'], ['B_DAIDIEN', 'Bên B: người đại diện (chủ hộ)'], ['B_CHUCVU', 'Bên B: chức danh người ký'],
   ['B_LIENHE', 'Bên B: điện thoại, email'], ['B_STK', 'Bên B: số tài khoản nhận tiền'], ['B_NGANHANG', 'Bên B: ngân hàng'], ['B_CHUTK', 'Bên B: chủ tài khoản'], ['B_BAOHANH', 'Bên B: số tháng bảo hành mặc định'],
@@ -153,7 +198,8 @@ const HD_QH = [['cb', 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM'], ['cb', '
 const hdCanCu = (...them) => [['ci', 'Căn cứ Bộ luật Dân sự năm 2015, Luật Thương mại năm 2005, Luật Bảo vệ quyền lợi người tiêu dùng năm 2023 và các văn bản pháp luật có liên quan;']]
   .concat(them.map(t => ['ci', t]));
 const hdBenA = vaiTro => [['h', 'BÊN A – ' + vaiTro], ['kv', 'Tên đơn vị / cá nhân: ', '{{TENDOANHNGHIEP}}'], ['kv', 'Địa chỉ: ', '{{DIACHIDOANHNGHIEP}}'], ['kv', 'Văn phòng giao dịch: ', '{{VANPHONGGIAODICH}}'],
-  ['kv', 'Mã số thuế: ', '{{MASOTHUE}}'], ['kv', 'Người đại diện: ', '{{NGUOIDAIDIEN}} – Chức vụ: {{CHUCVU}}'], ['kv', 'Điện thoại: ', '{{DIENTHOAI}}'], ['kv', 'Số tài khoản: ', '{{SOTAIKHOAN}} tại {{NGANHANG}}']];
+  ['kv', 'Mã số thuế: ', '{{MASOTHUE}}'], ['kv', 'CCCD/CMND (nếu là cá nhân): ', '{{SOCCCD}} – cấp: {{CCCDCAP}}'],
+  ['kv', 'Người đại diện: ', '{{NGUOIDAIDIEN}} – Chức vụ: {{CHUCVU}}'], ['kv', 'Điện thoại: ', '{{DIENTHOAI}}'], ['kv', 'Số tài khoản: ', '{{SOTAIKHOAN}} tại {{NGANHANG}}']];
 const hdBenB = vaiTro => [['h', 'BÊN B – ' + vaiTro], ['kv', 'Tên đơn vị: ', '{{B_TEN}}'], ['kv', 'Địa chỉ: ', '{{B_DIACHI}}'], ['kv', 'Mã số thuế: ', '{{B_MST}}'],
   ['kv', 'Người đại diện: ', '{{B_DAIDIEN}} – Chức vụ: {{B_CHUCVU}}'], ['kv', 'Liên hệ: ', '{{B_LIENHE}}'], ['kv', 'Số tài khoản: ', '{{B_STK}} tại {{B_NGANHANG}} – Chủ tài khoản: {{B_CHUTK}}']];
 const hdMoDau = (tieuDe, vaiA, vaiB, ...canCuThem) => HD_QH.concat([['tt', tieuDe], ['c', 'Số: {{MAHOPDONG}}'], ['bl']], hdCanCu(...canCuThem),
@@ -164,7 +210,9 @@ const hdBatKhaKhang = () => [['dieu', 'Bất khả kháng'],
   ['p', 'Sự kiện bất khả kháng là sự kiện xảy ra một cách khách quan không thể lường trước và không thể khắc phục được dù đã áp dụng mọi biện pháp cần thiết trong khả năng cho phép (thiên tai, dịch bệnh, chiến tranh, quyết định của cơ quan nhà nước có thẩm quyền…). Bên bị ảnh hưởng phải thông báo cho bên kia trong thời hạn hợp lý và được miễn trách nhiệm đối với phần nghĩa vụ bị ảnh hưởng trong thời gian xảy ra sự kiện đó.']];
 const hdTranhChap = () => [['dieu', 'Giải quyết tranh chấp'],
   ['p', 'Mọi tranh chấp phát sinh từ hợp đồng này trước hết được giải quyết bằng thương lượng, hòa giải trên tinh thần hợp tác. Nếu không thương lượng được trong thời hạn 30 ngày kể từ ngày phát sinh tranh chấp, mỗi bên có quyền khởi kiện tại Tòa án nhân dân có thẩm quyền theo quy định của pháp luật.']];
-const hdHieuLuc = () => [['dieu', 'Hiệu lực hợp đồng'], ['li', 'Hợp đồng có hiệu lực {{THOIHAN}}.'],
+const hdDuLieuCaNhan = () => [['dieu', 'Bảo vệ dữ liệu cá nhân'],
+  ['p', 'Hai bên đồng ý để bên kia xử lý thông tin cá nhân nêu trong hợp đồng (họ tên, số CCCD/CMND, địa chỉ, điện thoại, số tài khoản) cho mục đích lập, thực hiện, bảo hành và lưu trữ hợp đồng theo quy định của pháp luật về bảo vệ dữ liệu cá nhân. Mỗi bên chỉ dùng thông tin của bên kia cho các mục đích trên và có trách nhiệm bảo mật thông tin đó.']];
+const hdHieuLuc = () => [['dieu', 'Hiệu lực hợp đồng'], ['li', 'Hợp đồng có hiệu lực {{THOIHAN}} và chấm dứt khi hai bên hoàn thành nghĩa vụ, hoặc khi hết thời hạn nêu trên: lúc đó hợp đồng {{GIAHAN}}. Thời hạn báo trước khi chấm dứt hoặc không gia hạn: {{BAOTRUOC}} ngày.'],
   ['li', 'Mọi sửa đổi, bổ sung hợp đồng phải được lập thành văn bản và có chữ ký của hai bên.'],
   ['li', 'Hợp đồng được lập thành 02 bản có giá trị pháp lý như nhau, mỗi bên giữ 01 bản.'], ['p', 'Ghi chú thêm: {{GHICHU}}'], ['bl']];
 const hdThanhToanTK = [['li', 'Thông tin nhận chuyển khoản của Bên B: số tài khoản {{B_STK}} tại {{B_NGANHANG}}, chủ tài khoản {{B_CHUTK}}; nội dung chuyển khoản ghi số hợp đồng {{MAHOPDONG}}.']];
@@ -186,7 +234,7 @@ const HD_MAU_MUA_BAN = hdMoDau('HỢP ĐỒNG MUA BÁN HÀNG HÓA', 'BÊN MUA', 
   ['dieu', 'Quyền và nghĩa vụ của các bên'],
   ['li', 'Bên A: thanh toán đầy đủ, đúng hạn; nhận hàng đúng thời gian, địa điểm đã thỏa thuận; sử dụng hàng hóa theo hướng dẫn của nhà sản xuất.'],
   ['li', 'Bên B: giao hàng đúng chủng loại, số lượng, chất lượng; cung cấp phiếu giao hàng kiêm phiếu bảo hành có IMEI/serial; bảo hành theo cam kết; bảo mật thông tin của khách hàng.']],
-  hdViPham(), hdBatKhaKhang(), hdTranhChap(), hdHieuLuc(), [['ky', 'ĐẠI DIỆN BÊN A (BÊN MUA)', 'ĐẠI DIỆN BÊN B (BÊN BÁN)']]));
+  hdViPham(), hdBatKhaKhang(), hdTranhChap(), hdDuLieuCaNhan(), hdHieuLuc(), [['ky', 'ĐẠI DIỆN BÊN A (BÊN MUA)', 'ĐẠI DIỆN BÊN B (BÊN BÁN)']]));
 
 const HD_MAU_NGUYEN_TAC = hdMoDau('HỢP ĐỒNG NGUYÊN TẮC MUA BÁN HÀNG HÓA', 'BÊN MUA', 'BÊN BÁN', 'Căn cứ nhu cầu mua bán thường xuyên giữa hai bên.').concat([
   ['dieu', 'Nguyên tắc chung'],
@@ -207,9 +255,9 @@ const HD_MAU_NGUYEN_TAC = hdMoDau('HỢP ĐỒNG NGUYÊN TẮC MUA BÁN HÀNG H�
   ['li', 'Bên B cam kết hàng hóa chính hãng, có nguồn gốc rõ ràng, xuất trình chứng từ khi Bên A yêu cầu.'],
   ['li', 'Bên A cam kết mua hàng cho mục đích hợp pháp và thanh toán đúng hạn.'],
   ['dieu', 'Thời hạn và chấm dứt'],
-  ['li', 'Hợp đồng có hiệu lực {{THOIHAN}}. Hết thời hạn, hợp đồng tự gia hạn thêm 12 tháng nếu không bên nào thông báo bằng văn bản không gia hạn trước 30 ngày.'],
-  ['li', 'Mỗi bên có quyền chấm dứt hợp đồng bằng thông báo bằng văn bản trước 30 ngày; các đơn hàng đã xác nhận vẫn tiếp tục được thực hiện.']],
-  hdViPham(), hdBatKhaKhang(), hdTranhChap(),
+  ['li', 'Hợp đồng có hiệu lực {{THOIHAN}}. Khi hết thời hạn, hợp đồng {{GIAHAN}}.'],
+  ['li', 'Mỗi bên có quyền chấm dứt hợp đồng bằng thông báo bằng văn bản trước {{BAOTRUOC}} ngày; các đơn hàng đã xác nhận vẫn tiếp tục được thực hiện.']],
+  hdViPham(), hdBatKhaKhang(), hdTranhChap(), hdDuLieuCaNhan(),
   [['dieu', 'Điều khoản chung'], ['li', 'Mọi sửa đổi, bổ sung phải được lập thành văn bản và có chữ ký của hai bên. Hợp đồng được lập thành 02 bản có giá trị như nhau, mỗi bên giữ 01 bản.'],
   ['p', 'Ghi chú thêm: {{GHICHU}}'], ['bl'], ['ky', 'ĐẠI DIỆN BÊN A (BÊN MUA)', 'ĐẠI DIỆN BÊN B (BÊN BÁN)']]));
 
@@ -234,8 +282,8 @@ const HD_MAU_DAI_LY = hdMoDau('HỢP ĐỒNG ĐẠI LÝ – PHÂN PHỐI', 'Đ�
   ['li', 'Bán đúng sản phẩm chính hãng nhận từ Bên B; không bán hàng giả, hàng nhái, hàng không rõ nguồn gốc dưới danh nghĩa sản phẩm của Bên B.'],
   ['li', 'Giữ bí mật bảng giá, chính sách và thông tin khách hàng mà Bên B cung cấp; chịu trách nhiệm về hoạt động bán hàng của mình theo quy định của pháp luật.'],
   ['dieu', 'Chấm dứt hợp đồng'],
-  ['p', 'Mỗi bên có quyền chấm dứt hợp đồng bằng thông báo bằng văn bản trước 30 ngày. Khi chấm dứt, hai bên đối chiếu và thanh toán hết công nợ; hàng tồn của Bên A xử lý theo thỏa thuận: ……………………………………']],
-  hdViPham(), hdBatKhaKhang(), hdTranhChap(), hdHieuLuc(), [['ky', 'ĐẠI DIỆN BÊN A (ĐẠI LÝ)', 'ĐẠI DIỆN BÊN B (NHÀ CUNG CẤP)']]));
+  ['p', 'Mỗi bên có quyền chấm dứt hợp đồng bằng thông báo bằng văn bản trước {{BAOTRUOC}} ngày. Khi chấm dứt, hai bên đối chiếu và thanh toán hết công nợ; hàng tồn của Bên A xử lý theo thỏa thuận: ……………………………………']],
+  hdViPham(), hdBatKhaKhang(), hdTranhChap(), hdDuLieuCaNhan(), hdHieuLuc(), [['ky', 'ĐẠI DIỆN BÊN A (ĐẠI LÝ)', 'ĐẠI DIỆN BÊN B (NHÀ CUNG CẤP)']]));
 
 const HD_MAU_THU_CU = hdMoDau('HỢP ĐỒNG THU CŨ ĐỔI MỚI', 'BÊN BÁN MÁY CŨ', 'BÊN MUA MÁY CŨ', 'Căn cứ nhu cầu và sự tự nguyện của hai bên.').concat([
   ['dieu', 'Máy cũ thu mua'],
@@ -256,7 +304,7 @@ const HD_MAU_THU_CU = hdMoDau('HỢP ĐỒNG THU CŨ ĐỔI MỚI', 'BÊN BÁN M
   ['li', 'Quyền sở hữu máy cũ chuyển sang Bên B khi Bên A giao máy và hai bên hoàn tất thanh toán/bù trừ theo hợp đồng này.']]
   .concat(hdThanhToanTK, [
   ['li', 'Máy mới được bảo hành {{B_BAOHANH}} tháng theo chính sách của nhà sản xuất và của Bên B; số IMEI/serial ghi trong phiếu giao hàng kiêm phiếu bảo hành.']],
-  hdViPham(), hdBatKhaKhang(), hdTranhChap(), hdHieuLuc(), [['ky', 'ĐẠI DIỆN BÊN A (BÊN BÁN MÁY CŨ)', 'ĐẠI DIỆN BÊN B (BÊN MUA MÁY CŨ)']]));
+  hdViPham(), hdBatKhaKhang(), hdTranhChap(), hdDuLieuCaNhan(), hdHieuLuc(), [['ky', 'ĐẠI DIỆN BÊN A (BÊN BÁN MÁY CŨ)', 'ĐẠI DIỆN BÊN B (BÊN MUA MÁY CŨ)']]));
 
 const HD_MAU_SUA_CHUA = hdMoDau('HỢP ĐỒNG DỊCH VỤ SỬA CHỮA – BẢO HÀNH THIẾT BỊ', 'KHÁCH HÀNG', 'ĐƠN VỊ CUNG CẤP DỊCH VỤ', 'Căn cứ nhu cầu sửa chữa và khả năng cung cấp dịch vụ của hai bên.').concat([
   ['dieu', 'Thiết bị tiếp nhận'],
@@ -277,7 +325,7 @@ const HD_MAU_SUA_CHUA = hdMoDau('HỢP ĐỒNG DỊCH VỤ SỬA CHỮA – BẢ
   ['dieu', 'Dữ liệu và rủi ro'],
   ['li', 'Bên A tự sao lưu dữ liệu trước khi giao máy; Bên B không chịu trách nhiệm về dữ liệu bị mất trong quá trình sửa chữa, trừ trường hợp do lỗi cố ý của Bên B.'],
   ['li', 'Thiết bị đã từng vào nước, rơi vỡ hoặc bị can thiệp có thể phát sinh thêm lỗi khi mở máy; Bên B không bảo đảm khả năng phục hồi hoàn toàn trong các trường hợp này.']],
-  hdViPham(), hdBatKhaKhang(), hdTranhChap(), hdHieuLuc(), [['ky', 'ĐẠI DIỆN BÊN A (KHÁCH HÀNG)', 'ĐẠI DIỆN BÊN B (ĐƠN VỊ DỊCH VỤ)']]));
+  hdViPham(), hdBatKhaKhang(), hdTranhChap(), hdDuLieuCaNhan(), hdHieuLuc(), [['ky', 'ĐẠI DIỆN BÊN A (KHÁCH HÀNG)', 'ĐẠI DIỆN BÊN B (ĐƠN VỊ DỊCH VỤ)']]));
 
 // Loại hợp đồng có sẵn (ngành điện thoại). caiDat tạo file Google Docs mẫu cho từng loại rồi ghi vào trang MauHopDong; quản trị thêm/xóa loại ở đó.
 const HD_LOAI_MAC_DINH = [
@@ -400,6 +448,9 @@ function bienHopDong_(hd) {
     NGAYKY: t(ngay(hd.Ngay)), NGAYKYDAI: ngayDai(hd.Ngay), NGAYHIEULUC: t(ngay(hd.NgayHieuLuc)), NGAYHETHAN: t(ngay(hd.NgayHetHan)), THOIHAN: thoiHan,
     SODONHANG: t(hd.SoDH), NGUOIPHUTRACH: t(hd.NguoiPhuTrach),
     TENDOANHNGHIEP: t(hd.TenDN), DIACHIDOANHNGHIEP: t(hd.DiaChi), VANPHONGGIAODICH: t(hd.VanPhongGD), MASOTHUE: t(hd.MST), NGUOIDAIDIEN: t(hd.NguoiDaiDien),
+    BAOTRUOC: +hd.BaoTruocNgay > 0 ? String(+hd.BaoTruocNgay) : HD_TRONG,
+    GIAHAN: hd.TuGiaHan === '1' ? 'tự động gia hạn thêm ' + (+hd.ThangGiaHan || 12) + ' tháng mỗi lần nếu không bên nào thông báo chấm dứt trong thời hạn báo trước' : 'không tự động gia hạn, muốn tiếp tục phải ký phụ lục hoặc hợp đồng mới',
+    SOCCCD: t(hd.SoCCCD), CCCDCAP: t(hd.CCCDCap),
     CHUCVU: t(hd.ChucVu), DIENTHOAI: t(hd.SDT), SOTAIKHOAN: t(hd.SoTK), NGANHANG: t(hd.NganHang),
     B_TEN: t(c.ten), B_DIACHI: t((c.diaChi || []).join('; ')), B_MST: t(c.mst), B_DAIDIEN: t(c.chuHo), B_CHUCVU: t(c.kyTen), B_LIENHE: t(c.lienHe),
     B_STK: t(c.qrSoTK), B_NGANHANG: t(nh ? nh[1] : ''), B_CHUTK: t(c.qrChuTK), B_BAOHANH: t(c.baoHanhThang),
@@ -412,7 +463,7 @@ function bangHang_(hd, lines) {
   if (!lines.length) return null;
   const so = tien_;
   const rows = [['STT', 'Tên hàng hóa, dịch vụ', 'ĐVT', 'Số lượng', 'Đơn giá (đồng)', 'Thành tiền (đồng)']];
-  lines.forEach((l, i) => rows.push([String(i + 1), String(l.TenHang), String(l.DVT || ''), String(+l.SoLuong || 0).replace('.', ','), so(l.DonGia), so(l.ThanhTien)]));
+  lines.forEach((l, i) => rows.push([String(i + 1), String(l.TenHang) + (l.IMEI ? ' – IMEI/serial: ' + l.IMEI : ''), String(l.DVT || ''), String(+l.SoLuong || 0).replace('.', ','), so(l.DonGia), so(l.ThanhTien)]));
   rows.push(['', 'Cộng tiền hàng', '', '', '', so(hd.TienHang)]);
   rows.push(['', 'Thuế GTGT (' + (+hd.VAT || 0) + '%)', '', '', '', so(hd.TienVAT)]);
   rows.push(['', 'Tổng thanh toán', '', '', '', so(hd.TongCong)]);
