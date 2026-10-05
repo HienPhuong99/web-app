@@ -144,6 +144,7 @@ const DriveApp = {
 };
 
 const cache = new Map(), props = new Map();
+const thuMail = { da: [], henGio: [], chu: 'chu@example.com', thieuQuyen: false };
 const logs = [];
 const ctx = vm.createContext({
   console,
@@ -152,6 +153,15 @@ const ctx = vm.createContext({
   CacheService: { getScriptCache: () => ({ get: k => (cache.has(k) ? cache.get(k) : null), put: (k, v) => cache.set(k, String(v)), remove: k => cache.delete(k),
     getAll: ks => Object.fromEntries(ks.filter(k => cache.has(k)).map(k => [k, cache.get(k)])) }) },
   PropertiesService: { getScriptProperties: () => ({ getProperty: k => (props.has(k) ? props.get(k) : null), setProperty: (k, v) => { props.set(k, String(v)); } }) },
+  // Gửi mail và hẹn giờ giả: ghi lại để kiểm tra. thuMail.thieuQuyen = true giả lập chưa cấp quyền.
+  MailApp: { sendEmail: m => { if (thuMail.thieuQuyen) throw new Error('Bạn không có quyền gọi MailApp.sendEmail. Quyền cần thiết: https://www.googleapis.com/auth/script.send_mail'); thuMail.da.push(m); } },
+  ScriptApp: {
+    getProjectTriggers: () => thuMail.henGio.slice(),
+    deleteTrigger: t => { thuMail.henGio = thuMail.henGio.filter(x => x !== t); },
+    newTrigger: ham => { const t = { ham, getHandlerFunction: () => ham }; const b = { timeBased: () => b, everyDays: n => { t.moiNgay = n; return b; }, atHour: h => { t.gio = h; return b; }, inTimezone: z => { t.mui = z; return b; },
+      create: () => { if (thuMail.thieuQuyen) throw new Error('Bạn không có quyền gọi ScriptApp.newTrigger.'); thuMail.henGio.push(t); return t; } }; return b; },
+  },
+  Session: { getEffectiveUser: () => ({ getEmail: () => thuMail.chu }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
   Logger: { log: (...a) => { logs.push(a.join(' ')); console.log('[Logger]', ...a); } },
   Utilities: {
@@ -194,7 +204,7 @@ const SHIM = `window.google = { script: { get run() {
   return make({});
 } } };`;
 
-module.exports = { ctx, sheets, logs, cache, props, Sheet, drive, docs };
+module.exports = { ctx, sheets, logs, cache, props, Sheet, drive, docs, thuMail };
 if (require.main === module) http.createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/rpc') {
     let body = '';

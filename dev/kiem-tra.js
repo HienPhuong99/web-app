@@ -672,6 +672,152 @@ const fMK = G.findObj_('HopDong', hdMK.SoHD).FileId;
 assert.ok(docs.get(fMK).body.getImages().length === 1 && vanBan(fMK).includes('Chữ ký điện tử của Bên A:') && vanBan(fMK).includes('Đã ký điện tử: Khách MK'));
 G.xoaMauHopDong(admin, 'Mẫu không chỗ ký');
 
+// ===== Cải tiến (4): email tổng hợp mỗi sáng =====
+const { thuMail } = require('./chay-thu');
+const ngayTu = n => new Date(Date.parse(today) + n * 864e5).toISOString().slice(0, 10);
+G.taiDuLieu(admin); // đang ở cửa hàng phone
+assert.deepStrictEqual(plain(G.taiDuLieu(admin).emailSang), { bat: false, gio: 7, den: [] });
+assert.strictEqual(G.taiDuLieu(lan).emailSang, null); // nhân viên không thấy cấu hình
+assert.throws(() => G.luuEmailSang(lan, { bat: true, gio: 7 }), /quản trị/);
+assert.throws(() => G.luuEmailSang(admin, { bat: true, gio: 7, den: 'khong-phai-email' }), /Email không hợp lệ: khong-phai-email/);
+assert.throws(() => G.luuEmailSang(admin, { bat: true, gio: 7, den: 'a@x.com,b@x.com,c@x.com,d@x.com,e@x.com,f@x.com' }), /tối đa 5/);
+assert.throws(() => G.luuEmailSang(admin, { bat: true, gio: 3 }), /từ 5 đến 22/);
+assert.throws(() => G.luuEmailSang(admin, { bat: true }), /từ 5 đến 22/);
+assert.strictEqual(thuMail.henGio.length, 0); // lỗi nhập thì chưa đặt hẹn giờ
+// Chưa cấp quyền hẹn giờ: báo cách xử lý và hoàn lại cấu hình (chưa có khóa thì xóa khóa)
+thuMail.thieuQuyen = true;
+assert.throws(() => G.luuEmailSang(admin, { bat: true, gio: 7 }), /chạy hàm caiDat một lần/);
+thuMail.thieuQuyen = false;
+assert.ok(!sheets.CaiDat.rows.some(r => r[0] === 'emailSang.phone'), 'Lỗi hẹn giờ thì không để lại cấu hình');
+// Bật: lưu cấu hình, đúng một bộ hẹn giờ hằng ngày; email trùng gộp lại
+assert.deepStrictEqual(plain(G.luuEmailSang(admin, { bat: true, gio: '6', den: 'a@x.com, b@y.com; a@x.com' })), { bat: true, gio: 6, den: ['a@x.com', 'b@y.com'] });
+assert.deepStrictEqual(thuMail.henGio.map(t => [t.ham, t.moiNgay, t.gio, t.mui]), [['guiEmailSang', 1, 6, 'Asia/Ho_Chi_Minh']]);
+assert.deepStrictEqual(plain(G.taiDuLieu(admin).emailSang), { bat: true, gio: 6, den: ['a@x.com', 'b@y.com'] });
+G.luuEmailSang(admin, { bat: true, gio: 8, den: '' }); // đổi giờ: thay bộ hẹn giờ cũ, không nhân đôi
+assert.deepStrictEqual(thuMail.henGio.map(t => t.gio), [8]);
+thuMail.thieuQuyen = true; // chưa cấp quyền khi sửa: cấu hình cũ (giờ 8) được giữ
+assert.throws(() => G.luuEmailSang(admin, { bat: true, gio: 9 }), /chạy hàm caiDat/);
+thuMail.thieuQuyen = false;
+assert.strictEqual(G.taiDuLieu(admin).emailSang.gio, 8);
+assert.ok(sheets.CaiDat.rows.filter(r => r[0] === 'emailSang.phone').length === 1);
+G.luuEmailSang(admin, { bat: false, gio: 8 });
+assert.strictEqual(thuMail.henGio.length, 0);
+assert.ok(G.readTable_('NhatKy').some(x => x.HanhDong === 'Tắt email tổng hợp sáng') && G.readTable_('NhatKy').some(x => x.HanhDong === 'Bật email tổng hợp sáng' && /a@x\.com, b@y\.com|lúc 6 giờ/.test(x.ChiTiet)));
+
+// Dữ liệu thử: hợp đồng sắp/quá hạn, đợt thanh toán, đơn quá hạn giao, hàng sắp hết
+const tenLa = 'Công ty <A&B> "x"';
+const hdSap = G.luuHopDong(admin, { LoaiHD: 'Hợp đồng mua bán', TenDN: tenLa, TrangThai: 'Đang hiệu lực', NgayHieuLuc: ngayTu(-300), NgayHetHan: ngayTu(10), BaoTruocNgay: 20, TuGiaHan: '1', VAT: 0, lines: [] }).doc;
+const hdQua = G.luuHopDong(admin, { LoaiHD: 'Hợp đồng mua bán', TenDN: 'Khách Quá Hạn', TrangThai: 'Đang hiệu lực', NgayHetHan: ngayTu(-3), VAT: 0, lines: [] }).doc;
+const hdXa = G.luuHopDong(admin, { LoaiHD: 'Hợp đồng mua bán', TenDN: 'Khách Còn Lâu', TrangThai: 'Đang hiệu lực', NgayHetHan: ngayTu(200), VAT: 0, lines: [] }).doc;
+const hdNhap = G.luuHopDong(admin, { LoaiHD: 'Hợp đồng mua bán', TenDN: 'Khách Soạn Thảo', TrangThai: 'Soạn thảo', NgayHetHan: ngayTu(5), VAT: 0, lines: [] }).doc;
+const dhE = G.luuChungTu(admin, 'DH', { Ngay: ngayTu(-20), NgayGiao: ngayTu(-1), MaKH: 'KH00001', TenKH: 'Anh Minh', VAT: 0, lines: [{ TenHang: 'Dịch vụ E', DVT: 'Gói', SoLuong: 1, DonGia: 12000000 }] }).doc;
+const dhGiaoSau = G.luuChungTu(admin, 'DH', { Ngay: ngayTu(-2), NgayGiao: ngayTu(3), MaKH: 'KH00001', TenKH: 'Anh Minh', VAT: 0, lines: [{ TenHang: 'Dịch vụ F', DVT: 'Gói', SoLuong: 1, DonGia: 1000000 }] }).doc;
+const hdLich = G.luuHopDong(admin, { LoaiHD: 'Hợp đồng mua bán trả góp', TenDN: 'Anh Minh', MaKH: 'KH00001', SoDH: dhE.SoDH, TrangThai: 'Đang hiệu lực', VAT: 0, lines: [{ TenHang: 'Dịch vụ E', DVT: 'Gói', SoLuong: 1, DonGia: 12000000 }] }).doc;
+G.luuLichHopDong(admin, hdLich.SoHD, [{ Nhan: 'Kỳ A', NgayDen: ngayTu(-2), SoTien: 3000000 }, { Nhan: 'Kỳ B', NgayDen: ngayTu(-1), SoTien: 3000000 }, { Nhan: 'Kỳ C', NgayDen: ngayTu(5), SoTien: 3000000 }, { Nhan: 'Kỳ D', NgayDen: ngayTu(30), SoTien: 3000000 }]);
+G.thuDotHopDong(admin, hdLich.SoHD, 2, { Ngay: today, HinhThuc: 'Tiền mặt' }); // Kỳ B đã thu: không nằm trong danh sách cần thu
+const hangThap = G.luuHang(admin, { TenHang: 'Ốp thử hết', GiaLe: 100000, TonToiThieu: 5 }); // chưa có phiếu kho nhưng có mức tối thiểu
+const hangVua = G.luuHang(admin, { TenHang: 'Cáp thử còn 3', GiaLe: 100000, TonToiThieu: 5 });
+const hangDu = G.luuHang(admin, { TenHang: 'Sạc thử còn 20', GiaLe: 100000, TonToiThieu: 5 });
+const hangKhong = G.luuHang(admin, { TenHang: 'Kính thử không theo dõi', GiaLe: 100000 });
+G.luuChungTu(admin, 'NK', { Ngay: today, DoiTac: 'Nhà cung cấp thử', lines: [{ MaHH: hangVua.MaHH, TenHang: hangVua.TenHang, SoLuong: 3 }, { MaHH: hangDu.MaHH, TenHang: hangDu.TenHang, SoLuong: 20 }] });
+
+// Đơn giao một phần mà quá hẹn vẫn tính là quá hạn giao; đơn đã giao đủ thì không
+const dhMotPhan = G.luuChungTu(admin, 'DH', { Ngay: ngayTu(-10), NgayGiao: ngayTu(-2), MaKH: 'KH00001', TenKH: 'Anh Minh', VAT: 0, lines: [{ MaHH: hangDu.MaHH, TenHang: hangDu.TenHang, DVT: 'Cái', SoLuong: 2, DonGia: 100000 }] }).doc;
+const dhDaGiao = G.luuChungTu(admin, 'DH', { Ngay: ngayTu(-10), NgayGiao: ngayTu(-2), MaKH: 'KH00001', TenKH: 'Anh Minh', VAT: 0, lines: [{ MaHH: hangDu.MaHH, TenHang: hangDu.TenHang, DVT: 'Cái', SoLuong: 1, DonGia: 100000 }] }).doc;
+G.luuChungTu(admin, 'XK', { Ngay: today, SoDH: dhMotPhan.SoDH, DoiTac: 'Anh Minh', lines: [{ MaHH: hangDu.MaHH, TenHang: hangDu.TenHang, SoLuong: 1 }] });
+G.luuChungTu(admin, 'XK', { Ngay: today, SoDH: dhDaGiao.SoDH, DoiTac: 'Anh Minh', lines: [{ MaHH: hangDu.MaHH, TenHang: hangDu.TenHang, SoLuong: 1 }] });
+assert.deepStrictEqual([G.findObj_('DonHang', dhMotPhan.SoDH).TrangThai, G.findObj_('DonHang', dhDaGiao.SoDH).TrangThai], ['Giao một phần', 'Đã giao']);
+const du = plain(G.tongHopSang_(today));
+assert.ok(du.donTre.some(x => x.SoDH === dhMotPhan.SoDH) && !du.donTre.some(x => x.SoDH === dhDaGiao.SoDH));
+// Hợp đồng: đúng như hanHD_ cho từng hợp đồng, gần hạn nhất trước
+assert.deepStrictEqual(du.hopDong.map(x => x.SoHD), plain(G.readTable_('HopDong')).filter(h => G.hanHD_(h, today)).sort((a, b) => String(a.NgayHetHan).localeCompare(String(b.NgayHetHan))).map(h => h.SoHD));
+const xSap = du.hopDong.find(x => x.SoHD === hdSap.SoHD), xQua = du.hopDong.find(x => x.SoHD === hdQua.SoHD);
+assert.deepStrictEqual([xSap.het, xSap.n, xSap.bao, xSap.quyetDinh, xSap.tuGiaHan], [false, 10, 20, -10, true]);
+assert.deepStrictEqual([xQua.het, xQua.n, xQua.quyetDinh], [true, 3, null]);
+assert.ok(!du.hopDong.some(x => [hdXa.SoHD, hdNhap.SoHD].includes(x.SoHD)), 'Hợp đồng còn lâu hoặc chưa hiệu lực không có trong thư');
+assert.ok(du.hopDong.findIndex(x => x.SoHD === hdQua.SoHD) < du.hopDong.findIndex(x => x.SoHD === hdSap.SoHD)); // quá hạn trước sắp hạn
+// Đợt thanh toán: quá hạn + trong 7 ngày, bỏ đợt đã thu và đợt xa
+const dotE = du.dot.filter(x => x.SoHD === hdLich.SoHD);
+assert.deepStrictEqual(dotE.map(x => [x.Nhan, x.quaHan, x.n, x.SoTien, x.TenDN]), [['Kỳ A', true, -2, 3000000, 'Anh Minh'], ['Kỳ C', false, 5, 3000000, 'Anh Minh']]);
+assert.ok(du.dot.every((x, i, a) => !i || a[i - 1].NgayDen <= x.NgayDen));
+// Đơn quá hạn giao
+assert.ok(du.donTre.some(x => x.SoDH === dhE.SoDH && x.NgayGiao === ngayTu(-1) && x.TongCong === 12000000) && !du.donTre.some(x => x.SoDH === dhGiaoSau.SoDH));
+assert.ok(du.donTre.every(x => x.NgayGiao < today));
+// Hàng sắp hết: theo mức tối thiểu; có phiếu kho thì theo tồn; không đặt mức thì không báo (trừ khi tồn đã âm hoặc hết như màn hình Tổng quan)
+const mh = new Set(du.hang.map(x => x.MaHH)), hangMa = ma => du.hang.find(x => x.MaHH === ma);
+assert.deepStrictEqual([mh.has(hangThap.MaHH), mh.has(hangVua.MaHH), mh.has(hangDu.MaHH), mh.has(hangKhong.MaHH)], [true, true, false, false]);
+assert.deepStrictEqual([hangMa(hangThap.MaHH).ton, hangMa(hangThap.MaHH).toiThieu, hangMa(hangVua.MaHH).ton], [0, 5, 3]);
+// Công nợ khớp cách tính của màn hình Tổng quan (đã mua trừ đã thu theo khách, chỉ lấy số dương)
+const dl = G.taiDuLieu(admin), muaT = {}, thuT = {};
+dl.donHang.filter(x => x.TrangThai !== 'Hủy').forEach(x => { muaT[x.MaKH] = (muaT[x.MaKH] || 0) + (+x.TongCong || 0); });
+dl.thuTien.forEach(x => { thuT[x.MaKH] = (thuT[x.MaKH] || 0) + (+x.SoTien || 0); });
+const noT = Object.keys(Object.assign({}, muaT, thuT)).map(k => (muaT[k] || 0) - (thuT[k] || 0)).filter(v => v > 0);
+assert.deepStrictEqual([du.no.soKhach, du.no.tong], [noT.length, noT.reduce((a, b) => a + b, 0)]);
+assert.ok(du.no.top.length <= 5 && du.no.top.every((x, i, a) => !i || a[i - 1].tien >= x.tien) && du.no.top[0].TenKH);
+assert.strictEqual(du.soMuc, du.hopDong.length + du.dot.length + du.donTre.length + du.hang.length);
+assert.ok(du.coViec);
+// Hôm qua: doanh số đơn không hủy và tiền đã thu theo ngày
+assert.deepStrictEqual([du.homQua, du.homQuaBan.don >= 0, typeof du.homQuaThu], [ngayTu(-1), true, 'number']);
+const duThu = plain(G.tongHopSang_(ngayTu(1))); // ngày mai: "hôm qua" là hôm nay
+assert.strictEqual(duThu.homQuaBan.don, G.readTable_('DonHang').filter(x => x.TrangThai !== 'Hủy' && String(x.Ngay).slice(0, 10) === today).length);
+assert.strictEqual(duThu.homQuaThu, G.readTable_('ThuTien').filter(x => String(x.Ngay).slice(0, 10) === today).reduce((a, x) => a + (+x.SoTien || 0), 0));
+// Hết hạn hôm nay: còn 0 ngày
+const hdHomNay = G.luuHopDong(admin, { LoaiHD: 'Hợp đồng mua bán', TenDN: 'Hết Hôm Nay', TrangThai: 'Đang hiệu lực', NgayHetHan: today, VAT: 0, lines: [] }).doc;
+assert.ok(G.dungEmailSang_('X', plain(G.tongHopSang_(today)), false).text.includes('hết hạn hôm nay'));
+
+// Dựng thư: tiêu đề, nội dung, chống chèn mã HTML từ tên khách, rút gọn khi quá nhiều dòng
+const thu = plain(G.dungEmailSang_('Cửa hàng thử', du, false));
+assert.ok(thu.tieuDe.startsWith('[Cửa hàng thử] Tổng hợp sáng ' + today.slice(8) + '/' + today.slice(5, 7)) && thu.tieuDe.endsWith(du.soMuc + ' việc cần chú ý'), thu.tieuDe);
+assert.ok(thu.text.includes(hdSap.SoHD + ' · ' + tenLa) && thu.text.includes('đã quá hạn báo trước 10 ngày') && thu.text.includes('tự gia hạn') && thu.text.includes('Kỳ A') && thu.text.includes('quá hạn 2 ngày') && thu.text.includes('3.000.000 đ'));
+assert.ok(thu.text.includes('hẹn giao ' + ngayTu(-1).split('-').reverse().join('/')) && thu.text.includes('Ốp thử hết · tồn 0 (tối thiểu 5)') && thu.text.includes('Khách còn nợ: '));
+assert.ok(thu.html.includes('Công ty &lt;A&amp;B&gt; &quot;x&quot;') && !thu.html.includes('<A&B>') && thu.html.includes('<h3'));
+assert.ok(!/Đây là thư gửi thử/.test(thu.text) && /Đây là thư gửi thử/.test(G.dungEmailSang_('X', du, true).text));
+const nhieu = Object.assign({}, du, { hang: Array.from({ length: 13 }, (_, i) => ({ MaHH: 'H' + i, TenHang: 'Hàng ' + i, ton: 0, toiThieu: 1 })), hopDong: [], dot: [], donTre: [], soMuc: 13 });
+const tn = plain(G.dungEmailSang_('X', nhieu, false));
+assert.ok(tn.text.includes('Hàng sắp hết (13)') && tn.text.includes('Hàng 9 ·') && !tn.text.includes('Hàng 10 ·') && tn.text.includes('… và 3 mục khác'));
+assert.ok(G.dungEmailSang_('X', Object.assign({}, nhieu, { hang: [], soMuc: 0, coViec: false }), true).text.includes('chưa có việc nào cần chú ý'));
+
+// Gửi thử (quản trị): gửi ngay tới email đã nhập; chưa nhập thì tới chủ tài khoản; không có nơi nhận thì báo
+G.luuEmailSang(admin, { bat: true, gio: 7, den: 'giamdoc@example.com, ketoan@example.com' });
+thuMail.da.length = 0;
+assert.throws(() => G.guiThuEmailSang(lan), /quản trị/);
+let gui = plain(G.guiThuEmailSang(admin));
+assert.deepStrictEqual([gui.daGui, gui.den, gui.coViec, thuMail.da.length], [true, ['giamdoc@example.com', 'ketoan@example.com'], true, 1]);
+assert.deepStrictEqual([thuMail.da[0].to, thuMail.da[0].name, /Tổng hợp sáng/.test(thuMail.da[0].subject), thuMail.da[0].body.includes('Đây là thư gửi thử'), thuMail.da[0].htmlBody.includes('<div')], ['giamdoc@example.com,ketoan@example.com', G.cuaHang_('phone').ten, true, true, true]);
+G.luuEmailSang(admin, { bat: true, gio: 7, den: '' });
+assert.deepStrictEqual(plain(G.guiThuEmailSang(admin)).den, ['chu@example.com']);
+thuMail.chu = '';
+assert.throws(() => G.guiThuEmailSang(admin), /nhập email nhận/);
+thuMail.chu = 'chu@example.com';
+
+// Bộ hẹn giờ: chỉ chạy khi do bộ hẹn giờ gọi, mỗi ngày một thư, không có việc thì không gửi, lỗi gửi không làm hỏng và không đánh dấu đã gửi
+const hen = { triggerUid: 'tr-1', year: +today.slice(0, 4) };
+thuMail.da.length = 0; props.delete('emailSang.phone');
+G.guiEmailSang(); G.guiEmailSang({}); G.guiEmailSang('x');
+assert.strictEqual(thuMail.da.length, 0, 'Gọi từ trình duyệt (không phải bộ hẹn giờ) thì không gửi');
+G.guiEmailSang(hen);
+assert.deepStrictEqual([thuMail.da.length, thuMail.da[0].to, props.get('emailSang.phone'), thuMail.da[0].body.includes('Đây là thư gửi thử')], [1, 'chu@example.com', today, false]);
+G.guiEmailSang(hen);
+assert.strictEqual(thuMail.da.length, 1, 'Mỗi ngày một thư');
+props.set('emailSang.phone', ngayTu(-1)); // sang ngày mới thì gửi tiếp
+G.guiEmailSang(hen);
+assert.strictEqual(thuMail.da.length, 2);
+G.luuEmailSang(admin, { bat: false, gio: 7 });
+props.delete('emailSang.phone');
+G.guiEmailSang(hen);
+assert.strictEqual(thuMail.da.length, 2, 'Đã tắt thì không gửi');
+G.luuEmailSang(admin, { bat: true, gio: 7 });
+thuMail.thieuQuyen = true;
+G.guiEmailSang(hen);
+assert.ok(!props.get('emailSang.phone') && logs.some(l => /Không gửi được email sáng của phone/.test(l)), 'Gửi lỗi: ghi nhật ký, chưa đánh dấu đã gửi để lần sau còn thử');
+thuMail.thieuQuyen = false;
+const tongGoc = G.tongHopSang_; // không có việc gì cần chú ý: không gửi, không đánh dấu
+G.tongHopSang_ = d => Object.assign(plain(tongGoc(d)), { coViec: false, soMuc: 0 });
+thuMail.da.length = 0; G.guiEmailSang(hen);
+assert.deepStrictEqual([thuMail.da.length, props.get('emailSang.phone') || ''], [0, '']);
+G.tongHopSang_ = tongGoc;
+G.luuEmailSang(admin, { bat: false, gio: 7 });
+
 // Khóa tài khoản / quản trị đặt lại mật khẩu: phiên đang đăng nhập hết hiệu lực ngay; chỉ đổi tên thì không
 const tkLan = { TenDangNhap: 'lan.nguyen', HoTen: 'Lan', VaiTro: 'nhanvien', CuaHang: 'phone' };
 G.luuTaiKhoan(admin, Object.assign({ TrangThai: 'Khóa' }, tkLan));

@@ -325,7 +325,7 @@ table.lines { width: 100%; border-collapse: collapse; min-width: 1040px; }
 
 <script>
 // ===================== Trạng thái & tiện ích =====================
-const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], hopDong: [], hopDongLich: [], mauHD: [], loaiHD: [], nganHang: [], hd: null, ton: {},
+const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], hopDong: [], hopDongLich: [], mauHD: [], loaiHD: [], nganHang: [], emailSang: null, hd: null, ton: {},
   thongKe: { topHang: [], theoNhom: [] }, taiKhoan: null, baoHanh: null, nhatKy: null, view: 'home', loai: '', doc: null, extra: {}, dirty: false, q: {}, onNew: null };
 const D = { thuDH: {}, thuKH: {}, muaKH: {}, noKH: {}, dhBG: {} }; // số liệu suy ra: đã thu, công nợ, báo giá đã chốt
 const LG = { si: 'Giá sỉ', le: 'Giá lẻ', tuy: 'Giá tùy chọn' };
@@ -2572,7 +2572,7 @@ function vCaiDat(el) {
         : `<p class="muted" style="margin-bottom:0">Chưa bật mã QR chuyển khoản${isAdmin() ? ' – bấm Sửa, chọn ngân hàng và nhập số tài khoản.' : '.'}</p>`}
     </div></div>
   </div>
-  ${isAdmin() ? mauHDCard() : ''}
+  ${isAdmin() ? mauHDCard() + emailSangCard() : ''}
   ${ds.length > 1 ? `<details class="card adv"><summary>${icon('settings')}Nâng cao</summary><div class="card-b">
     <h4 style="margin:0 0 4px">Cửa hàng đang làm việc</h4>
     <p class="muted" style="margin:0 0 12px">Mỗi cửa hàng có khách hàng, hàng hóa, chứng từ, kho và công nợ riêng. Lần đăng nhập sau sẽ mở lại ${esc(ds[0].ten)}.</p>
@@ -2582,9 +2582,41 @@ function vCaiDat(el) {
     const a = e.target.closest('[data-act]'), sh = e.target.closest('[data-shop]');
     if (a && a.dataset.act === 'shop') openCuaHang();
     else if (a && a.dataset.act.startsWith('mau-')) await mauHDAct(a);
+    else if (a && a.dataset.act === 'es-sua') openEmailSang();
+    else if (a && a.dataset.act === 'es-thu') await guiThuEmailSang();
     else if (a) $(a.dataset.act === 'pass' ? '#btnPass' : '#btnOut').click();
     if (sh && sh.dataset.shop !== shop.id) await switchShop(sh.dataset.shop);
   });
+}
+
+// Email tổng hợp mỗi sáng (quản trị): máy chủ tự gửi các việc cần chú ý tới quản lý, không gửi cho khách
+function emailSangCard() {
+  const c = S.emailSang || { bat: false, gio: 7, den: [] };
+  return `<div class="card" style="margin-top:16px"><div class="card-h"><h3>Email tổng hợp mỗi sáng</h3>${c.bat ? badge('Đang bật · ' + c.gio + ':00 mỗi sáng', 'b-green') : badge('Đang tắt', 'b-gray')}</div><div class="card-b">
+    <p class="muted" style="margin-top:0">Mỗi sáng app tự gửi một email các việc cần chú ý: hợp đồng sắp hết hạn hoặc sắp tới hạn báo trước, đợt thanh toán đến hạn, đơn quá hạn giao, hàng sắp hết và khách còn nợ. Hôm nào không có việc gì thì không gửi. Chỉ gửi cho quản lý, không gửi cho khách. ${c.den.length ? 'Đang gửi tới: <b>' + esc(c.den.join(', ')) + '</b>.' : 'Chưa nhập email nhận thì gửi tới email của chủ tài khoản Google đã triển khai app.'}</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-act="es-sua">${icon('settings')}${c.bat ? 'Sửa cài đặt' : 'Bật email sáng'}</button><button class="btn sm" data-act="es-thu">${icon('alert')}Gửi thư thử ngay</button></div>
+  </div></div>`;
+}
+function openEmailSang() {
+  const c = S.emailSang || { bat: false, gio: 7, den: [] };
+  modal({
+    title: 'Email tổng hợp mỗi sáng',
+    body: formHtml([
+      ['bat', 'Trạng thái', { options: [['', 'Tắt'], ['1', 'Bật']] }],
+      ['gio', 'Gửi vào khoảng (giờ)', { options: Array.from({ length: 18 }, (_, i) => [5 + i, (5 + i) + ':00']) }],
+      ['den', 'Email nhận (cách nhau dấu phẩy, tối đa 5)', { full: true, ph: 'Để trống = gửi tới chủ tài khoản Google đã triển khai app' }],
+    ], { bat: c.bat ? '1' : '', gio: c.gio, den: c.den.join(', ') })
+      + '<p class="muted">Thư có tên và số điện thoại khách còn nợ, chỉ nhập email của người trong cửa hàng. Google gửi trong khoảng một giờ quanh giờ đã chọn. Lần đầu bật có thể cần chạy lại hàm caiDat trong Apps Script để cấp quyền gửi email và hẹn giờ (xem HUONG_DAN.md).</p>',
+    buttons: [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', save: true, fn: run(async m => {
+      const d = formData(m);
+      S.emailSang = await api('luuEmailSang', { bat: !!d.bat, gio: d.gio, den: d.den });
+      closeModal(); render(); toast(S.emailSang.bat ? 'Đã bật email tổng hợp lúc ' + S.emailSang.gio + ':00 mỗi sáng.' : 'Đã tắt email tổng hợp mỗi sáng.');
+    }) }],
+  });
+}
+async function guiThuEmailSang() {
+  const r = await api('guiThuEmailSang');
+  toast('Đã gửi thư thử tới ' + r.den.join(', ') + '. Nếu không thấy, kiểm tra mục Spam.');
 }
 
 // Mẫu hợp đồng (quản trị): mỗi loại hợp đồng một file Google Docs mẫu

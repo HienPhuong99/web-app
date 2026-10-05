@@ -450,6 +450,35 @@ module.exports = BUOC => {
     await page.waitForFunction(() => !S.dirty, null, { timeout: 8000 });
   }]);
 
+  BUOC.push(['Cài đặt: email tổng hợp mỗi sáng (bật, kiểm tra nhập, gửi thử, tắt)', async page => {
+    await page.click('#nav a[data-go="caidat"]');
+    const the = page.locator('.card:has-text("Email tổng hợp mỗi sáng")');
+    await the.waitFor();
+    assert.ok(/Đang tắt/.test(await the.textContent()));
+    await the.locator('[data-act="es-thu"]').click();
+    await page.waitForSelector('#toast:has-text("Đã gửi thư thử tới chu@example.com")');
+    await the.locator('[data-act="es-sua"]').click();
+    await page.waitForSelector('#modal [name=den]');
+    await page.selectOption('#modal [name=bat]', '1');
+    await page.selectOption('#modal [name=gio]', '6');
+    await page.fill('#modal [name=den]', 'khong-phai-email');
+    await page.click('#modal [data-save]');
+    await page.waitForSelector('#toast .err:has-text("Email không hợp lệ")');
+    await page.fill('#modal [name=den]', 'quanly@example.com, ketoan@example.com');
+    await page.click('#modal [data-save]');
+    await page.waitForSelector('#modal', { state: 'hidden' });
+    await page.waitForSelector('.card:has-text("Đang bật · 6:00 mỗi sáng")');
+    assert.ok(/quanly@example\.com, ketoan@example\.com/.test(await the.textContent()));
+    assert.deepStrictEqual(await page.evaluate(() => S.emailSang), { bat: true, gio: 6, den: ['quanly@example.com', 'ketoan@example.com'] });
+    await shot(page, 'hd-16-email-sang');
+    await the.locator('[data-act="es-sua"]').click();
+    await page.selectOption('#modal [name=bat]', '');
+    await page.click('#modal [data-save]');
+    await page.waitForSelector('#modal', { state: 'hidden' });
+    await page.waitForSelector('.card:has-text("Đang tắt")');
+    assert.strictEqual(await page.evaluate(() => S.emailSang.bat), false);
+  }]);
+
   BUOC.push(['Hợp đồng: màn hình điện thoại không tràn ngang', async page => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => newHD());
