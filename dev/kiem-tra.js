@@ -249,7 +249,8 @@ assert.strictEqual(G.luuHopDong(lan, Object.assign({}, hdMau, { lines: [] })).do
 const hdRow = sheets.PS_HopDong.rows.findIndex(r => r[0] === hd.SoHD), cols = sheets.PS_HopDong.rows[0];
 sheets.PS_HopDong.rows[hdRow][cols.indexOf('FileId')] = 'id-that'; sheets.PS_HopDong.rows[hdRow][cols.indexOf('LinkFile')] = 'https://docs.google.com/document/d/id-that';
 const sua1 = G.luuHopDong(lan, Object.assign({}, hd, { NguoiTao: 'ai đó', LinkFile: 'https://evil.example', lines: [{ TenHang: 'Thép D16', DVT: 'Tấn', SoLuong: 2, DonGia: 15000000 }] })).doc;
-assert.deepStrictEqual([sua1.SoHD, sua1.NguoiTao, sua1.FileId, sua1.LinkFile, sua1.TongCong], [hd.SoHD, 'Quản trị', 'id-that', 'https://docs.google.com/document/d/id-that', 33000000]);
+assert.deepStrictEqual([sua1.SoHD, sua1.NguoiTao, sua1.FileId, sua1.LinkFile, sua1.TongCong], [hd.SoHD, 'Quản trị', '1', '', 33000000]); // nhân viên chỉ thấy cờ đã có file
+assert.deepStrictEqual([G.findObj_('HopDong', hd.SoHD).FileId, G.findObj_('HopDong', hd.SoHD).LinkFile], ['id-that', 'https://docs.google.com/document/d/id-that']); // file thật vẫn giữ nguyên trong Sheet
 assert.strictEqual(rowsOf('PS_HopDongCT', hd.SoHD).length, 1);
 assert.strictEqual(rowsOf('PS_HopDongCT', '002-2026/HD').length, 3);
 
@@ -275,6 +276,7 @@ assert.ok(plain(G.dsNhatKy(admin)).some(x => x.HanhDong === 'Thêm hợp đồng
 
 // ===== Hợp đồng (GĐ3): file Google Docs từ mẫu =====
 const vanBan = id => docs.get(id).body.getText();
+const idDe = r => G.findObj_('HopDong', r.doc.SoHD).FileId; // mã file thật lấy thẳng từ Sheet: nhân viên chỉ nhận cờ "đã có file" ('1'), không nhận mã/link Drive
 const bangTrong = id => docs.get(id).body.children.filter(c => c.getType() === 'TABLE');
 const tenThuMuc = id => (drive.folders.get(drive.files.get(id).folder) || {}).name;
 // Bộ mẫu mặc định cho ngành điện thoại: 5 loại, tự tạo trong thư mục Drive của cửa hàng, chỉ dùng biến app biết
@@ -296,8 +298,8 @@ const hdKho = G.luuHopDong(lan, { LoaiHD: 'Hợp đồng mua bán', TenDN: 'Côn
   Ngay: '2026-01-25', NgayHieuLuc: '2026-02-01', NgayHetHan: '2027-01-31', VAT: 10, GhiChu: 'Giao trong tuần $&', lines: hdLines }).doc;
 assert.throws(() => G.taiPdfHopDong(lan, hdKho.SoHD), /chưa có file/);
 const f1 = plain(G.taoFileHopDong(lan, hdKho.SoHD));
-const id1 = f1.doc.FileId, vb1 = vanBan(id1);
-assert.deepStrictEqual([f1.conSot, f1.doc.FileCu, /^https:\/\/docs\.google\.com\/document\/d\//.test(f1.doc.LinkFile), G.findObj_('HopDong', hdKho.SoHD).FileId], [[], '', true, id1]);
+const id1 = idDe(f1), vb1 = vanBan(id1);
+assert.deepStrictEqual([f1.conSot, f1.doc.FileCu, f1.doc.FileId, f1.doc.LinkFile, /^https:\/\/docs\.google\.com\/document\/d\//.test(G.findObj_('HopDong', hdKho.SoHD).LinkFile)], [[], '', '1', '', true]);
 assert.ok(!vb1.includes('{{'), 'còn biến chưa thay: ' + (vb1.match(/\{\{[^}]*\}\}/g) || []));
 assert.ok(vb1.includes('Số: ' + hdKho.SoHD) && vb1.includes('ngày 25 tháng 01 năm 2026') && vb1.includes('từ ngày 01/02/2026 đến hết ngày 31/01/2027'));
 assert.ok(vb1.includes('Tên đơn vị / cá nhân: Công ty $1 & \\2 "Test" B_STK'), 'tên khách có $, \\ phải giữ nguyên, dấu {{ }} bị bỏ'); // không bị hiểu thành nhóm bắt $1, $&
@@ -319,8 +321,9 @@ assert.strictEqual(G.luuHopDong(lan, hdTT).doc.FileCu, ''); // đổi trạng th
 assert.strictEqual(G.luuHopDong(lan, Object.assign({}, hdTT, { DiaChi: '12 Lê Lợi' })).doc.FileCu, '1');
 assert.strictEqual(G.luuHopDong(lan, Object.assign({}, hdTT, { DiaChi: '12 Lê Lợi', TrangThai: 'Tạm dừng' })).doc.FileCu, '1'); // đã cũ thì vẫn cũ
 const f2 = plain(G.taoFileHopDong(lan, hdKho.SoHD));
-assert.deepStrictEqual([f2.doc.FileCu, f2.doc.FileId !== id1, drive.files.get(id1).trashed, !!drive.files.get(f2.doc.FileId).trashed], ['', true, true, false]);
-assert.ok(vanBan(f2.doc.FileId).includes('Địa chỉ: 12 Lê Lợi'));
+const id2 = idDe(f2);
+assert.deepStrictEqual([f2.doc.FileCu, id2 !== id1, drive.files.get(id1).trashed, !!drive.files.get(id2).trashed], ['', true, true, false]);
+assert.ok(vanBan(id2).includes('Địa chỉ: 12 Lê Lợi'));
 assert.deepStrictEqual([...drive.folders.values()].filter(f => f.name.startsWith('Hợp đồng - ')).map(f => f.name), ['Hợp đồng - phuonghihi']); // dùng lại một thư mục
 
 // PDF: tải về dạng base64
@@ -331,7 +334,7 @@ assert.ok(pdfByte.startsWith('%PDF') && pdfByte.includes('Địa chỉ: 12 Lê L
 
 // Hợp đồng không có hàng: dòng bảng hàng được thay bằng ghi chú, không chèn bảng
 const hdKhong = G.luuHopDong(lan, { LoaiHD: 'Hợp đồng nguyên tắc', TenDN: 'Đại lý Một', lines: [] }).doc;
-const vbKhong = vanBan(G.taoFileHopDong(lan, hdKhong.SoHD).doc.FileId);
+const vbKhong = vanBan(idDe(G.taoFileHopDong(lan, hdKhong.SoHD)));
 assert.ok(vbKhong.includes('(Theo báo giá, đơn đặt hàng hoặc phụ lục từng lần)') && !vbKhong.includes('{{') && vbKhong.includes('kể từ ngày ký'));
 assert.strictEqual(bangTrong(G.findObj_('HopDong', hdKhong.SoHD).FileId).length, 1); // chỉ còn bảng chữ ký
 
@@ -352,17 +355,21 @@ assert.ok(dsMau.loaiHD.includes('Hợp đồng thử') && dsMau.mauHD.length ===
 const hdThu = G.luuHopDong(lan, { LoaiHD: 'Hợp đồng thử', TenDN: 'Khách Thử', lines: hdLines }).doc;
 const rThu = plain(G.taoFileHopDong(lan, hdThu.SoHD));
 assert.deepStrictEqual(rThu.conSot, ['{{BIEN_LA}}']);
-assert.ok(vanBan(rThu.doc.FileId).includes('Kính gửi Khách Thử - {{BIEN_LA}}')); // biến lạ giữ nguyên để người dùng thấy và sửa mẫu
-assert.strictEqual(bangTrong(rThu.doc.FileId).length, 1); // mẫu có {{BANGHANG}} giữa đoạn chữ: bảng chèn trước đoạn đó
+assert.ok(vanBan(idDe(rThu)).includes('Kính gửi Khách Thử - {{BIEN_LA}}')); // biến lạ giữ nguyên để người dùng thấy và sửa mẫu
+assert.strictEqual(bangTrong(idDe(rThu)).length, 1); // mẫu có {{BANGHANG}} giữa đoạn chữ: bảng chèn trước đoạn đó
 G.xoaMauHopDong(admin, 'Hợp đồng thử');
 assert.throws(() => G.taoFileHopDong(lan, hdThu.SoHD), /chưa có file mẫu/);
 assert.throws(() => G.xoaMauHopDong(lan, 'Hợp đồng mua bán'), /quản trị/);
 
-// Mẫu mặc định bị xóa thì tự tạo lại khi cần; quản trị tạo lại được bằng một nút
-G.xoaMauHopDong(admin, 'Hợp đồng đại lý – phân phối');
-assert.ok(!G.readTable_('MauHopDong').some(m => m.LoaiHD === 'Hợp đồng đại lý – phân phối'));
+// Quản trị xóa một mẫu mặc định thì app tôn trọng (không tự tạo lại); hợp đồng cũ thuộc loại đó báo thiếu mẫu; "Tạo lại mẫu mặc định" khôi phục
 const hdDL = G.luuHopDong(lan, { LoaiHD: 'Hợp đồng đại lý – phân phối', TenDN: 'Đại lý Hai', lines: [] }).doc;
-assert.ok(vanBan(G.taoFileHopDong(lan, hdDL.SoHD).doc.FileId).includes('HỢP ĐỒNG ĐẠI LÝ – PHÂN PHỐI') && G.readTable_('MauHopDong').length === 5);
+G.xoaMauHopDong(admin, 'Hợp đồng đại lý – phân phối');
+assert.ok(!G.readTable_('MauHopDong').some(m => m.LoaiHD === 'Hợp đồng đại lý – phân phối') && !G.taiDuLieu(lan).loaiHD.includes('Hợp đồng đại lý – phân phối'));
+assert.throws(() => G.taoFileHopDong(lan, hdDL.SoHD), /chưa có file mẫu/);
+assert.throws(() => G.luuHopDong(lan, { LoaiHD: 'Hợp đồng đại lý – phân phối', TenDN: 'Đại lý Ba', lines: [] }), /chưa có mẫu/); // loại đã xóa không lập mới được
+assert.strictEqual(G.luuHopDong(lan, Object.assign({}, hdDL, { GhiChu: 'sửa' })).doc.TrangThai, 'Soạn thảo'); // hợp đồng cũ vẫn sửa được khi giữ nguyên loại
+assert.deepStrictEqual(plain(G.taoMauMacDinh(admin).moi), ['Hợp đồng đại lý – phân phối']);
+assert.ok(vanBan(idDe(G.taoFileHopDong(lan, hdDL.SoHD))).includes('HỢP ĐỒNG ĐẠI LÝ – PHÂN PHỐI') && G.readTable_('MauHopDong').length === 5);
 G.xoaMauHopDong(admin, 'Hợp đồng thu cũ đổi mới');
 assert.throws(() => G.taoMauMacDinh(lan), /quản trị/);
 assert.deepStrictEqual([plain(G.taoMauMacDinh(admin).moi), plain(G.taoMauMacDinh(admin).moi)], [['Hợp đồng thu cũ đổi mới'], []]);
@@ -373,6 +380,29 @@ const tuKiem = plain(G.kiemTraTaoHopDong());
 assert.strictEqual(tuKiem.ok, true, JSON.stringify(tuKiem.kq.filter(x => !x[1])));
 assert.ok(tuKiem.kq.length >= 7 && sheets.PS_HopDong.rows.length === soHDtruoc);
 assert.strictEqual([...drive.files.values()].filter(f => !f.trashed).length, soFileTruoc); // file thử đã vào thùng rác
+
+// Khóa hợp đồng đã ký: nhân viên không vòng qua được bằng cách đưa về Soạn thảo; Tạm dừng cũng là đã ký
+const hdKy = G.luuHopDong(lan, { LoaiHD: 'Hợp đồng mua bán', TenDN: 'Khách Ký', VAT: 0, TrangThai: 'Đang hiệu lực', lines: [{ TenHang: 'Máy A', SoLuong: 1, DonGia: 1000000 }] }).doc;
+assert.throws(() => G.luuHopDong(lan, Object.assign({}, hdKy, { TrangThai: 'Soạn thảo' })), /không đưa về Soạn thảo/);
+const hdTamDung = G.luuHopDong(lan, Object.assign({}, hdKy, { TrangThai: 'Tạm dừng' })).doc;
+assert.throws(() => G.luuHopDong(lan, Object.assign({}, hdTamDung, { lines: [{ TenHang: 'Máy A', SoLuong: 1, DonGia: 1 }] })), /đã hiệu lực/);
+assert.strictEqual(G.luuHopDong(admin, Object.assign({}, hdTamDung, { TrangThai: 'Soạn thảo', lines: [{ TenHang: 'Máy A', SoLuong: 1, DonGia: 2000000 }] })).doc.TongCong, 2000000); // quản trị làm được
+// Nhân viên chỉ thấy cờ đã có file; link mẫu chỉ gửi cho quản trị
+const soCoFile = G.taiDuLieu(lan).hopDong.find(h => h.SoHD === hdKhong.SoHD), soCoFileQT = G.taiDuLieu(admin).hopDong.find(h => h.SoHD === hdKhong.SoHD);
+assert.deepStrictEqual([soCoFile.FileId, soCoFile.LinkFile, soCoFileQT.FileId.length > 5, /^https:/.test(soCoFileQT.LinkFile)], ['1', '', true, true]);
+assert.deepStrictEqual([G.taiDuLieu(lan).mauHD.length, G.taiDuLieu(admin).mauHD.length, G.taiDuLieu(lan).loaiHD.length], [0, 5, 5]);
+// Đổi người phụ trách (có trong file) làm file cũ; người khác sửa trong lúc đang tạo file thì file cũng được coi là cũ
+const hdPT = G.luuHopDong(lan, { LoaiHD: 'Hợp đồng mua bán', TenDN: 'Khách PT', NguoiPhuTrach: 'Linh', lines: [] }).doc;
+G.taoFileHopDong(lan, hdPT.SoHD);
+assert.strictEqual(G.luuHopDong(lan, Object.assign({}, hdPT, { NguoiPhuTrach: 'An' })).doc.FileCu, '1');
+G.taoFileHopDong(lan, hdPT.SoHD);
+assert.strictEqual(G.findObj_('HopDong', hdPT.SoHD).FileCu, '');
+let daSua = false;
+drive.khiSao = () => { if (!daSua) { daSua = true; G.luuHopDong(admin, Object.assign({}, G.findObj_('HopDong', hdPT.SoHD), { DiaChi: 'Sửa giữa chừng', lines: [] })); } }; // giả lập người khác lưu trong lúc Google đang chép mẫu
+assert.strictEqual(plain(G.taoFileHopDong(lan, hdPT.SoHD)).doc.FileCu, '1');
+drive.khiSao = null;
+assert.strictEqual(G.findObj_('HopDong', hdPT.SoHD).FileCu, '1');
+assert.strictEqual(plain(G.taoFileHopDong(lan, hdPT.SoHD)).doc.FileCu, '');
 
 // Chưa cấp quyền Google Docs/Drive: báo rõ cách xử lý, app vẫn mở và lưu hợp đồng bình thường
 assert.deepStrictEqual(plain(G.taoMauMacDinh(admin).moi), []); // đủ 5 mẫu: không cần gọi Google nên không đòi quyền
@@ -386,16 +416,16 @@ assert.strictEqual(G.luuHopDong(lan, Object.assign({}, hdTT, { GhiChu: 'vẫn l�
 G.caiDat(); // caiDat không vỡ khi thiếu quyền (chỉ ghi nhật ký thực thi)
 drive.thieuQuyen = false;
 assert.deepStrictEqual(plain(G.taoMauMacDinh(admin).moi), ['Hợp đồng nguyên tắc']);
-assert.ok(G.findObj_('HopDong', hdKho.SoHD).FileId === f2.doc.FileId); // lần tạo hỏng không làm mất file đang có
+assert.ok(G.findObj_('HopDong', hdKho.SoHD).FileId === id2); // lần tạo hỏng không làm mất file đang có
 
 // Xóa hợp đồng đưa file vào thùng rác; mỗi cửa hàng có mẫu và thư mục riêng
 G.xoaHopDong(admin, hdKho.SoHD);
-assert.strictEqual(drive.files.get(f2.doc.FileId).trashed, true);
+assert.strictEqual(drive.files.get(id2).trashed, true);
 G.chonCuaHang(admin, 'demo');
 const hdDemo = G.luuHopDong(admin, Object.assign({}, hdMau, { TenDN: 'Khách demo' })).doc;
 assert.strictEqual(G.readTable_('MauHopDong').length, 0);
 const fDemo = G.taoFileHopDong(admin, hdDemo.SoHD).doc.FileId;
-assert.deepStrictEqual([G.readTable_('MauHopDong').length, tenThuMuc(fDemo), vanBan(fDemo).includes('CÔNG TY THỬ')], [1, 'Hợp đồng - Cửa hàng thử', true]);
+assert.deepStrictEqual([G.readTable_('MauHopDong').length, tenThuMuc(fDemo), vanBan(fDemo).includes('CÔNG TY THỬ')], [5, 'Hợp đồng - Cửa hàng thử', true]); // chưa có mẫu nào: tạo đủ bộ mặc định lần đầu dùng
 G.chonCuaHang(admin, 'phone');
 assert.ok(plain(G.dsNhatKy(admin)).some(x => x.HanhDong === 'Tạo file hợp đồng') && plain(G.dsNhatKy(admin)).some(x => x.HanhDong === 'Tạo lại file hợp đồng'));
 
@@ -414,8 +444,9 @@ assert.strictEqual(G.findObj_('HopDong', hdNguon.SoHD).TrangThai, 'Đang hiệu 
 // có tạo file: ra file đúng mẫu của loại mới, bảng hàng đúng
 const nb2 = plain(G.nhanBanHopDong(lan, hdNguon.SoHD, 'Hợp đồng đại lý – phân phối', true));
 assert.ok(nb2.doc.FileId && !nb2.loiFile && nb2.conSot.length === 0);
-assert.ok(vanBan(nb2.doc.FileId).includes('HỢP ĐỒNG ĐẠI LÝ – PHÂN PHỐI') && vanBan(nb2.doc.FileId).includes('Số: ' + nb2.doc.SoHD) && vanBan(nb2.doc.FileId).includes('Công ty Nguồn'));
-assert.ok(JSON.stringify(bangTrong(nb2.doc.FileId).map(t => t.rows.map(r => r.map(c => c.getText())))).includes('60.912.000'));
+const idNb2 = idDe(nb2);
+assert.ok(vanBan(idNb2).includes('HỢP ĐỒNG ĐẠI LÝ – PHÂN PHỐI') && vanBan(idNb2).includes('Số: ' + nb2.doc.SoHD) && vanBan(idNb2).includes('Công ty Nguồn'));
+assert.ok(JSON.stringify(bangTrong(idNb2).map(t => t.rows.map(r => r.map(c => c.getText())))).includes('60.912.000'));
 // không đổi loại: giữ loại gốc; đơn hàng gốc đã bị xóa thì không gắn nữa; nhân viên cũng nhân bản được
 const dhTam = G.luuChungTu(admin, 'DH', { Ngay: today, MaKH: 'KH00001', TenKH: 'Anh Minh', VAT: 0, lines: [{ TenHang: 'x', SoLuong: 1, DonGia: 1 }] }).doc;
 const hdTheoDon = G.luuHopDong(lan, Object.assign({}, hdMau, { SoDH: dhTam.SoDH })).doc;
@@ -428,8 +459,9 @@ drive.thieuQuyen = true;
 const nb4 = plain(G.nhanBanHopDong(lan, hdNguon.SoHD, '', true));
 drive.thieuQuyen = false;
 assert.ok(G.findObj_('HopDong', nb4.doc.SoHD) && /chưa được cấp quyền/.test(nb4.loiFile) && !nb4.doc.FileId);
-const nb5 = plain(G.nhanBanHopDong(lan, hdNguon.SoHD, 'Loại chưa có mẫu', true));
-assert.ok(G.findObj_('HopDong', nb5.doc.SoHD) && /chưa có file mẫu/.test(nb5.loiFile));
+const soHDtruocNb5 = sheets.PS_HopDong.rows.length;
+assert.throws(() => G.nhanBanHopDong(lan, hdNguon.SoHD, 'Loại chưa có mẫu', true), /chưa có mẫu/); // loại không có mẫu bị chặn ngay lúc lập, không đẻ ra hợp đồng không tạo được file
+assert.strictEqual(sheets.PS_HopDong.rows.length, soHDtruocNb5);
 assert.ok(plain(G.dsNhatKy(admin)).some(x => x.HanhDong === 'Thêm hợp đồng' && x.DoiTuong === nb2.doc.SoHD));
 
 // Khóa tài khoản / quản trị đặt lại mật khẩu: phiên đang đăng nhập hết hiệu lực ngay; chỉ đổi tên thì không

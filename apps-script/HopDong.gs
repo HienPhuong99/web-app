@@ -7,18 +7,24 @@
 // ===== Dữ liệu hợp đồng =====
 // Trạng thái lưu: HD_TRANG_THAI; "Sắp hết hạn"/"Đã hết hạn" tính từ NgayHetHan, không lưu.
 const HD_TRANG_THAI = ['Soạn thảo', 'Đang hiệu lực', 'Tạm dừng', 'Hoàn thành'];
-const HD_DA_KY = ['Đang hiệu lực', 'Hoàn thành']; // đã ký: nhân viên không đổi hàng và số tiền, chỉ quản trị
+const HD_DA_KY = ['Đang hiệu lực', 'Hoàn thành', 'Tạm dừng']; // đã ký (mọi trạng thái trừ Soạn thảo): nhân viên không đổi hàng và số tiền, không đưa về Soạn thảo; chỉ quản trị
 // Các cột có mặt trong file hợp đồng: đổi một trong số này (hoặc dòng hàng) sau khi tạo file thì file đã cũ (FileCu = '1')
-const HD_TRONG_FILE = ['Ngay', 'LoaiHD', 'SoDH', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang', 'NgayHieuLuc', 'NgayHetHan', 'VAT', 'GhiChu'];
+const HD_TRONG_FILE = ['Ngay', 'LoaiHD', 'SoDH', 'NguoiPhuTrach', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang', 'NgayHieuLuc', 'NgayHetHan', 'VAT', 'GhiChu'];
 
-function loaiHopDong_() {
-  const ds = readTable_('MauHopDong').map(m => String(m.LoaiHD)).filter(Boolean);
+function loaiHopDong_(mau) { // mau = các dòng MauHopDong đã đọc sẵn (đỡ đọc Sheet lại)
+  const ds = (mau || readTable_('MauHopDong')).map(m => String(m.LoaiHD)).filter(Boolean);
   return ds.length ? ds : HD_LOAI_MAC_DINH.map(l => l.ten);
 }
 
 function layHopDong(token, soHD) {
   user_(token);
   return { lines: dongHopDong_(soHD) };
+}
+// Nhân viên chỉ cần biết hợp đồng đã có file hay chưa (không mở được Drive): giấu mã và link file
+function hdChoUser_(user, hd) { return user.vaiTro === 'admin' ? hd : Object.assign({}, hd, { FileId: hd.FileId ? '1' : '', LinkFile: '' }); }
+// Nội dung hợp đồng xuất hiện trong file Docs (các trường HD_TRONG_FILE + dòng hàng): so hai bản để biết file có cũ không
+function noiDungHD_(hd, lines) {
+  return JSON.stringify([HD_TRONG_FILE.map(k => String(hd[k] == null ? '' : hd[k])), lines.map(l => [String(l.MaHH), String(l.TenHang), String(l.DVT), +l.SoLuong, +l.DonGia])]);
 }
 function dongHopDong_(soHD) {
   return readTable_('HopDongCT').filter(l => String(l.SoHD) === String(soHD)).sort((a, b) => a.STT - b.STT);
@@ -60,14 +66,16 @@ function luuHopDong(token, doc) {
     const old = head.SoHD ? findObj_('HopDong', head.SoHD) : null;
     if (head.SoHD && !old) throw new Error('Không tìm thấy hợp đồng ' + head.SoHD + ' (có thể đã bị xóa).');
     if (head.SoDH && !findObj_('DonHang', head.SoDH)) throw new Error('Không tìm thấy đơn hàng ' + head.SoDH + '.');
+    if (!(old && old.LoaiHD === head.LoaiHD) && !loaiHopDong_().includes(head.LoaiHD)) throw new Error('Loại hợp đồng "' + head.LoaiHD + '" chưa có mẫu. Chọn loại khác, hoặc quản trị thêm ở Cài đặt → Mẫu hợp đồng.');
     const khoa = ls => JSON.stringify(ls.map(l => [String(l.MaHH), String(l.TenHang), String(l.DVT), +l.SoLuong, +l.DonGia]));
     const cu = old ? dongHopDong_(head.SoHD) : [];
-    if (old && HD_DA_KY.includes(old.TrangThai) && user.vaiTro !== 'admin' && (khoa(cu) !== khoa(lines) || +old.VAT !== head.VAT)) {
-      throw new Error('Hợp đồng đã hiệu lực: chỉ quản trị được sửa hàng hóa và số tiền. Có thay đổi thì nhân bản thành hợp đồng mới.');
+    if (old && HD_DA_KY.includes(old.TrangThai) && user.vaiTro !== 'admin') {
+      if (head.TrangThai === HD_TRANG_THAI[0]) throw new Error('Hợp đồng đã ký không đưa về Soạn thảo được (chỉ quản trị). Cần thay đổi thì nhân bản thành hợp đồng mới.');
+      if (khoa(cu) !== khoa(lines) || +old.VAT !== head.VAT) throw new Error('Hợp đồng đã hiệu lực: chỉ quản trị được sửa hàng hóa và số tiền. Có thay đổi thì nhân bản thành hợp đồng mới.');
     }
     if (!old) { head.NguoiTao = user.ten; head.NgayTao = head.NgaySua; }
     // File Docs đã tạo mà nội dung hợp đồng vừa đổi thì đánh dấu file cũ (giao diện sẽ tạo lại trước khi tải PDF)
-    const doiNoiDung = old && (HD_TRONG_FILE.some(k => String(old[k] == null ? '' : old[k]) !== String(head[k])) || khoa(cu) !== khoa(lines));
+    const doiNoiDung = old && noiDungHD_(old, cu) !== noiDungHD_(head, lines);
     head.FileCu = old && old.FileId && (doiNoiDung || old.FileCu === '1') ? '1' : '';
     upsert_('HopDong', head, () => nextSo_('HopDong', 'HD', head.Ngay), ['NguoiTao', 'NgayTao', 'FileId', 'LinkFile', 'NgayFile']);
     deleteWhere_('HopDongCT', head.SoHD);
@@ -78,7 +86,7 @@ function luuHopDong(token, doc) {
     }
     log_(user, (old ? 'Sửa' : 'Thêm') + ' hợp đồng', head.SoHD, head.TenDN + ' · ' + head.LoaiHD + ' · ' + head.TongCong + ' đ');
     head.lines = lines;
-    return { doc: head };
+    return { doc: hdChoUser_(user, head) };
   });
 }
 
@@ -280,47 +288,47 @@ const HD_LOAI_MAC_DINH = [
   { ten: 'Hợp đồng dịch vụ sửa chữa – bảo hành', moTa: 'Nhận máy sửa chữa/bảo hành: tình trạng máy, chi phí, thời gian, bảo hành sau sửa.', mau: HD_MAU_SUA_CHUA },
 ];
 
-// Dựng nội dung mẫu vào file Google Docs mới
+// Dựng nội dung mẫu vào file Google Docs mới. Mỗi đoạn đặt tường minh toàn bộ định dạng (phông, cỡ, đậm, nghiêng, căn lề, thụt lề) trong một lần gọi,
+// không dựa vào việc đoạn mới có thừa hưởng kiểu của đoạn trước hay không.
 function dungMau_(doc, muc) {
-  const body = doc.getBody(), A = DocumentApp.HorizontalAlignment;
+  const body = doc.getBody(), A = DocumentApp.HorizontalAlignment, AT = DocumentApp.Attribute;
   body.setMarginTop(57); body.setMarginBottom(57); body.setMarginLeft(85); body.setMarginRight(57); // 2cm trên/dưới/phải, 3cm trái (chuẩn văn bản hành chính)
   let dieu = 0;
-  const them = (text, canh, dam, nghieng, thut) => {
-    const p = body.appendParagraph(text);
-    p.setAlignment(canh).setSpacingAfter(6);
-    if (thut) p.setIndentStart(18);
-    const t = p.editAsText();
-    if (dam) t.setBold(true);
-    if (nghieng) t.setItalic(true);
+  const them = (text, canh, o) => {
+    o = o || {};
+    const p = body.appendParagraph(text), st = {};
+    st[AT.FONT_FAMILY] = 'Times New Roman'; st[AT.FONT_SIZE] = o.co || 13; st[AT.BOLD] = !!o.dam; st[AT.ITALIC] = !!o.nghieng; st[AT.UNDERLINE] = false;
+    st[AT.HORIZONTAL_ALIGNMENT] = canh; st[AT.SPACING_AFTER] = 6; st[AT.INDENT_START] = o.thut ? 18 : 0; st[AT.INDENT_FIRST_LINE] = 0;
+    p.setAttributes(st);
     return p;
   };
   muc.forEach(m => {
     const k = m[0];
-    if (k === 'cb') them(m[1], A.CENTER, true);
+    if (k === 'cb') them(m[1], A.CENTER, { dam: true });
     else if (k === 'c') them(m[1], A.CENTER);
-    else if (k === 'tt') { const p = them(m[1], A.CENTER, true); p.editAsText().setFontSize(15); }
-    else if (k === 'ci') them(m[1], A.JUSTIFY, false, true);
+    else if (k === 'tt') them(m[1], A.CENTER, { dam: true, co: 15 });
+    else if (k === 'ci') them(m[1], A.JUSTIFY, { nghieng: true });
     else if (k === 'p') them(m[1], A.JUSTIFY);
-    else if (k === 'li') them('- ' + m[1], A.JUSTIFY, false, false, true);
-    else if (k === 'h') them(m[1], A.LEFT, true);
-    else if (k === 'dieu') them('Điều ' + (++dieu) + '. ' + m[1], A.LEFT, true);
+    else if (k === 'li') them('- ' + m[1], A.JUSTIFY, { thut: true });
+    else if (k === 'h') them(m[1], A.LEFT, { dam: true });
+    else if (k === 'dieu') them('Điều ' + (++dieu) + '. ' + m[1], A.LEFT, { dam: true });
     else if (k === 'bl') them('', A.LEFT);
     else if (k === 'bang') them('{{BANGHANG}}', A.LEFT);
     else if (k === 'kv') { const p = them(m[1] + m[2], A.LEFT); p.editAsText().setBold(0, m[1].length - 1, true); }
     else if (k === 'ky') {
       const t = body.appendTable([[m[1], m[2]], ['(Ký, ghi rõ họ tên, đóng dấu)', '(Ký, ghi rõ họ tên, đóng dấu)']]);
-      t.setBorderWidth(0);
+      const kieu = {}; kieu[AT.FONT_FAMILY] = 'Times New Roman'; kieu[AT.FONT_SIZE] = 13;
+      t.setAttributes(kieu); t.setBorderWidth(0);
       [0, 1].forEach(r => [0, 1].forEach(c => { const cell = t.getCell(r, c); cell.getChild(0).asParagraph().setAlignment(A.CENTER); if (r === 0) cell.editAsText().setBold(true); }));
     }
   });
   const dau = body.getChild(0); // đoạn trống có sẵn ở đầu file mới
   if (dau.getType() === DocumentApp.ElementType.PARAGRAPH && !dau.asParagraph().getText()) dau.asParagraph().removeFromParent();
-  const kieu = {}; kieu[DocumentApp.Attribute.FONT_FAMILY] = 'Times New Roman'; kieu[DocumentApp.Attribute.FONT_SIZE] = 13;
-  body.setAttributes(kieu);
 }
 
 // ===== Tạo file hợp đồng từ mẫu =====
 const HD_TRONG = '………………';
+const tien_ = n => String(Math.round(+n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); // 1234567 -> 1.234.567
 function loiRieng_(msg) { return Object.assign(new Error(msg), { rieng: true }); }
 function loiDocs_(e) { // việc gọi Google Docs/Drive hỏng: nói rõ cách xử lý thay vì để lộ lỗi kỹ thuật
   if (e && e.rieng) return e;
@@ -348,11 +356,10 @@ function thuMuc_() {
 }
 
 /** Tạo file Google Docs mẫu cho các loại hợp đồng mặc định còn thiếu (chỉ một loại nếu có tên). Trả về tên các loại vừa tạo. */
-function taoMauMacDinh_(chiLoai) {
-  const moi = [];
+function taoMauMacDinh_() {
+  const moi = [], co = readTable_('MauHopDong').map(m => String(m.LoaiHD));
   HD_LOAI_MAC_DINH.forEach(l => {
-    if (chiLoai && l.ten !== chiLoai) return;
-    if (readTable_('MauHopDong').some(m => String(m.LoaiHD) === l.ten)) return;
+    if (co.includes(l.ten)) return;
     const ten = 'MẪU - ' + l.ten + ' - ' + cuaHang_(CUR_SHOP).ten;
     const doc = DocumentApp.create(ten);
     dungMau_(doc, l.mau);
@@ -369,8 +376,9 @@ function taoMauMacDinh_(chiLoai) {
 }
 
 function mauHopDong_(loai) {
-  let m = readTable_('MauHopDong').find(x => String(x.LoaiHD) === String(loai));
-  if (!m && HD_LOAI_MAC_DINH.some(l => l.ten === loai)) { taoMauMacDinh_(loai); m = readTable_('MauHopDong').find(x => String(x.LoaiHD) === String(loai)); }
+  let ds = readTable_('MauHopDong');
+  if (!ds.length) { taoMauMacDinh_(); ds = readTable_('MauHopDong'); } // chưa có mẫu nào (caiDat chưa tạo được): tạo đủ bộ mặc định; đã có mẫu thì tôn trọng việc quản trị xóa mẫu
+  const m = ds.find(x => String(x.LoaiHD) === String(loai));
   if (!m) throw loiRieng_('Loại hợp đồng "' + loai + '" chưa có file mẫu. Quản trị vào Cài đặt → Mẫu hợp đồng để thêm.');
   const id = idTuLink_(m.LinkMau);
   if (!id) throw loiRieng_('Link file mẫu của "' + loai + '" không hợp lệ. Quản trị sửa lại trong Cài đặt → Mẫu hợp đồng.');
@@ -381,7 +389,7 @@ function mauHopDong_(loai) {
 function bienHopDong_(hd) {
   const c = cuaHang_(CUR_SHOP).congTy;
   const t = v => { v = String(v == null ? '' : v).replace(/\{\{|\}\}/g, '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ' ').trim().slice(0, 500); return v || HD_TRONG; };
-  const so = n => String(Math.round(+n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const so = tien_;
   const ngay = s => /^\d{4}-\d{2}-\d{2}/.test(String(s)) ? String(s).slice(8, 10) + '/' + String(s).slice(5, 7) + '/' + String(s).slice(0, 4) : '';
   const ngayDai = s => /^\d{4}-\d{2}-\d{2}/.test(String(s)) ? 'ngày ' + String(s).slice(8, 10) + ' tháng ' + String(s).slice(5, 7) + ' năm ' + String(s).slice(0, 4) : 'ngày ….. tháng ….. năm …….';
   const thoiHan = hd.NgayHieuLuc && hd.NgayHetHan ? 'từ ngày ' + ngay(hd.NgayHieuLuc) + ' đến hết ngày ' + ngay(hd.NgayHetHan)
@@ -402,7 +410,7 @@ function bienHopDong_(hd) {
 // Ô bảng hàng: tiêu đề, các dòng hàng, cộng tiền hàng, thuế, tổng. Không có dòng hàng thì để trống (null).
 function bangHang_(hd, lines) {
   if (!lines.length) return null;
-  const so = n => String(Math.round(+n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const so = tien_;
   const rows = [['STT', 'Tên hàng hóa, dịch vụ', 'ĐVT', 'Số lượng', 'Đơn giá (đồng)', 'Thành tiền (đồng)']];
   lines.forEach((l, i) => rows.push([String(i + 1), String(l.TenHang), String(l.DVT || ''), String(+l.SoLuong || 0).replace('.', ','), so(l.DonGia), so(l.ThanhTien)]));
   rows.push(['', 'Cộng tiền hàng', '', '', '', so(hd.TienHang)]);
@@ -458,6 +466,7 @@ function taoFileHopDong(token, soHD) {
   const hd = findObj_('HopDong', soHD);
   if (!hd) throw new Error('Không tìm thấy hợp đồng ' + soHD + '.');
   const lines = dongHopDong_(soHD);
+  const noiDung = noiDungHD_(hd, lines); // nội dung dùng để tạo file: người khác sửa trong lúc tạo thì file coi là cũ
   let file, conSot;
   try {
     file = DriveApp.getFileById(mauHopDong_(hd.LoaiHD)).makeCopy(tenFile_(hd), thuMuc_());
@@ -472,11 +481,11 @@ function taoFileHopDong(token, soHD) {
     const sh = sheet_('HopDong'), r = findRow_(sh, soHD);
     if (!r) { try { file.setTrashed(true); } catch (e) {} throw new Error('Hợp đồng ' + soHD + ' đã bị xóa trong lúc tạo file.'); }
     const cu = rowObj_(sh, r);
-    const moi = Object.assign({}, cu, { FileId: file.getId(), LinkFile: file.getUrl(), NgayFile: now_(), FileCu: '' });
+    const moi = Object.assign({}, cu, { FileId: file.getId(), LinkFile: file.getUrl(), NgayFile: now_(), FileCu: noiDungHD_(cu, dongHopDong_(soHD)) === noiDung ? '' : '1' });
     writeRow_(sh, r, moi);
     if (cu.FileId) { try { DriveApp.getFileById(cu.FileId).setTrashed(true); } catch (e) {} }
     log_(user, (cu.FileId ? 'Tạo lại' : 'Tạo') + ' file hợp đồng', soHD, hd.LoaiHD);
-    return { doc: moi, conSot: Array.from(new Set(conSot)) };
+    return { doc: hdChoUser_(user, moi), conSot: Array.from(new Set(conSot)) };
   });
 }
 
@@ -543,6 +552,13 @@ function kiemTraTaoHopDong() {
     const pdf = file.getAs(MimeType.PDF).getBytes();
     ghi('Xuất PDF', pdf.length > 1000 && pdf[0] === 37 && pdf[1] === 80 && pdf[2] === 68 && pdf[3] === 70, pdf.length + ' byte');
     ghi('File mẫu gốc không bị sửa', DocumentApp.openById(mau.getId()).getBody().getText().indexOf('{{TENDOANHNGHIEP}}') >= 0);
+    const thu = DocumentApp.create('KIEMTRA - dựng mẫu');
+    try { // gọi đủ các hàm định dạng đoạn và bảng chữ ký mà bộ mẫu mặc định dùng
+      dungMau_(thu, [['cb', 'A'], ['tt', 'B'], ['ci', 'C'], ['p', 'D'], ['li', 'E'], ['h', 'F'], ['kv', 'G: ', 'H'], ['dieu', 'I'], ['bang'], ['ky', 'J', 'K']]);
+      thu.saveAndClose();
+      const vb2 = DocumentApp.openById(thu.getId()).getBody().getText();
+      ghi('Dựng được nội dung mẫu mới (định dạng đoạn, bảng chữ ký)', vb2.indexOf('Điều 1. I') >= 0 && vb2.indexOf('G: H') >= 0 && vb2.indexOf('- E') >= 0 && vb2.indexOf('{{BANGHANG}}') >= 0);
+    } finally { try { DriveApp.getFileById(thu.getId()).setTrashed(true); } catch (e) {} }
   } catch (e) { ghi('Chạy được các bước trên', false, String((e && e.message) || e)); }
   finally { if (file) { try { file.setTrashed(true); } catch (e) {} } }
   const ok = kq.every(x => x[1]);

@@ -1630,7 +1630,7 @@ window.addEventListener('scroll', e => { if (e.target !== $('#picker')) hidePick
 // ===================== Hợp đồng =====================
 // Bên A = khách hàng, bên B = cửa hàng. Trạng thái lưu ở máy chủ; "sắp hết hạn" / "đã hết hạn" tính từ ngày hết hạn.
 const HD_TT = { 'Soạn thảo': 'b-gray', 'Đang hiệu lực': 'b-blue', 'Tạm dừng': 'b-amber', 'Hoàn thành': 'b-green' };
-const HD_DA_KY = ['Đang hiệu lực', 'Hoàn thành']; // đã ký: nhân viên không sửa hàng và số tiền
+const HD_DA_KY = ['Đang hiệu lực', 'Hoàn thành', 'Tạm dừng']; // đã ký (mọi trạng thái trừ Soạn thảo): nhân viên không sửa hàng và số tiền, không đưa về Soạn thảo
 const HD_SAP = 30; // báo "sắp hết hạn" trước hạn bấy nhiêu ngày
 const HD_BEN_A = ['TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang'];
 function hanHD(h) { // hợp đồng đang hiệu lực đã quá hạn / sắp hết hạn, còn lại null

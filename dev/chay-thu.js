@@ -56,6 +56,7 @@ class MPara {
   getType() { return 'PARAGRAPH'; } asParagraph() { return this; } getText() { return this.text; } setText(t) { this.text = String(t); return this; }
   getParent() { return this.parent; } removeFromParent() { this.removed = true; this.parent.children.splice(this.parent.children.indexOf(this), 1); return this; }
   setHeading(h) { this.heading = h; return this; } setAlignment(a) { this.align = a; return this; }
+  setAttributes(st) { this.attr = st; this.bold = !!st.BOLD; if (st.HORIZONTAL_ALIGNMENT) this.align = st.HORIZONTAL_ALIGNMENT; return this; }
   setSpacingAfter() { return this; } setSpacingBefore() { return this; } setLineSpacing() { return this; } setIndentFirstLine() { return this; } setIndentStart() { return this; }
   editAsText() { return new MText(this); }
 }
@@ -114,6 +115,7 @@ class MFile {
   moveTo(folder) { this.f.folder = folder.getId(); return this; }
   getParents() { const f = drive.folders.get(this.f.folder), l = f ? [new MFolder(f)] : []; return { hasNext: () => l.length > 0, next: () => l.shift() }; }
   makeCopy(name, folder) {
+    if (drive.khiSao) drive.khiSao(); // chỗ để test giả lập người khác thao tác trong lúc đang chép mẫu
     const id = newId('F'), src = docs.get(this.f.id), d = new MDoc(id);
     d.body.children = src.body.children.map(c => (c instanceof MTable ? Object.assign(new MTable(c.rows.map(r => r.map(x => x.getText())), d.body), { borderWidth: c.borderWidth })
       : Object.assign(new MPara(c.text, d.body), { heading: c.heading, align: c.align, bold: c.bold })));
@@ -127,7 +129,7 @@ class MFile {
 }
 const DocumentApp = {
   HorizontalAlignment: ENUM(['LEFT', 'CENTER', 'RIGHT', 'JUSTIFY']), ParagraphHeading: ENUM(['NORMAL', 'HEADING1', 'HEADING2']),
-  Attribute: ENUM(['FONT_FAMILY', 'FONT_SIZE']), ElementType: ENUM(['PARAGRAPH', 'TABLE']),
+  Attribute: ENUM(['FONT_FAMILY', 'FONT_SIZE', 'BOLD', 'ITALIC', 'UNDERLINE', 'HORIZONTAL_ALIGNMENT', 'SPACING_AFTER', 'INDENT_START', 'INDENT_FIRST_LINE']), ElementType: ENUM(['PARAGRAPH', 'TABLE']),
   create(name) { quyen('DocumentApp.create'); const id = newId('D'), d = new MDoc(id); docs.set(id, d); drive.files.set(id, { id, name, mime: 'application/vnd.google-apps.document', folder: 'root' }); return d; },
   openById(id) { quyen('DocumentApp.openById'); if (!docs.has(id)) throw new Error('Không mở được tài liệu ' + id); return docs.get(id); },
 };
