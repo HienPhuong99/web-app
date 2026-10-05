@@ -68,12 +68,12 @@ class MText { // sửa chữ trong một đoạn
   deleteText(a, b) { this.p.text = this.p.text.slice(0, a) + this.p.text.slice(b + 1); return this; }
   insertText(o, t) { this.p.text = this.p.text.slice(0, o) + t + this.p.text.slice(o); return this; }
 }
-class MCell { constructor(text, table) { this.para = new MPara(text, this); this.table = table; } getChild() { return this.para; } getText() { return this.para.text; } editAsText() { return this.para.editAsText(); } }
+class MCell { constructor(text, table) { this.para = new MPara(text, this); this.table = table; } getText() { return this.para.text; } getChild() { return this.para; } getText() { return this.para.text; } editAsText() { return this.para.editAsText(); } }
 class MTable {
   constructor(cells, parent) { this.parent = parent; this.rows = cells.map(r => r.map(t => new MCell(t, this))); this.borderWidth = 1; }
   getType() { return 'TABLE'; } getParent() { return this.parent; } setBorderWidth(w) { this.borderWidth = w; return this; } setColumnWidth() { return this; } setAttributes() { return this; }
   getNumRows() { return this.rows.length; } getCell(r, c) { return this.rows[r][c]; }
-  getRow(r) { const row = this.rows[r]; return { editAsText: () => ({ setBold: b => { row.forEach(c => { c.para.bold = b; }); return this; } }) }; }
+  getRow(r) { const row = this.rows[r]; return { getNumCells: () => row.length, editAsText: () => ({ setBold: b => { row.forEach(c => { c.para.bold = b; }); return this; } }) }; }
   paras() { return this.rows.flat().map(c => c.para); }
 }
 const javaRepl = (repl, m) => repl.replace(/\\(.)|\$(\d)/g, (_, lit, g) => (lit !== undefined ? lit : m[+g] === undefined ? '' : m[+g])); // "\" thoát ký tự, "$1" là nhóm bắt như Java
@@ -83,6 +83,7 @@ class MBody {
   appendTable(cells) { const t = new MTable(cells, this); this.children.push(t); return t; }
   insertTable(i, cells) { const t = new MTable(cells, this); this.children.splice(i, 0, t); return t; }
   getChildIndex(el) { const i = this.children.indexOf(el); if (i < 0) throw new Error('Phần tử không phải con trực tiếp của body'); return i; }
+  getTables() { return this.children.filter(c => c instanceof MTable); }
   getNumChildren() { return this.children.length; } getChild(i) { return this.children[i]; }
   setMarginTop() {} setMarginBottom() {} setMarginLeft() {} setMarginRight() {} setAttributes() { return this; }
   allParas() { return this.children.flatMap(c => (c instanceof MTable ? c.paras() : [c])); }
@@ -111,6 +112,7 @@ class MFile {
   getId() { return this.f.id; } getName() { return this.f.name; } getUrl() { return 'https://docs.google.com/document/d/' + this.f.id + '/edit'; }
   getMimeType() { return this.f.mime; } isTrashed() { return !!this.f.trashed; } setTrashed(b) { this.f.trashed = !!b; return this; }
   moveTo(folder) { this.f.folder = folder.getId(); return this; }
+  getParents() { const f = drive.folders.get(this.f.folder), l = f ? [new MFolder(f)] : []; return { hasNext: () => l.length > 0, next: () => l.shift() }; }
   makeCopy(name, folder) {
     const id = newId('F'), src = docs.get(this.f.id), d = new MDoc(id);
     d.body.children = src.body.children.map(c => (c instanceof MTable ? Object.assign(new MTable(c.rows.map(r => r.map(x => x.getText())), d.body), { borderWidth: c.borderWidth })

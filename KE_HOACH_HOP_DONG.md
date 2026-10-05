@@ -2,6 +2,20 @@
 
 > Bản nháp để bạn duyệt. **Chưa có dòng code nào được sửa.** Sau khi bạn chốt các mục ở phần 8, tôi mới bắt tay làm theo từng giai đoạn ở phần 5.
 
+## Tình trạng thực hiện (cập nhật 06/10/2026)
+
+| GĐ | Nội dung | Trạng thái |
+|---|---|---|
+| 0 | Bỏ cửa hàng PCCC và dữ liệu | Xong. `caiDat` xóa trang `PCCC_…`, cấu hình, quyền; khóa nhân viên chỉ vào PCCC |
+| 1 | Nền dữ liệu hợp đồng, số thành chữ | Xong |
+| 2 | Giao diện danh sách + form | Xong |
+| 3 | Tạo file Docs từ mẫu, 5 mẫu tự tạo, PDF, quản lý mẫu | Xong trên bản giả lập; **chờ chạy `kiemTraTaoHopDong` trên Google thật** |
+| 4 | Từ đơn hàng, nhân bản, tạo hàng loạt | Xong |
+| 5 | Theo dõi hạn | Xong, **trừ email nhắc hạn** (cần thêm quyền gửi mail cho cả script; làm khi bạn muốn) |
+| 6 | Hoàn thiện, `HUONG_DAN.md`, script triển khai 1 lệnh | Xong (`dev/trien-khai.js` chưa chạy thử được vì môi trường làm việc không có clasp) |
+
+Khác với bản kế hoạch ban đầu: mã hợp đồng nằm ở `apps-script/HopDong.gs` (tách khỏi `Code.gs`); mẫu tuỳ chỉnh bắt buộc nằm trong thư mục Drive của cửa hàng (chặn quản trị trong app dùng tài liệu riêng của chủ Google làm mẫu); thêm hàm `kiemTraTaoHopDong` để kiểm tra phần Docs/Drive trên Google thật bằng một lần bấm.
+
 ## 0. Đã chốt với chủ app (05/10/2026)
 
 | Mục | Quyết định |

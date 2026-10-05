@@ -338,6 +338,9 @@ assert.strictEqual(bangTrong(G.findObj_('HopDong', hdKhong.SoHD).FileId).length,
 // Mẫu tuỳ chỉnh (quản trị): biến lạ được báo, không làm hỏng việc tạo file
 const mauTuy = G.DocumentApp.create('Mẫu riêng');
 mauTuy.getBody().appendParagraph('Kính gửi {{TENDOANHNGHIEP}} - {{BIEN_LA}} - {{BANGHANG}}');
+const thuMucHD = [...drive.folders.values()].find(f => f.name === 'Hợp đồng - phuonghihi');
+assert.throws(() => G.luuMauHopDong(admin, { LoaiHD: 'Hợp đồng thử', LinkMau: mauTuy.getUrl() }), /phải nằm trong thư mục "Hợp đồng - phuonghihi"/); // tài liệu ngoài thư mục (vd. tài liệu riêng của chủ Google) không dùng làm mẫu được
+G.DriveApp.getFileById(mauTuy.getId()).moveTo(G.DriveApp.getFolderById(thuMucHD.id));
 assert.throws(() => G.luuMauHopDong(lan, { LoaiHD: 'Hợp đồng thử', LinkMau: mauTuy.getUrl() }), /quản trị/);
 assert.throws(() => G.luuMauHopDong(admin, { LoaiHD: '', LinkMau: mauTuy.getUrl() }), /tên loại/);
 assert.throws(() => G.luuMauHopDong(admin, { LoaiHD: 'X', LinkMau: 'không phải link' }), /dán link/i);
@@ -363,6 +366,13 @@ assert.ok(vanBan(G.taoFileHopDong(lan, hdDL.SoHD).doc.FileId).includes('HỢP Đ
 G.xoaMauHopDong(admin, 'Hợp đồng thu cũ đổi mới');
 assert.throws(() => G.taoMauMacDinh(lan), /quản trị/);
 assert.deepStrictEqual([plain(G.taoMauMacDinh(admin).moi), plain(G.taoMauMacDinh(admin).moi)], [['Hợp đồng thu cũ đổi mới'], []]);
+
+// Hàm tự kiểm tra chạy tay trên Google thật: ở đây chạy trên bản giả lập để chắc chính hàm này đúng và không để lại gì
+const soHDtruoc = sheets.PS_HopDong.rows.length, soFileTruoc = [...drive.files.values()].filter(f => !f.trashed).length;
+const tuKiem = plain(G.kiemTraTaoHopDong());
+assert.strictEqual(tuKiem.ok, true, JSON.stringify(tuKiem.kq.filter(x => !x[1])));
+assert.ok(tuKiem.kq.length >= 7 && sheets.PS_HopDong.rows.length === soHDtruoc);
+assert.strictEqual([...drive.files.values()].filter(f => !f.trashed).length, soFileTruoc); // file thử đã vào thùng rác
 
 // Chưa cấp quyền Google Docs/Drive: báo rõ cách xử lý, app vẫn mở và lưu hợp đồng bình thường
 assert.deepStrictEqual(plain(G.taoMauMacDinh(admin).moi), []); // đủ 5 mẫu: không cần gọi Google nên không đòi quyền

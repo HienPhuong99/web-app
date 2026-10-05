@@ -2236,7 +2236,7 @@ async function mauHDAct(a) {
     modal({
       title: m ? 'Sửa mẫu: ' + m.LoaiHD : 'Thêm loại hợp đồng',
       body: formHtml([['LoaiHD', 'Tên loại hợp đồng *', { ro: !!m, full: true }], ['LinkMau', 'Link file Google Docs mẫu *', { full: true, ph: 'https:/' + '/docs.google.com/document/d/…' }], ['MoTa', 'Mô tả ngắn', { full: true }]], m || {})
-        + '<p class="muted">Tài khoản Google chạy script phải mở được file này (file của chính chủ script thì được). Không dùng file Word .docx: mở bằng Google Docs rồi chọn Tệp → Lưu dưới dạng Google Docs.</p>',
+        + '<p class="muted">File phải là Google Docs và nằm trong thư mục "Hợp đồng - tên cửa hàng" trên Google Drive của chủ script (mở Drive, kéo file vào thư mục đó). Không dùng file Word .docx: mở bằng Google Docs rồi chọn Tệp → Lưu dưới dạng Google Docs.</p>',
       buttons: [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', save: true, fn: run(async mm => { nhan(await api('luuMauHopDong', formData(mm))); closeModal(); toast('Đã lưu mẫu hợp đồng.'); }) }],
     });
   } else if (act === 'mau-xoa') {

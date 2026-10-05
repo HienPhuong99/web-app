@@ -513,6 +513,43 @@ function nhanBanHopDong(token, soNguon, loaiMoi, taoFile) {
   return kq;
 }
 
+/**
+ * Chạy tay trong trình soạn thảo Apps Script (chọn hàm kiemTraTaoHopDong → Chạy), sau khi đã chạy caiDat một lần.
+ * Tạo một hợp đồng thử từ mẫu mua bán, đọc lại file bằng chính Google Docs để kiểm tra từng bước, xuất PDF rồi chuyển file thử vào thùng rác.
+ * Không ghi gì vào Sheet. Kết quả hiện ở Nhật ký thực thi; trả về { ok, kq: [[tên bước, đạt, chi tiết]] }.
+ * Dùng để chắc các hàm Docs/Drive chạy đúng trên Google thật (bản chạy thử trên máy chỉ là giả lập).
+ */
+function kiemTraTaoHopDong() {
+  CUR_SHOP = SHOP_MAC_DINH;
+  const kq = [], ghi = (ten, ok, ct) => { kq.push([ten, !!ok, ct || '']); Logger.log((ok ? 'ĐẠT  ' : 'LỖI  ') + ten + (ct ? ' – ' + ct : '')); };
+  const lines = [{ STT: 1, TenHang: 'iPhone 16 Pro Max 256GB', DVT: 'Máy', SoLuong: 2, DonGia: 28200000, ThanhTien: 56400000 }, { STT: 2, TenHang: 'Ốp lưng', DVT: 'Cái', SoLuong: 5, DonGia: 150000, ThanhTien: 750000 }];
+  const hd = { SoHD: 'KIEMTRA-001', Ngay: now_().slice(0, 10), LoaiHD: HD_LOAI_MAC_DINH[0].ten, TenDN: 'Công ty $1 & \\2 "Kiểm tra" Ơ', DiaChi: '12 Lê Lợi', MST: '', NguoiDaiDien: 'Nguyễn Văn A', ChucVu: 'Giám đốc',
+    VAT: 10, TienHang: 57150000, TienVAT: 5715000, TongCong: 62865000, BangChu: docTienChu_(62865000), GhiChu: 'Ghi chú $& thử' };
+  let file = null;
+  try {
+    const mau = DriveApp.getFileById(mauHopDong_(hd.LoaiHD));
+    file = mau.makeCopy('KIEMTRA - ' + tenFile_(hd), thuMuc_());
+    ghi('Sao chép file mẫu vào thư mục Drive', true, file.getName());
+    const doc = DocumentApp.openById(file.getId());
+    const conSot = dienMau_(doc, bienHopDong_(hd), bangHang_(hd, lines));
+    doc.saveAndClose();
+    const body = DocumentApp.openById(file.getId()).getBody(), vb = body.getText();
+    ghi('Mọi biến {{…}} đã được thay', conSot.length === 0 && !/\{\{[A-Z0-9_]+\}\}/.test(vb), conSot.join(', '));
+    ghi('Tên khách có $1, \\2, dấu nháy giữ nguyên', vb.indexOf(hd.TenDN) >= 0 && vb.indexOf(hd.GhiChu) >= 0);
+    ghi('Số tiền bằng chữ và tên cửa hàng có trong file', vb.indexOf(hd.BangChu) >= 0 && vb.indexOf(cuaHang_(CUR_SHOP).congTy.ten) >= 0);
+    const bang = body.getTables().filter(t => t.getNumRows() === 6 && t.getRow(0).getNumCells() === 6);
+    ghi('Bảng hàng hóa được chèn (6 cột, 2 dòng hàng + tiêu đề + 3 dòng tổng)', bang.length === 1, 'số bảng khớp: ' + bang.length);
+    ghi('Bảng hàng có đúng thành tiền', bang.length === 1 && bang[0].getCell(1, 5).getText() === '56.400.000' && bang[0].getCell(5, 5).getText() === '62.865.000');
+    const pdf = file.getAs(MimeType.PDF).getBytes();
+    ghi('Xuất PDF', pdf.length > 1000 && pdf[0] === 37 && pdf[1] === 80 && pdf[2] === 68 && pdf[3] === 70, pdf.length + ' byte');
+    ghi('File mẫu gốc không bị sửa', DocumentApp.openById(mau.getId()).getBody().getText().indexOf('{{TENDOANHNGHIEP}}') >= 0);
+  } catch (e) { ghi('Chạy được các bước trên', false, String((e && e.message) || e)); }
+  finally { if (file) { try { file.setTrashed(true); } catch (e) {} } }
+  const ok = kq.every(x => x[1]);
+  Logger.log(ok ? 'TẤT CẢ ĐẠT: tạo hợp đồng từ mẫu chạy đúng trên Google. File thử đã vào thùng rác Drive.' : 'CÓ LỖI: xem các dòng LỖI ở trên (chép lại nhật ký này để được hỗ trợ).');
+  return { ok: ok, kq: kq };
+}
+
 // ===== Quản lý mẫu (quản trị) =====
 function trangMau_() { return { mauHD: readTable_('MauHopDong'), loaiHD: loaiHopDong_() }; }
 
@@ -526,6 +563,11 @@ function luuMauHopDong(token, m) {
   try {
     const f = DriveApp.getFileById(id);
     if (f.getMimeType() !== MimeType.GOOGLE_DOCS) throw loiRieng_('File này không phải Google Docs (không dùng được file Word .docx hay PDF; hãy mở bằng Google Docs rồi chọn Tệp → Lưu dưới dạng Google Docs).');
+    // Chỉ nhận mẫu nằm trong thư mục của cửa hàng: nếu không, quản trị trong app dán link tài liệu riêng của chủ Google rồi tạo hợp đồng + tải PDF là đọc được nội dung tài liệu đó
+    const thu = thuMuc_(), cha = f.getParents();
+    let trong = false;
+    while (cha.hasNext()) { if (cha.next().getId() === thu.getId()) trong = true; }
+    if (!trong) throw loiRieng_('File mẫu phải nằm trong thư mục "' + thu.getName() + '" trên Google Drive: mở Drive, kéo file vào thư mục đó rồi lưu lại.');
   } catch (e) { throw (e && e.rieng) ? e : new Error('Không mở được file mẫu: ' + (loiDocs_(e).message)); }
   withLock_(() => {
     const sh = sheet_('MauHopDong'), r = findRow_(sh, loai), cu = r ? rowObj_(sh, r) : null;
