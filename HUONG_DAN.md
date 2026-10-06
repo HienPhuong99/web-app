@@ -16,6 +16,16 @@ Quản lý khách hàng, bảng giá, báo giá, đơn hàng, kho (ghi IMEI/seri
 | `du-lieu/DuLieu.xlsx` | Dữ liệu ban đầu (chỉ dùng khi lập Sheet mới). **File cũ còn dữ liệu khách PCCC: nên xóa các trang `PCCC_…` hoặc bỏ file này, đừng chia sẻ công khai.** |
 | `dev/` | Chạy thử trên máy, không cần khi dùng thật |
 
+## Lên bản mới có Hợp đồng và các cải tiến (đã cài bản cũ rồi)
+
+Link app giữ nguyên, dữ liệu cũ giữ nguyên. Làm đúng thứ tự:
+
+1. **Đưa code mới lên Apps Script.** Chạy `node dev/trien-khai.js` (kiểm tra, `clasp push`, rồi tạo bản triển khai mới; xong bước này thì bỏ qua bước 3), **hoặc** dán tay `Code.gs`, `HopDong.gs`, `Index.html` và **tệp mới `EmailSang.gs`** (làm như bước 3 của phần *Cài đặt* bên dưới).
+2. **Chạy `caiDat`** trong trình soạn thảo Apps Script rồi bấm **Cho phép** các quyền mới (Google Docs, Google Drive, gửi email, hẹn giờ). Hàm này tạo 6 file Docs mẫu hợp đồng và **xóa cửa hàng PCCC cùng dữ liệu của nó, không hoàn tác được trong app** (xem *Dọn dữ liệu PCCC cũ*). Sau đó chạy hàm `kiemTraTaoHopDong`: Nhật ký thực thi phải ghi **TẤT CẢ ĐẠT**.
+3. **Triển khai lại** (chỉ khi dán tay): Triển khai → Quản lý các lần triển khai → ✏ → Phiên bản: **Phiên bản mới** → Triển khai. Link giữ nguyên.
+
+Nên thử bản mới trước ở link `/dev` (Triển khai → Thử nghiệm các lần triển khai, chỉ chủ tài khoản mở được) rồi mới triển khai cho mọi người. Muốn dùng email sáng thì vào *Cài đặt → Email tổng hợp mỗi sáng* và bấm *Gửi thư thử ngay* (xem mục *Email tổng hợp mỗi sáng*).
+
 ## Cài đặt (làm 1 lần, khoảng 10 phút)
 
 1. **Tạo Google Sheet**: mở <https://sheets.new> bằng tài khoản Google sẽ giữ dữ liệu.

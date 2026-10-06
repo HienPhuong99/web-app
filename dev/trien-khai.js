@@ -17,6 +17,6 @@ console.log(`
 Đã đẩy code và triển khai lại, link giữ nguyên.
 Nếu đây là lần đầu triển khai bản có Hợp đồng (hoặc bản mới đổi quyền), còn 1 việc làm tay:
   1. Chạy "clasp open" (hoặc mở Tiện ích mở rộng -> Apps Script).
-  2. Chọn hàm caiDat -> Chạy -> Xem lại quyền -> Cho phép (xin quyền Google Docs/Drive; caiDat cũng tạo 5 file mẫu hợp đồng và xóa cửa hàng PCCC cũ).
+  2. Chọn hàm caiDat -> Chạy -> Xem lại quyền -> Cho phép (xin quyền Google Docs, Drive, gửi email và hẹn giờ; caiDat cũng tạo 6 file mẫu hợp đồng và xóa cửa hàng PCCC cũ, không hoàn tác được trong app).
   3. Chọn hàm kiemTraTaoHopDong -> Chạy: phải thấy "TẤT CẢ ĐẠT" ở Nhật ký thực thi.
 Rồi thử trên link /dev (Triển khai -> Thử nghiệm các lần triển khai) trước khi dùng thật.`);
