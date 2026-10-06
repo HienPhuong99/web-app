@@ -296,7 +296,7 @@ function taiDuLieu(token) {
   const hang = readTable_('HangHoa');
   const donHang = readTable_('DonHang');
   const s = SHOPS[CUR_SHOP], cd = caiDatMap_(), ch = cuaHang_(CUR_SHOP, cd);
-  const mauHD = readTable_('MauHopDong');
+  const mauHD = readTable_('MauHopDong'), phieuKho = readTable_('PhieuKho');
   // Tên các cửa hàng khác chỉ gửi cho tài khoản được vào (quản trị thấy hết để phân quyền)
   const ds = Object.keys(SHOPS).filter(id => user.vaiTro === 'admin' || user.shops.includes(id)).map(id => {
     const c = id === CUR_SHOP ? ch : cuaHang_(id, cd);
@@ -306,8 +306,8 @@ function taiDuLieu(token) {
     user: user, congTy: ch.congTy,
     cuaHang: { id: CUR_SHOP, ten: ch.ten, moTa: ch.moTa, icon: s.icon, mau: s.mau }, dsCuaHang: ds,
     khach: readTable_('KhachHang'), hang: hang, baoGia: readTable_('BaoGia'), donHang: donHang,
-    phieuKho: readTable_('PhieuKho'), thuTien: readTable_('ThuTien'), hopDong: readTable_('HopDong').map(h => hdChoUser_(user, h)), mauHD: user.vaiTro === 'admin' ? mauHD : [], loaiHD: loaiHopDong_(mauHD), hopDongLich: readTable_('HopDongLich'), nganHang: NGAN_HANG, emailSang: user.vaiTro === 'admin' ? cauHinhEmailSang_(CUR_SHOP, cd) : null,
-    ton: tonKho_(), thongKe: thongKe_(donHang, hang, Utilities.formatDate(new Date(Date.now() - 90 * 864e5), tz_(), 'yyyy-MM-dd'), '', 8),
+    phieuKho: phieuKho, thuTien: readTable_('ThuTien'), hopDong: readTable_('HopDong').map(h => hdChoUser_(user, h)), mauHD: user.vaiTro === 'admin' ? mauHD : [], loaiHD: loaiHopDong_(mauHD), hopDongLich: readTable_('HopDongLich'), nganHang: NGAN_HANG, emailSang: user.vaiTro === 'admin' ? cauHinhEmailSang_(CUR_SHOP, cd) : null,
+    ton: tonKho_(phieuKho), thongKe: thongKe_(donHang, hang, Utilities.formatDate(new Date(Date.now() - 90 * 864e5), tz_(), 'yyyy-MM-dd'), '', 8),
   };
 }
 
@@ -582,9 +582,9 @@ function daGiao_(soDH) {
 }
 
 // ===== Kho =====
-function tonKho_() {
+function tonKho_(phieuKho) { // phieuKho = bảng PhieuKho đã đọc sẵn (đỡ đọc Sheet lại)
   const loai = {};
-  readTable_('PhieuKho').forEach(p => { loai[p.SoPK] = p.Loai; });
+  (phieuKho || readTable_('PhieuKho')).forEach(p => { loai[p.SoPK] = p.Loai; });
   const ton = {};
   readTable_('PhieuKhoCT').forEach(l => {
     if (!l.MaHH || !loai[l.SoPK]) return;
