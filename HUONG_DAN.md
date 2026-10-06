@@ -26,6 +26,15 @@ Link app giữ nguyên, dữ liệu cũ giữ nguyên. Làm đúng thứ tự:
 
 Nên thử bản mới trước ở link `/dev` (Triển khai → Thử nghiệm các lần triển khai, chỉ chủ tài khoản mở được) rồi mới triển khai cho mọi người. Muốn dùng email sáng thì vào *Cài đặt → Email tổng hợp mỗi sáng* và bấm *Gửi thư thử ngay* (xem mục *Email tổng hợp mỗi sáng*).
 
+## Nhập khách hàng / hàng hóa hàng loạt từ Excel
+
+Vào **Khách hàng** (hoặc **Hàng hóa**, chỉ quản trị) → **Nhập từ file**. Làm một trong hai cách:
+
+- **Dán từ Excel / Google Sheet**: bôi đen các ô (gồm dòng tiêu đề), sao chép, dán vào ô "Hoặc dán dữ liệu".
+- **Chọn file CSV**: trong Excel chọn *Lưu thành → CSV UTF-8*. Bấm **Tải file mẫu** để lấy đúng dòng tiêu đề.
+
+Web hiện xem trước, bấm **Nhập** để ghi xuống Sheet. Mã (`KH00001`, `HH0001`…) tự sinh. Dòng thiếu tên, trùng số điện thoại (khách) hoặc trùng tên + model (hàng), hoặc giá không phải số sẽ được bỏ qua và báo số dòng trong file. Tối đa 2000 dòng mỗi lần. Số điện thoại trong Excel nên để định dạng văn bản, kẻo mất số 0 đầu. Chưa hỗ trợ đọc trực tiếp file .xlsx: hãy dán hoặc lưu CSV.
+
 ## Cài đặt (làm 1 lần, khoảng 10 phút)
 
 1. **Tạo Google Sheet**: mở <https://sheets.new> bằng tài khoản Google sẽ giữ dữ liệu.

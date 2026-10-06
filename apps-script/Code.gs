@@ -379,6 +379,78 @@ function xoaHang(token, maHH) {
   withLock_(() => { deleteWhere_('HangHoa', maHH); log_(user, 'Xóa mặt hàng', maHH); });
 }
 
+// ===== Nhập hàng loạt từ file Excel/CSV: khách hàng, hàng hóa =====
+const NHAP_TOI_DA = 2000;
+const NHAP_KHACH = ['TenKH', 'NguoiLienHe', 'SDT', 'DiaChi', 'MST', 'Email', 'NguoiDaiDien', 'ChucVu', 'VanPhongGD', 'SoTK', 'NganHang', 'GhiChu'];
+const NHAP_HANG = ['TenHang', 'Model', 'NhomHang', 'PhanLoai', 'DVT', 'XuatXu', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'GhiChu'];
+const NHAP_SO = ['GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh'];
+const sdtList_ = s => String(s || '').split(/[\/,;]/).map(x => x.replace(/\D/g, '')).filter(x => x.length >= 8);
+
+// Ghi nhiều dòng một lần (một lệnh setValues). kiem(o) trả về lý do lỗi hoặc ''; khoa(o) trả các khóa dùng để bỏ dòng trùng
+// (daCo = khóa đã có trong Sheet); them(o) bổ sung cột tự điền. Trả { them: bản ghi đã ghi, bo: [{ dong, ly }] }.
+function nhapBang_(name, prefix, width, rows, cols, kiem, khoa, daCo, them) {
+  if (!Array.isArray(rows) || !rows.length) throw new Error('Không có dòng nào để nhập.');
+  if (rows.length > NHAP_TOI_DA) throw new Error('Mỗi lần nhập tối đa ' + NHAP_TOI_DA + ' dòng; hãy chia file nhỏ hơn.');
+  const bo = [], ok = [], thay = new Set(daCo);
+  rows.forEach((r, i) => {
+    const dong = +r._dong || i + 2, o = {};
+    cols.forEach(c => { o[c] = String(r[c] == null ? '' : r[c]).trim(); });
+    if (!cols.some(c => o[c])) return; // dòng trống
+    const loi = kiem(o);
+    if (loi) return bo.push({ dong: dong, ly: loi });
+    const ks = khoa(o);
+    if (ks.some(k => thay.has(k))) return bo.push({ dong: dong, ly: 'Trùng với dữ liệu đã có hoặc dòng trước trong file.' });
+    ks.forEach(k => thay.add(k));
+    ok.push(o);
+  });
+  if (!ok.length) return { them: [], bo: bo };
+  const ma = nhapMa_(name, prefix, width, ok.length), key = TABLES[name][0];
+  ok.forEach((o, i) => { o[key] = ma[i]; them(o); });
+  const sh = sheet_(name), mang = ok.map(o => toRow_(sh, o));
+  sh.getRange(sh.getLastRow() + 1, 1, mang.length, mang[0].length).setValues(mang);
+  return { them: ok, bo: bo };
+}
+// Mã liên tiếp: tính số lớn nhất một lần rồi tăng dần
+function nhapMa_(name, prefix, width, n) {
+  const dau = parseInt(nextCode_(name, prefix, width).slice(prefix.length), 10);
+  return Array.from({ length: n }, (_, i) => prefix + String(dau + i).padStart(width, '0'));
+}
+function soNhap_(v) { // '345.000' hoặc '345,000' → 345000; sai định dạng → NaN; trống → ''
+  const s = String(v).replace(/[\s.,]/g, '');
+  return s === '' ? '' : /^\d{1,12}$/.test(s) ? +s : NaN;
+}
+
+function nhapKhach(token, rows) {
+  const user = user_(token);
+  return withLock_(() => {
+    const daCo = [];
+    readTable_('KhachHang').forEach(k => { sdtList_(k.SDT).forEach(p => daCo.push('s' + p)); });
+    const r = nhapBang_('KhachHang', 'KH', 5, rows, NHAP_KHACH,
+      o => o.TenKH ? '' : 'Thiếu tên khách hàng.',
+      o => sdtList_(o.SDT).map(p => 's' + p),
+      daCo, o => { o.NgayTao = now_(); o.NguoiTao = user.ten; });
+    if (r.them.length) log_(user, 'Nhập khách hàng từ file', r.them[0].MaKH + ' … ' + r.them[r.them.length - 1].MaKH, r.them.length + ' khách');
+    return r;
+  });
+}
+
+function nhapHang(token, rows) {
+  const user = user_(token, true);
+  return withLock_(() => {
+    const ten = h => 'h' + String(h.TenHang).toLowerCase() + '|' + String(h.Model || '').toLowerCase();
+    const r = nhapBang_('HangHoa', 'HH', 4, rows, NHAP_HANG,
+      o => {
+        if (!o.TenHang) return 'Thiếu tên hàng.';
+        const sai = NHAP_SO.find(c => isNaN(soNhap_(o[c])));
+        return sai ? 'Cột ' + sai + ' phải là số nguyên không âm.' : '';
+      },
+      o => [ten(o)], readTable_('HangHoa').map(ten),
+      o => { NHAP_SO.forEach(c => { o[c] = soNhap_(o[c]); }); });
+    if (r.them.length) log_(user, 'Nhập mặt hàng từ file', r.them[0].MaHH + ' … ' + r.them[r.them.length - 1].MaHH, r.them.length + ' mặt hàng');
+    return r;
+  });
+}
+
 // ===== Chứng từ có dòng hàng: báo giá (BG), đơn hàng (DH), phiếu nhập (NK), phiếu xuất/giao hàng (XK) =====
 function layChungTu(token, loai, so) {
   user_(token);

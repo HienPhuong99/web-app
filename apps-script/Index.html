@@ -964,7 +964,7 @@ function openThu(pt) {
 // ===================== Khách hàng =====================
 const khachText = k => [k.MaKH, k.TenKH, k.NguoiLienHe, k.SDT, digits(k.SDT), k.DiaChi, k.MST, k.Email].join(' ');
 function vKhach(el) {
-  setTop('Danh mục', 'Khách hàng', [{ t: 'Thêm khách hàng', ic: 'plus', cls: 'primary', fn: () => openKhach() }]);
+  setTop('Danh mục', 'Khách hàng', [{ t: 'Nhập từ file', ic: 'up', fn: () => openNhap('khach') }, { t: 'Thêm khách hàng', ic: 'plus', cls: 'primary', fn: () => openKhach() }]);
   S.onNew = () => openKhach();
   listCard(el, {
     id: 'khach', ph: 'Tìm mã, tên, SĐT, địa chỉ…',
@@ -1046,12 +1046,98 @@ function openKhach(kh, onPicked) {
   }); });
 }
 
+// ===================== Nhập hàng loạt từ file CSV / dán từ Excel =====================
+// Tiêu đề cột: chấp nhận nhãn tiếng Việt (như file mẫu) hoặc tên cột trong Sheet, không phân biệt dấu và hoa thường.
+const NHAP = {
+  khach: { ten: 'khách hàng', api: 'nhapKhach', list: 'khach', key: 'MaKH', cap: 'khach.csv', batBuoc: 'TenKH', hien: ['TenKH', 'SDT', 'DiaChi'],
+    cols: [['TenKH', 'Tên khách hàng'], ['NguoiLienHe', 'Người liên hệ'], ['SDT', 'Điện thoại'], ['DiaChi', 'Địa chỉ'], ['MST', 'Mã số thuế'], ['Email', 'Email'],
+      ['NguoiDaiDien', 'Người đại diện'], ['ChucVu', 'Chức vụ'], ['VanPhongGD', 'Văn phòng giao dịch'], ['SoTK', 'Số tài khoản'], ['NganHang', 'Ngân hàng'], ['GhiChu', 'Ghi chú']],
+    mau: [['Công ty TNHH Mẫu', 'Anh Nam', '0900000001', '12 Đường số 1, TP.HCM', '0300000001', 'nam@example.com', '', '', '', '', '', 'Khách mẫu']] },
+  hang: { ten: 'mặt hàng', api: 'nhapHang', list: 'hang', key: 'MaHH', cap: 'hang-hoa.csv', batBuoc: 'TenHang', hien: ['TenHang', 'Model', 'GiaSi', 'GiaLe'],
+    cols: [['TenHang', 'Tên hàng'], ['Model', 'Model'], ['NhomHang', 'Nhóm hàng'], ['PhanLoai', 'Phân loại'], ['DVT', 'Đơn vị tính'], ['XuatXu', 'Xuất xứ'],
+      ['GiaSi', 'Giá sỉ'], ['GiaLe', 'Giá lẻ'], ['TonToiThieu', 'Tồn tối thiểu'], ['BaoHanh', 'Bảo hành (tháng)'], ['GhiChu', 'Ghi chú']],
+    mau: [['iPhone 16 Pro 256GB Titan Đen', 'MYNG3', 'iPhone', 'ĐIỆN THOẠI', 'Cái', 'Việt Nam', '25000000', '27990000', '2', '12', '']] },
+};
+// Đọc CSV/TSV: nháy kép bao ô, "" là một dấu nháy, ô có thể chứa xuống dòng. Dấu ngăn cột đoán từ dòng đầu.
+function parseTable(text) {
+  text = String(text).replace(/^﻿/, '');
+  const first = text.split(/\r?\n/)[0] || '';
+  const cnt = c => first.split(c).length - 1;
+  const sep = cnt('\t') ? '\t' : cnt(';') > cnt(',') ? ';' : ',';
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; continue; }
+    if (c === '"' && cell === '') q = true;
+    else if (c === sep) { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += c;
+  }
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+// Bảng thô -> mảng đối tượng theo tên cột; _dong = số dòng trong file. Trả { rows, thieu } (thieu: cột bắt buộc không có trong tiêu đề)
+function mapNhap(cfg, raw) {
+  const lines = raw.map((r, i) => ({ r, dong: i + 1 })).filter(x => x.r.some(v => String(v).trim()));
+  if (!lines.length) return { rows: [], thieu: false };
+  const idx = {};
+  lines[0].r.forEach((h, i) => { const n = norm(h).trim(); const c = cfg.cols.find(([k, l]) => norm(k) === n || norm(l) === n); if (c && !(c[0] in idx)) idx[c[0]] = i; });
+  const rows = lines.slice(1).map(x => { const o = { _dong: x.dong }; Object.keys(idx).forEach(k => { o[k] = String(x.r[idx[k]] ?? '').trim(); }); return o; });
+  return { rows, thieu: !(cfg.batBuoc in idx) };
+}
+
+function openNhap(kind) {
+  const cfg = NHAP[kind];
+  if (kind === 'hang' && !isAdmin()) return;
+  let parsed = { rows: [], thieu: false };
+  const m = modal({
+    title: 'Nhập ' + cfg.ten + ' từ file', wide: true,
+    body: `<p class="muted">Chọn file <b>.csv</b> (Excel: Lưu thành → <i>CSV UTF-8</i>) hoặc <b>sao chép các ô trong Excel / Google Sheet rồi dán</b> vào ô bên dưới. Dòng đầu là tiêu đề cột. Mã ${cfg.ten} tự sinh; dòng trùng ${kind === 'khach' ? 'số điện thoại' : 'tên hàng và model'} với dữ liệu đã có sẽ được bỏ qua.</p>
+      <div class="fgrid"><label class="field full"><span class="lb">File CSV</span><input type="file" name="file" accept=".csv,.tsv,.txt,text/csv"></label>
+      <label class="field full"><span class="lb">Hoặc dán dữ liệu</span><textarea name="text" rows="5" placeholder="${esc(cfg.cols.map(c => c[1]).join('\t'))}"></textarea></label></div>
+      <div name="xem" style="margin-top:12px"></div>`,
+    buttons: [
+      { t: 'Tải file mẫu', ic: 'down', fn: () => downloadCsv(cfg.cap, cfg.cols.map(c => c[1]), cfg.mau) },
+      { t: 'Nhập', ic: 'save', cls: 'primary', fn: run(async () => {
+        if (parsed.thieu) throw new Error('Thiếu cột "' + cfg.cols.find(c => c[0] === cfg.batBuoc)[1] + '" ở dòng tiêu đề.');
+        if (!parsed.rows.length) throw new Error('Chưa có dữ liệu để nhập.');
+        if (!confirm('Nhập ' + parsed.rows.length + ' dòng ' + cfg.ten + ' vào Sheet?')) return;
+        const r = await api(cfg.api, parsed.rows);
+        r.them.forEach(o => upsertLocal(cfg.list, cfg.key, o));
+        sortAll(); derive(); render();
+        const loi = r.bo.length ? `<p style="margin-top:12px"><b>Bỏ qua ${r.bo.length} dòng:</b></p><ul>${r.bo.slice(0, 50).map(b => `<li>Dòng ${b.dong}: ${esc(b.ly)}</li>`).join('')}</ul>${r.bo.length > 50 ? `<p class="muted">… và ${r.bo.length - 50} dòng khác.</p>` : ''}` : '';
+        toast(`Đã nhập ${r.them.length} ${cfg.ten}.`);
+        if (loi) { m.querySelector('.box-b').innerHTML = `<p><b class="green">Đã nhập ${r.them.length} ${cfg.ten}.</b></p>` + loi; m.querySelector('[data-b="1"]').remove(); }
+        else closeModal();
+      }) },
+    ],
+  });
+  const xem = m.querySelector('[name=xem]'), ta = m.querySelector('[name=text]');
+  const veXem = () => {
+    parsed = mapNhap(cfg, parseTable(ta.value));
+    if (!ta.value.trim()) { xem.innerHTML = ''; return; }
+    if (parsed.thieu) { xem.innerHTML = `<p class="red">Không thấy cột <b>${esc(cfg.cols.find(c => c[0] === cfg.batBuoc)[1])}</b> ở dòng đầu. Dùng "Tải file mẫu" để lấy đúng tiêu đề.</p>`; return; }
+    const lbl = k => cfg.cols.find(c => c[0] === k)[1], n = parsed.rows.length;
+    const thieuTen = parsed.rows.filter(r => !r[cfg.batBuoc]).length;
+    xem.innerHTML = `<p><b>${n}</b> dòng dữ liệu${thieuTen ? `, <span class="red">${thieuTen} dòng thiếu ${esc(lbl(cfg.batBuoc).toLowerCase())} (sẽ bị bỏ qua)</span>` : ''}.${n > NHAP_TOI_DA ? ` <span class="red">Quá ${NHAP_TOI_DA} dòng, hãy chia file.</span>` : ''}</p>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Dòng</th>${cfg.hien.map(k => `<th>${esc(lbl(k))}</th>`).join('')}</tr></thead><tbody>${parsed.rows.slice(0, 8).map(r => `<tr><td>${r._dong}</td>${cfg.hien.map(k => `<td>${esc(r[k] || '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>${n > 8 ? `<p class="muted">Hiện 8 dòng đầu.</p>` : ''}`;
+  };
+  ta.oninput = veXem;
+  m.querySelector('[name=file]').onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => { ta.value = String(rd.result); if (ta.value.includes('�')) toast('File không phải UTF-8: chữ có dấu có thể lỗi. Hãy lưu lại dạng "CSV UTF-8".', 'err'); veXem(); };
+    rd.readAsText(f, 'utf-8');
+  };
+}
+const NHAP_TOI_DA = 2000;
+
 // ===================== Hàng hóa & tồn kho =====================
 const hangText = h => [h.MaHH, h.TenHang, h.Model, h.NhomHang, h.PhanLoai, h.XuatXu, h.GhiChu].join(' ');
 const nhomOptions = () => [['', 'Tất cả nhóm hàng'], ...[...new Set(S.hang.map(h => h.NhomHang).filter(Boolean))].map(g => [g, g])];
 
 function vHang(el) {
-  setTop('Kho hàng', 'Hàng hóa & bảng giá', isAdmin() ? [{ t: 'Thêm mặt hàng', ic: 'plus', cls: 'primary', fn: () => openHang() }] : []);
+  setTop('Kho hàng', 'Hàng hóa & bảng giá', isAdmin() ? [{ t: 'Nhập từ file', ic: 'up', fn: () => openNhap('hang') }, { t: 'Thêm mặt hàng', ic: 'plus', cls: 'primary', fn: () => openHang() }] : []);
   if (isAdmin()) S.onNew = () => openHang();
   listCard(el, {
     id: 'hang', ph: 'Tìm tên, model, hãng… (không cần gõ dấu)',
