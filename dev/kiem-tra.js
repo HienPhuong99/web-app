@@ -864,5 +864,54 @@ assert.deepStrictEqual([tkCu['cu.admin'].CuaHang, tkCu['cu.admin'].TrangThai], [
 assert.strictEqual(G.taiDuLieu(admin2).user.u, 'admin'); // tài khoản không bị đổi thì giữ nguyên phiên
 assert.deepStrictEqual(plain(G.xoaCuaHangDaBo_()), []); // chạy lại không làm gì thêm
 
+// Nhập hàng loạt từ file: khách hàng và hàng hóa
+{
+  G.luuTaiKhoan(admin2, { TenDangNhap: 'nv.nhap', HoTen: 'NV Nhập', VaiTro: 'nhanvien', MatKhau: 'nhap-123', CuaHang: 'phone', moi: true });
+  const nv = G.dangNhap('nv.nhap', 'nhap-123').token;
+  assert.throws(() => G.nhapHang(nv, [{ TenHang: 'X' }]), /quản trị/);
+  assert.throws(() => G.nhapKhach('sai', [{ TenKH: 'X' }]), /HET_PHIEN/);
+  assert.throws(() => G.nhapKhach(nv, []), /Không có dòng/);
+  assert.throws(() => G.nhapKhach(nv, Array.from({ length: 2001 }, (_, i) => ({ TenKH: 'K' + i }))), /tối đa 2000/);
+
+  const truoc = sheets.PS_KhachHang.rows.length, logTruoc = sheets.PS_NhatKy.rows.length;
+  G.luuKhach(admin2, { TenKH: 'Khách có sẵn', SDT: '0911 222 333' });
+  const r = plain(G.nhapKhach(nv, [
+    { _dong: 2, TenKH: ' Nhập Một ', SDT: '0922000001', NguoiDaiDien: 'Ông A' },
+    { _dong: 3, TenKH: 'Nhập Hai', SDT: '0922000002 / 0922000003' },
+    { _dong: 4, TenKH: 'Trùng sẵn có', SDT: '0911.222.333' },       // trùng SĐT với khách đã có
+    { _dong: 5, TenKH: 'Trùng trong file', SDT: '0922000003' },     // trùng dòng 3
+    { _dong: 6, TenKH: '', SDT: '0933000000' },                     // thiếu tên
+    { _dong: 7, TenKH: '', SDT: '' },                               // dòng trống: bỏ qua im lặng
+    { _dong: 8, TenKH: '=HYPERLINK("x")', SDT: '' },                // không thành công thức
+  ]));
+  assert.deepStrictEqual(r.them.map(k => k.TenKH), ['Nhập Một', 'Nhập Hai', '=HYPERLINK("x")']);
+  assert.deepStrictEqual(r.bo.map(b => b.dong), [4, 5, 6]);
+  assert.ok(r.them.every(k => /^KH\d{5}$/.test(k.MaKH) && k.NguoiTao === 'NV Nhập' && k.NgayTao));
+  assert.strictEqual(new Set(r.them.map(k => k.MaKH)).size, 3); // mã không trùng nhau
+  assert.strictEqual(sheets.PS_KhachHang.rows.length, truoc + 1 + 3);
+  const dong = G.findObj_('KhachHang', r.them[0].MaKH);
+  assert.deepStrictEqual([dong.SDT, dong.NguoiDaiDien], ['0922000001', 'Ông A']);
+  assert.strictEqual(G.findObj_('KhachHang', r.them[2].MaKH).TenKH, '=HYPERLINK("x")'); // toRow_ thêm dấu ' nên Sheet giữ là chữ
+  assert.strictEqual(sheets.PS_NhatKy.rows.length, logTruoc + 2); // luuKhach + 1 dòng nhật ký tổng hợp
+  assert.deepStrictEqual(plain(G.nhapKhach(nv, [{ TenKH: 'Nhập Một', SDT: '0922000001' }])).them, []); // nhập lại: không thêm
+  assert.strictEqual(G.luuKhach(nv, { TenKH: 'Sau nhập' }).MaKH, 'KH' + String(+r.them[2].MaKH.slice(2) + 1).padStart(5, '0')); // mã tiếp theo đúng
+
+  const h = plain(G.nhapHang(admin2, [
+    { _dong: 2, TenHang: 'Hàng nhập 1', Model: 'M1', GiaSi: '25.000.000', GiaLe: '27,990,000', TonToiThieu: '2', BaoHanh: '12', DVT: 'Cái' },
+    { _dong: 3, TenHang: 'Hàng nhập 2' },
+    { _dong: 4, TenHang: 'hàng nhập 1', Model: 'm1' },                    // trùng tên + model
+    { _dong: 5, TenHang: 'Hàng nhập 1', Model: 'M2' },                    // cùng tên khác model: được
+    { _dong: 6, TenHang: 'Giá sai', GiaLe: '12abc' },
+    { _dong: 7, TenHang: 'Giá âm', GiaSi: '-5' },
+  ]));
+  assert.deepStrictEqual(h.them.map(x => x.TenHang), ['Hàng nhập 1', 'Hàng nhập 2', 'Hàng nhập 1']);
+  assert.deepStrictEqual(h.bo.map(b => b.dong), [4, 6, 7]);
+  const h1 = G.findObj_('HangHoa', h.them[0].MaHH);
+  assert.deepStrictEqual([h1.GiaSi, h1.GiaLe, h1.TonToiThieu, h1.BaoHanh], [25000000, 27990000, 2, 12]);
+  assert.deepStrictEqual([G.findObj_('HangHoa', h.them[1].MaHH).GiaSi], ['']);
+  assert.ok(h.them.every(x => /^HH\d{4}$/.test(x.MaHH)));
+  assert.deepStrictEqual(plain(G.taiDuLieu(admin2).hang.filter(x => x.TenHang === 'Hàng nhập 1')).map(x => x.GiaSi).sort(), ['', 25000000]);
+}
+
 require('./kiem-tra-html'); // giao diện: cú pháp, và các chỗ Apps Script sẽ cắt nhầm khi xóa chú thích
 console.log('OK - tất cả kiểm tra đều đạt');
