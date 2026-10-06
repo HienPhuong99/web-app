@@ -10,7 +10,7 @@ const chay = (lenh, args) => {
   const r = spawnSync(lenh, args, { cwd: ROOT, stdio: 'inherit', shell: process.platform === 'win32' }); // shell trên Windows để tìm được clasp.cmd
   if (r.error || r.status !== 0) { console.error('\nDừng: bước trên lỗi' + (r.error ? ' (' + r.error.message + ')' : '') + '.'); process.exit(r.status || 1); }
 };
-if (!process.argv.includes('--bo-qua-kiem-tra')) chay(process.execPath, [path.join('dev', 'kiem-tra.js')]);
+if (!process.argv.includes('--bo-qua-kiem-tra')) chay('node', [path.join('dev', 'kiem-tra.js')]); // 'node' chứ không dùng process.execPath: shell trên Windows tách đường dẫn có dấu cách
 chay('clasp', ['push', '--force']);
 chay('clasp', ['create-deployment', '-i', DEPLOYMENT_ID]);
 console.log(`

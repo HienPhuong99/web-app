@@ -209,7 +209,7 @@ assert.ok(!sheets.DM_NhatKy.rows.some(r => /Anh Minh/.test(r[4])));
 assert.throws(() => G.docTienChu_(1e16), /quá lớn/);
 
 // Giao diện (Index.html, docSo: in báo giá và xem trước hợp đồng) và máy chủ (docTienChu_: ghi vào file hợp đồng) phải đọc số giống nhau
-const docSoGiaoDien = vm.runInNewContext(require('fs').readFileSync(require('path').join(__dirname, '..', 'apps-script', 'Index.html'), 'utf8').match(/function docSo\(n\) \{[\s\S]*?\n\}\n/)[0] + ';docSo');
+const docSoGiaoDien = vm.runInNewContext(require('fs').readFileSync(require('path').join(__dirname, '..', 'apps-script', 'Index.html'), 'utf8').match(/function docSo\(n\) \{[\s\S]*?\r?\n\}\r?\n/)[0] + ';docSo');
 let seedRng = 12345; const rnd = () => (seedRng = (seedRng * 1103515245 + 12345) % 2147483648) / 2147483648;
 const mau = [0, 1, 4, 14, 24, 34, 104, 1004, 1e6 + 4, 1e9, 1e9 + 1, 2e9 + 24, 999999999999];
 for (let i = 0; i < 3000; i++) mau.push(Math.floor(rnd() * Math.pow(10, 1 + Math.floor(rnd() * 11))));
@@ -503,7 +503,7 @@ assert.ok(ls.every(x => x.DoiTuong === hdGHFile.SoHD) && /thêm 6 tháng: 2026-1
 assert.deepStrictEqual(plain(G.lichSuHopDong(lan, 'khong-co')), []);
 // hanHD ở máy chủ (nhắc việc) và ở giao diện (Index.html) phải cho cùng kết quả
 for (const homNay of ['2026-10-05', '2026-03-01', '2027-01-01']) {
-  const gd = vm.runInNewContext('const HD_SAP = 30, today = () => ' + JSON.stringify(homNay) + ';\n' + require('fs').readFileSync(require('path').join(__dirname, '..', 'apps-script', 'Index.html'), 'utf8').match(/function hanHD\(h\) \{[\s\S]*?\n\}\n/)[0] + '\nhanHD');
+  const gd = vm.runInNewContext('const HD_SAP = 30, today = () => ' + JSON.stringify(homNay) + ';\n' + require('fs').readFileSync(require('path').join(__dirname, '..', 'apps-script', 'Index.html'), 'utf8').match(/function hanHD\(h\) \{[\s\S]*?\r?\n\}\r?\n/)[0] + '\nhanHD');
   for (const bao of [0, 7, 30, 60, 90]) for (let off = -40; off <= 160; off += 3) for (const tt of ['Đang hiệu lực', 'Soạn thảo', 'Hoàn thành']) {
     const d = new Date(Date.parse(homNay) + off * 864e5).toISOString().slice(0, 10), h = { TrangThai: tt, NgayHetHan: d, BaoTruocNgay: bao };
     assert.deepStrictEqual(plain(G.hanHD_(h, homNay)), plain(gd(h)), JSON.stringify([homNay, h]));
@@ -578,7 +578,7 @@ G.xoaHopDong(admin, hdKhongDon.SoHD);
 assert.strictEqual(rowsOf('PS_HopDongLich', hdKhongDon.SoHD).length, 0);
 assert.ok(['Sửa lịch thanh toán', 'Thu đợt hợp đồng', 'Hủy thu đợt hợp đồng'].every(h => plain(G.dsNhatKy(admin)).some(x => x.HanhDong === h && x.DoiTuong === hdTG.SoHD)));
 // Tình trạng đợt: máy chủ (nhắc việc) và giao diện (Index.html) cho cùng kết quả
-const htNoi = vm.runInNewContext('const today = () => "2026-10-05";\n' + require('fs').readFileSync(require('path').join(__dirname, '..', 'apps-script', 'Index.html'), 'utf8').match(/function trangThaiDot\(r\) \{[\s\S]*?\n\}\n/)[0] + '\ntrangThaiDot');
+const htNoi = vm.runInNewContext('const today = () => "2026-10-05";\n' + require('fs').readFileSync(require('path').join(__dirname, '..', 'apps-script', 'Index.html'), 'utf8').match(/function trangThaiDot\(r\) \{[\s\S]*?\r?\n\}\r?\n/)[0] + '\ntrangThaiDot');
 for (let off = -15; off <= 20; off++) for (const so of ['', 'PT1']) {
   const r = { SoPT: so, NgayDen: new Date(Date.parse('2026-10-05') + off * 864e5).toISOString().slice(0, 10) };
   assert.strictEqual(G.trangThaiDot_(r, '2026-10-05'), htNoi(r), JSON.stringify(r));
