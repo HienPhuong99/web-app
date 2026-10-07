@@ -1335,7 +1335,7 @@ const openPK = p => p && openDoc(p.Loai === 'Nhập' ? 'NK' : 'XK', p);
 
 function vDoc(el) {
   const L = S.loai, c = DOC[L], d = S.doc, saved = !!d[c.key], price = !!c.price;
-  const btns = [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', fn: run(saveDoc) }, { t: 'In / PDF', ic: 'print', fn: run(printDoc) }];
+  const btns = [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', fn: run(() => saveDoc(null, true)) }, { t: 'In / PDF', ic: 'print', fn: run(printDoc) }];
   if (L === 'BG' && saved) {
     const so = D.dhBG[d.SoBG];
     btns.push(so ? { t: 'Xem đơn ' + so, ic: 'cart', fn: run(() => openDoc('DH', S.donHang.find(x => x.SoDH === so))) } : { t: 'Chốt thành đơn hàng', ic: 'check', cls: 'soft', fn: run(chotDon) });
@@ -1562,7 +1562,8 @@ function applyResult(r) {
 }
 
 let saving = false;
-async function saveDoc(override) {
+// ve: bấm Lưu/F8 thì lưu xong về danh sách; tự lưu giữa chừng (hủy đơn, in) thì ở lại
+async function saveDoc(override, ve) {
   if (saving) return;
   const L = S.loai, c = DOC[L], d = Object.assign({}, S.doc, override || {}), lines = filled(d.lines);
   if (!lines.length) throw new Error('Chưa có dòng hàng nào.');
@@ -1593,8 +1594,9 @@ async function saveDoc(override) {
     S.doc = Object.assign({}, head, { lines: r.doc.lines });
     S.extra = Object.assign({}, S.extra, { goc });
     S.dirty = false; ensureTail();
-    render();
     toast(`Đã lưu ${c.ten.toLowerCase()} ${head[c.key]}.`);
+    const dh = L === 'XK' && head.SoDH && S.donHang.find(x => x.SoDH === head.SoDH); // phiếu giao hàng: về đơn gốc để thu tiền tiếp
+    if (!ve) render(); else if (dh) await openDoc('DH', dh); else go(c.list);
   } finally { saving = false; }
 }
 
@@ -2101,7 +2103,7 @@ async function openHD(h) {
 
 function vHD(el) {
   const d = S.hd, saved = !!d.SoHD, khoa = !!S.extra.khoa;
-  const btns = [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', fn: run(saveHD) }];
+  const btns = [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', fn: run(() => saveHD(true)) }];
   if (saved && d.TrangThai === 'Đang hiệu lực' && d.NgayHetHan) btns.push({ t: 'Gia hạn', ic: 'refresh', cls: 'soft', fn: run(() => openGiaHan(S.hd)) });
   if (saved) btns.push({ t: 'Nhắc khách', ic: 'alert', fn: run(() => nhacHD(S.hd)) });
   if (saved) btns.push({ t: 'Nhân bản', ic: 'copy', fn: run(nhanBanHD) });
@@ -2405,7 +2407,7 @@ function openHDHangLoat() {
   }
 }
 
-async function saveHD() {
+async function saveHD(ve) {
   if (saving) return;
   const d = Object.assign({}, S.hd), lines = d.lines.filter(l => String(l.TenHang).trim());
   if (!d.LoaiHD) throw new Error('Chọn loại hợp đồng.');
@@ -2444,8 +2446,8 @@ async function saveHD() {
     S.hd = Object.assign({}, head, { lines: r.doc.lines.map(l => Object.assign({}, l)), lich: lich.map(x => Object.assign({}, x)) });
     S.extra = { khoa: HD_DA_KY.includes(head.TrangThai) && !isAdmin() };
     S.dirty = false; hdTail();
-    render();
     toast(`Đã lưu hợp đồng ${head.SoHD}.`);
+    if (ve) go('hopdong'); else render();
   } finally { saving = false; }
 }
 
@@ -2809,8 +2811,8 @@ document.addEventListener('keydown', e => {
   if (e.key === 'F8') {
     e.preventDefault();
     if (modalOpen) { const b = $('#modal [data-save]'); if (b && !b.disabled) b.click(); }
-    else if (S.view === 'doc') run(saveDoc)();
-    else if (S.view === 'hd') run(saveHD)();
+    else if (S.view === 'doc') run(() => saveDoc(null, true))();
+    else if (S.view === 'hd') run(() => saveHD(true))();
   }
   if (e.key === 'F2' && !modalOpen && S.onNew) { e.preventDefault(); S.onNew(); }
   if (e.key === 'F3' && !modalOpen) { const s = $('#view .search input'); if (s) { e.preventDefault(); s.focus(); } }
