@@ -11,6 +11,8 @@ Quản lý khách hàng, bảng giá, báo giá, đơn hàng, kho (ghi IMEI/seri
 | `apps-script/Code.gs` | Phần máy chủ: bán hàng, kho, công nợ, báo cáo (dán vào Apps Script) |
 | `apps-script/HopDong.gs` | Phần máy chủ của Hợp đồng: lưu, lịch thanh toán, ký tại quầy, tạo file Google Docs từ mẫu, PDF, mẫu (dán vào Apps Script) |
 | `apps-script/EmailSang.gs` | Email tổng hợp mỗi sáng cho quản lý (dán vào Apps Script) |
+| `apps-script/Api.gs` | API cho app điện thoại (`mobile/`): đăng nhập theo máy, tổng quan, tra bảo hành (dán vào Apps Script) |
+| `mobile/` | App điện thoại Android/iOS (Expo), xem mục *App điện thoại* |
 | `apps-script/Index.html` | Giao diện (dán vào Apps Script) |
 | `apps-script/appsscript.json`, `.clasp.json` | Cấu hình dự án (múi giờ VN, web app) và mã dự án Apps Script cho `clasp` |
 | `du-lieu/DuLieu.xlsx` | Dữ liệu ban đầu (chỉ dùng khi lập Sheet mới). **File cũ còn dữ liệu khách PCCC: nên xóa các trang `PCCC_…` hoặc bỏ file này, đừng chia sẻ công khai.** |
@@ -20,7 +22,7 @@ Quản lý khách hàng, bảng giá, báo giá, đơn hàng, kho (ghi IMEI/seri
 
 Link app giữ nguyên, dữ liệu cũ giữ nguyên. Làm đúng thứ tự:
 
-1. **Đưa code mới lên Apps Script.** Chạy `node dev/trien-khai.js` (kiểm tra, `clasp push`, rồi tạo bản triển khai mới; xong bước này thì bỏ qua bước 3), **hoặc** dán tay `Code.gs`, `HopDong.gs`, `Index.html` và **tệp mới `EmailSang.gs`** (làm như bước 3 của phần *Cài đặt* bên dưới).
+1. **Đưa code mới lên Apps Script.** Chạy `node dev/trien-khai.js` (kiểm tra, `clasp push`, rồi tạo bản triển khai mới; xong bước này thì bỏ qua bước 3), **hoặc** dán tay `Code.gs`, `HopDong.gs`, `Index.html`, `EmailSang.gs` và **tệp mới `Api.gs`** (làm như bước 3 của phần *Cài đặt* bên dưới).
 2. **Chạy `caiDat`** trong trình soạn thảo Apps Script rồi bấm **Cho phép** các quyền mới (Google Docs, Google Drive, gửi email, hẹn giờ). Hàm này tạo 6 file Docs mẫu hợp đồng và **xóa cửa hàng PCCC cùng dữ liệu của nó, không hoàn tác được trong app** (xem *Dọn dữ liệu PCCC cũ*). Sau đó chạy hàm `kiemTraTaoHopDong`: Nhật ký thực thi phải ghi **TẤT CẢ ĐẠT**.
 3. **Triển khai lại** (chỉ khi dán tay): Triển khai → Quản lý các lần triển khai → ✏ → Phiên bản: **Phiên bản mới** → Triển khai. Link giữ nguyên.
 
@@ -45,6 +47,7 @@ Web hiện xem trước, bấm **Nhập** để ghi xuống Sheet. Mã (`KH00001
    - Xóa hết nội dung `Code.gs` có sẵn, dán toàn bộ `apps-script/Code.gs`.
    - Bấm **+** cạnh "Tệp" → Tập lệnh (*Script*) → đặt tên `HopDong` → dán toàn bộ `apps-script/HopDong.gs`.
    - Làm tương tự cho tập lệnh thứ ba, đặt tên `EmailSang` → dán toàn bộ `apps-script/EmailSang.gs`.
+   - Tập lệnh thứ tư đặt tên `Api` → dán toàn bộ `apps-script/Api.gs` (cho app điện thoại; không dùng app thì vẫn nên dán).
    - Bấm **+** cạnh "Tệp" → HTML → đặt tên đúng là `Index` → xóa nội dung có sẵn, dán toàn bộ `apps-script/Index.html`.
    - Bấm Lưu (Ctrl+S).
 4. **Chạy `caiDat`**: trên thanh công cụ chọn hàm `caiDat` → **Chạy**. Hàm này tạo trang/cột còn thiếu, **xóa cửa hàng PCCC cũ** (trang `PCCC_…`, cấu hình, quyền vào), **tạo 6 file Google Docs mẫu hợp đồng** trong thư mục Drive `Hợp đồng - phuonghihi` và tạo tài khoản quản trị nếu chưa có.

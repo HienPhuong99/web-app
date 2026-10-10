@@ -162,6 +162,8 @@ const ctx = vm.createContext({
       create: () => { if (thuMail.thieuQuyen) throw new Error('Bạn không có quyền gọi ScriptApp.newTrigger.'); thuMail.henGio.push(t); return t; } }; return b; },
   },
   Session: { getEffectiveUser: () => ({ getEmail: () => thuMail.chu }) },
+  ContentService: { MimeType: { JSON: 'application/json' }, createTextOutput: s => ({ text: String(s), mime: 'text/plain',
+    setMimeType(m) { this.mime = m; return this; }, getContent() { return this.text; }, getMimeType() { return this.mime; } }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
   Logger: { log: (...a) => { logs.push(a.join(' ')); console.log('[Logger]', ...a); } },
   Utilities: {
@@ -182,7 +184,8 @@ fs.readdirSync(ROOT).filter(f => f.endsWith('.gs')).sort((a, b) => (a === 'Code.
   .forEach(f => vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f }));
 
 // ---- Dữ liệu
-const file = process.argv[2];
+const MAU_APP = process.argv.includes('--mau-app'); // thêm vài máy đã giao có IMEI để thử app điện thoại
+const file = process.argv.slice(2).find(a => !a.startsWith('--'));
 const HH = ['MaHH', 'TenHang', 'Model', 'NhomHang', 'PhanLoai', 'DVT', 'XuatXu', 'GiaSi', 'GiaLe', 'TonToiThieu', 'GhiChu'];
 const KH = ['MaKH', 'TenKH', 'NguoiLienHe', 'SDT', 'DiaChi', 'MST', 'Email', 'GhiChu', 'NgayTao', 'NguoiTao'];
 const seed = file ? JSON.parse(fs.readFileSync(file, 'utf8')) : {
@@ -194,6 +197,16 @@ const seed = file ? JSON.parse(fs.readFileSync(file, 'utf8')) : {
 };
 for (const [name, rows] of Object.entries(seed)) sheets[name] = new Sheet(rows.map(r => r.slice()));
 ctx.caiDat();
+if (MAU_APP) {
+  const t = ctx.dangNhap('admin', logs.join('\n').match(/mật khẩu: (\S+)/)[1]).token, homNay = ctx.now_().slice(0, 10);
+  const may16 = { MaHH: 'HH0001', TenHang: 'iPhone 16 Pro Max 256GB - Titan Đen', DVT: 'Máy' }, may15 = { MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', DVT: 'Máy' };
+  ctx.luuChungTu(t, 'NK', { Ngay: homNay, DoiTac: 'Tồn đầu kỳ', lines: [Object.assign({ SoLuong: 5 }, may16), Object.assign({ SoLuong: 1 }, may15)] });
+  const dh = ctx.luuChungTu(t, 'DH', { Ngay: homNay, MaKH: 'KH00001', TenKH: 'Anh Minh', SDT: '0911000001', VAT: 0, lines: [Object.assign({ SoLuong: 1, DonGia: 28200000 }, may16)] }).doc;
+  ctx.luuChungTu(t, 'XK', { Ngay: homNay, SoDH: dh.SoDH, DoiTac: 'Anh Minh', lines: [Object.assign({ SoLuong: 1, IMEI: '356789012345671' }, may16)] });
+  ctx.luuChungTu(t, 'XK', { Ngay: '2024-03-10', DoiTac: 'Khách lẻ', lines: [Object.assign({ SoLuong: 1, IMEI: '351234567890123' }, may15)] });
+  ctx.luuThuTien(t, { Ngay: homNay, SoDH: dh.SoDH, SoTien: 20000000, HinhThuc: 'Tiền mặt' });
+  console.log('Mẫu tra bảo hành trên app: IMEI 356789012345671 (còn hạn), 351234567890123 (hết hạn), SĐT 0911000001');
+}
 
 // ---- google.script.run giả: gọi hàm trong Code.gs qua /rpc (hàm kết thúc bằng _ là hàm riêng, không gọi được)
 const SHIM = `window.google = { script: { get run() {
@@ -219,6 +232,17 @@ if (require.main === module) http.createServer(async (req, res) => {
     await new Promise(r => setTimeout(r, 120)); // Apps Script thật chậm hơn nhiều
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify(out));
+  }
+  // API của app điện thoại (Api.gs → doPost). App trong Expo Go trỏ tới http://<IP máy tính>:5178/api
+  if (req.url === '/api' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' };
+    if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
+    let body = '';
+    for await (const c of req) body += c;
+    const out = ctx.doPost({ postData: { contents: body, type: req.headers['content-type'] || '' } });
+    await new Promise(r => setTimeout(r, 120));
+    res.writeHead(200, Object.assign({ 'Content-Type': out.getMimeType() }, cors));
+    return res.end(out.getContent());
   }
   if (req.url === '/') {
     // doGet() thật thêm thẻ viewport; ở đây chèn tay cho giống

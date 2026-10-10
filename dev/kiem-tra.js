@@ -914,4 +914,7 @@ assert.deepStrictEqual(plain(G.xoaCuaHangDaBo_()), []); // chạy lại không l
 }
 
 require('./kiem-tra-html'); // giao diện: cú pháp, và các chỗ Apps Script sẽ cắt nhầm khi xóa chú thích
+// API app điện thoại: tiến trình riêng để có dữ liệu sạch
+require('child_process').execFileSync(process.execPath, [require('path').join(__dirname, 'kiem-tra-api.js')], { stdio: ['ignore', 'pipe', 'inherit'] })
+  .toString().split('\n').filter(l => /^OK/.test(l)).forEach(l => console.log(l));
 console.log('OK - tất cả kiểm tra đều đạt');

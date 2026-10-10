@@ -51,6 +51,8 @@ const TABLES = {
   HopDongCT: ['SoHD', 'STT', 'MaHH', 'TenHang', 'DVT', 'SoLuong', 'DonGia', 'ThanhTien', 'IMEI'],
   HopDongLich: ['SoHD', 'Dot', 'Nhan', 'NgayDen', 'SoTien', 'SoPT', 'NgayThu'], // lịch thanh toán / trả góp: mỗi đợt một dòng; SoPT = phiếu thu đã ghi nhận cho đợt đó
   MauHopDong: ['LoaiHD', 'LinkMau', 'MoTa', 'NgayTao'], // mỗi loại hợp đồng một file Google Docs mẫu
+  // Điện thoại đã đăng nhập app (Api.gs): MaMay = SHA-256 của mã đăng nhập máy (không lưu mã gốc), CapLuc = mốc cấp (ms) để thu hồi khi tài khoản bị khóa/đổi mật khẩu
+  ThietBi: ['MaMay', 'TenDangNhap', 'TenMay', 'CapLuc', 'NgayTao', 'LanCuoi'],
 };
 // Ngân hàng nhận chuyển khoản qua mã VietQR: [mã BIN, tên] (theo danh sách của vietqr.io). Gửi cho giao diện và dùng khi in tên ngân hàng vào hợp đồng.
 const NGAN_HANG = [['970436', 'Vietcombank'], ['970415', 'VietinBank'], ['970418', 'BIDV'], ['970405', 'Agribank'], ['970407', 'Techcombank'], ['970422', 'MB Bank'],
@@ -59,10 +61,10 @@ const NGAN_HANG = [['970436', 'Vietcombank'], ['970415', 'VietinBank'], ['970418
   ['970425', 'ABBank'], ['970427', 'VietABank'], ['970412', 'PVcomBank'], ['970429', 'SCB'], ['970419', 'NCB'], ['970452', 'KienlongBank'], ['970400', 'Saigonbank'],
   ['970438', 'BaoViet Bank'], ['970433', 'VietBank'], ['970430', 'PGBank'], ['970454', 'Viet Capital Bank'], ['970414', 'MBV'], ['970446', 'Co-opBank'],
   ['970424', 'Shinhan Bank'], ['970457', 'Woori Bank'], ['422589', 'CIMB'], ['668888', 'KBank'], ['546034', 'CAKE'], ['546035', 'Ubank'], ['963388', 'Timo']];
-const SHARED = ['TaiKhoan', 'CaiDat']; // trang dùng chung cho mọi cửa hàng, không có tiền tố
+const SHARED = ['TaiKhoan', 'CaiDat', 'ThietBi']; // trang dùng chung cho mọi cửa hàng, không có tiền tố
 const NUMBER_COLS = ['Dot', 'BaoTruocNgay', 'ThangGiaHan', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien'];
 const SESSION_TTL = 6 * 60 * 60; // giây; tối đa của CacheService, tự gia hạn khi còn dùng
-const SCHEMA = '6'; // tăng số này khi thêm bảng/cột ở TABLES: app tự thêm phần thiếu ở lần gọi đầu sau khi triển khai
+const SCHEMA = '7'; // tăng số này khi thêm bảng/cột ở TABLES: app tự thêm phần thiếu ở lần gọi đầu sau khi triển khai
 
 // Loại chứng từ có dòng hàng. Số chứng từ dạng 001-2026/DH, mỗi năm đánh lại từ 001 (riêng từng cửa hàng).
 const CT = {
@@ -229,12 +231,16 @@ function dangNhap(tenDangNhap, matKhau) {
   if (tk.TrangThai === 'Khóa') throw new Error('Tài khoản đã bị khóa.');
   cache.remove('fail_' + u);
   const token = Utilities.getUuid();
-  const shops = shopsOf_(tk);
-  const user = { u: tk.TenDangNhap, ten: tk.HoTen || tk.TenDangNhap, vaiTro: tk.VaiTro, shops: shops,
-    shop: shops.includes(SHOP_MAC_DINH) ? SHOP_MAC_DINH : shops[0], // luôn mở cửa hàng mặc định trước
-    t: Math.max(Date.now(), revOf_(u, cache) + 1) }; // thời điểm đăng nhập, để thu hồi phiên cũ khi tài khoản bị khóa/đổi quyền
+  const user = phienMoi_(tk, Math.max(Date.now(), revOf_(u, cache) + 1)); // thời điểm đăng nhập, để thu hồi phiên cũ khi tài khoản bị khóa/đổi quyền
   cache.put('ss_' + token, JSON.stringify(user), SESSION_TTL);
   return { token: token, user: user };
+}
+
+// Thông tin phiên của tài khoản tk, đăng nhập lúc t (ms)
+function phienMoi_(tk, t) {
+  const shops = shopsOf_(tk);
+  return { u: tk.TenDangNhap, ten: tk.HoTen || tk.TenDangNhap, vaiTro: tk.VaiTro, shops: shops,
+    shop: shops.includes(SHOP_MAC_DINH) ? SHOP_MAC_DINH : shops[0], t: t }; // luôn mở cửa hàng mặc định trước
 }
 
 function dangXuat(token) { CacheService.getScriptCache().remove('ss_' + token); }

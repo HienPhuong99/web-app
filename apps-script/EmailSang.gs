@@ -118,11 +118,13 @@ function tongHopSang_(homNay) {
   thu.forEach(p => { da[p.MaKH] = (da[p.MaKH] || 0) + (+p.SoTien || 0); });
   const noDs = Object.keys(Object.assign({}, mua, da)).map(k => ({ MaKH: k, tien: (mua[k] || 0) - (da[k] || 0) })).filter(x => x.tien > 0).sort((a, b) => b.tien - a.tien)
     .map(x => ({ MaKH: x.MaKH, TenKH: x.MaKH && khach[x.MaKH] ? khach[x.MaKH].TenKH : (x.MaKH || 'Khách lẻ'), SDT: x.MaKH && khach[x.MaKH] ? khach[x.MaKH].SDT : '', tien: x.tien }));
-  const homQuaDon = song.filter(d => ngay(d.Ngay) === homQua);
+  const ban = n => { const ds = song.filter(d => ngay(d.Ngay) === n); return { don: ds.length, tien: ds.reduce((s, d) => s + (+d.TongCong || 0), 0) }; };
+  const daThu = n => thu.filter(p => ngay(p.Ngay) === n).reduce((s, p) => s + (+p.SoTien || 0), 0);
   const du = {
     homNay: homNay, homQua: homQua,
-    homQuaBan: { don: homQuaDon.length, tien: homQuaDon.reduce((s, d) => s + (+d.TongCong || 0), 0) },
-    homQuaThu: thu.filter(p => ngay(p.Ngay) === homQua).reduce((s, p) => s + (+p.SoTien || 0), 0),
+    homQuaBan: ban(homQua), homQuaThu: daThu(homQua),
+    homNayBan: ban(homNay), homNayThu: daThu(homNay), // màn hình Tổng quan của app điện thoại (Api.gs)
+    ban7: [6, 5, 4, 3, 2, 1, 0].map(i => { const n = new Date(Date.parse(homNay) - i * 864e5).toISOString().slice(0, 10); return { ngay: n, tien: ban(n).tien }; }),
     hopDong: hopDong, dot: dot, donTre: donTre, hang: hang,
     no: { soKhach: noDs.length, tong: noDs.reduce((s, x) => s + x.tien, 0), top: noDs.slice(0, 5) },
   };
