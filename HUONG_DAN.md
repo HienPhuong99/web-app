@@ -37,6 +37,24 @@ Vào **Khách hàng** (hoặc **Hàng hóa**, chỉ quản trị) → **Nhập t
 
 Web hiện xem trước, bấm **Nhập** để ghi xuống Sheet. Mã (`KH00001`, `HH0001`…) tự sinh. Dòng thiếu tên, trùng số điện thoại (khách) hoặc trùng tên + model (hàng), hoặc giá không phải số sẽ được bỏ qua và báo số dòng trong file. Tối đa 2000 dòng mỗi lần. Số điện thoại trong Excel nên để định dạng văn bản, kẻo mất số 0 đầu. Chưa hỗ trợ đọc trực tiếp file .xlsx: hãy dán hoặc lưu CSV.
 
+## App điện thoại (Android / iOS)
+
+Thư mục `mobile/` là app cho nhân viên đứng quầy: đăng nhập bằng tài khoản web, **Tổng quan** (doanh số hôm nay, đã thu, còn nợ, 7 ngày, việc cần làm), **Quét IMEI** tra bảo hành bằng camera, **Tài khoản**. Cách chạy thử, cài APK, kiểm tra: xem `mobile/README.md`.
+
+1. **Đưa `Api.gs` lên Google trước** (`node dev/trien-khai.js`, hoặc dán tay rồi triển khai lại như mục *Lên bản mới*). Bản trên Google chưa có `Api.gs` thì app báo lỗi khi đăng nhập. Lần mở đầu tiên app tự thêm trang `ThietBi` vào Sheet.
+2. **Thử miễn phí trên điện thoại**: cài Expo Go, trong `mobile/` chạy `npm install` rồi `npx expo start`, quét mã QR.
+3. **Bảo mật**:
+   - Đăng nhập trên điện thoại cấp một mã máy dùng lâu dài, lưu trong Keychain/Keystore của máy. Trang `ThietBi` chỉ giữ mã đã băm, tên máy, lần dùng cuối.
+   - Mã máy hết hiệu lực khi đăng xuất trên máy đó, khi tài khoản bị khóa (kể cả khóa thẳng trong Sheet), đổi quyền, hoặc đặt lại / đổi mật khẩu.
+   - **Mất điện thoại**: quản trị vào menu Tài khoản trên web, đặt lại mật khẩu hoặc khóa tài khoản đó.
+   - Mỗi tài khoản tối đa 10 máy; đăng nhập máy thứ 11 thì máy lâu không dùng nhất bị đăng xuất.
+4. **Chưa thử trên Google thật và trên điện thoại thật**:
+   - API mới chỉ được kiểm tra trên bản giả lập; app mới chạy ở bản web (trình duyệt cỡ điện thoại).
+   - Lần đầu: triển khai, đăng nhập app bằng một tài khoản nhân viên thử, tra một IMEI đã bán.
+   - App báo "Máy chủ trả dữ liệu không đọc được" nghĩa là web app chưa để *Bất kỳ ai* truy cập, hoặc link sai (trong app: *Máy chủ*).
+   - Link `/dev` không dùng được cho app, vì link này đòi đăng nhập Google.
+   - Camera quét mã chỉ thử được trên máy thật.
+
 ## Cài đặt (làm 1 lần, khoảng 10 phút)
 
 1. **Tạo Google Sheet**: mở <https://sheets.new> bằng tài khoản Google sẽ giữ dữ liệu.

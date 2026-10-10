@@ -202,10 +202,10 @@ if (MAU_APP) {
   const may16 = { MaHH: 'HH0001', TenHang: 'iPhone 16 Pro Max 256GB - Titan Đen', DVT: 'Máy' }, may15 = { MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', DVT: 'Máy' };
   ctx.luuChungTu(t, 'NK', { Ngay: homNay, DoiTac: 'Tồn đầu kỳ', lines: [Object.assign({ SoLuong: 5 }, may16), Object.assign({ SoLuong: 1 }, may15)] });
   const dh = ctx.luuChungTu(t, 'DH', { Ngay: homNay, MaKH: 'KH00001', TenKH: 'Anh Minh', SDT: '0911000001', VAT: 0, lines: [Object.assign({ SoLuong: 1, DonGia: 28200000 }, may16)] }).doc;
-  ctx.luuChungTu(t, 'XK', { Ngay: homNay, SoDH: dh.SoDH, DoiTac: 'Anh Minh', lines: [Object.assign({ SoLuong: 1, IMEI: '356789012345671' }, may16)] });
-  ctx.luuChungTu(t, 'XK', { Ngay: '2024-03-10', DoiTac: 'Khách lẻ', lines: [Object.assign({ SoLuong: 1, IMEI: '351234567890123' }, may15)] });
+  ctx.luuChungTu(t, 'XK', { Ngay: homNay, SoDH: dh.SoDH, DoiTac: 'Anh Minh', lines: [Object.assign({ SoLuong: 1, IMEI: '356789012345672' }, may16)] });
+  ctx.luuChungTu(t, 'XK', { Ngay: '2024-03-10', DoiTac: 'Khách lẻ', lines: [Object.assign({ SoLuong: 1, IMEI: '351234567890124' }, may15)] });
   ctx.luuThuTien(t, { Ngay: homNay, SoDH: dh.SoDH, SoTien: 20000000, HinhThuc: 'Tiền mặt' });
-  console.log('Mẫu tra bảo hành trên app: IMEI 356789012345671 (còn hạn), 351234567890123 (hết hạn), SĐT 0911000001');
+  console.log('Mẫu tra bảo hành trên app: IMEI 356789012345672 (còn hạn), 351234567890124 (hết hạn), SĐT 0911000001');
 }
 
 // ---- google.script.run giả: gọi hàm trong Code.gs qua /rpc (hàm kết thúc bằng _ là hàm riêng, không gọi được)
