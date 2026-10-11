@@ -1691,7 +1691,7 @@ function vDoc(el) {
         <div class="stat"><div class="l">Đã thu</div><div class="v green">${money(daThu(d))}</div></div><div class="stat"><div class="l">Còn nợ</div><div class="v red">${money(conNo(d))}</div></div></div>
         ${miniTable(pts.map(p => `<tr data-go="pt:${esc(p.SoPT)}"><td><b>${esc(p.SoPT)}</b><span class="sub">${dmy(p.Ngay)} · ${esc(p.HinhThuc)}${p.GhiChu ? ' · ' + esc(p.GhiChu) : ''}</span></td><td class="num green"><b>${money(p.SoTien)} ₫</b></td></tr>`), 'Chưa thu tiền đơn này.')}</div></div>
       <div class="card"><div class="card-h"><h3>Giao hàng</h3>${d.TrangThai !== 'Hủy' && d.TrangThai !== 'Đã giao' ? '<a class="more" data-act="giao">+ Giao hàng</a>' : ''}</div><div class="card-b">
-        ${miniTable(pks.map(p => `<tr data-go="pk:${esc(p.SoPK)}"><td><b>${esc(p.SoPK)}</b><span class="sub">${dmy(p.Ngay)}${p.GhiChu ? ' · ' + esc(p.GhiChu) : ''}</span></td><td class="num">${badge('Đã xuất kho', 'b-blue')}</td></tr>`), 'Chưa giao lần nào.')}</div></div>
+        ${miniTable(pks.map(p => `<tr data-go="pk:${esc(p.SoPK)}"><td><b>${esc(p.SoPK)}</b><span class="sub">${dmy(p.Ngay)}${p.GhiChu ? ' · ' + esc(p.GhiChu) : ''}</span></td><td class="num">${p.Loai === 'Nhập' ? badge('Khách trả hàng', 'b-amber') : badge('Đã xuất kho', 'b-blue')}</td></tr>`), 'Chưa giao lần nào.')}</div></div>
       ${laiDonHtml(d)}
     </div>`;
   })() : '';
@@ -3230,9 +3230,12 @@ function vSoQuy(el) {
 
 // Nhà cung cấp = đối tác của phiếu nhập (trừ tồn đầu kỳ, kiểm kê). Nợ = giá trị nhập (theo giá nhập) − đã trả bằng phiếu chi "Trả nhà cung cấp".
 const NGUON_KHONG_NO = /tồn đầu|đầu kỳ|kiểm kê|chuyển kho/i;
+// Phiếu nhập từ khách (thu cũ đổi mới, khách trả hàng: Đối tác là tên khách) không phải mua của nhà cung cấp
+const NHAP_TU_KHACH = /^(Thu cũ đổi mới|Khách trả hàng)/i;
+const laNhapNCC = p => p.Loai === 'Nhập' && String(p.DoiTac || '').trim() && !NGUON_KHONG_NO.test(p.DoiTac) && !NHAP_TU_KHACH.test(String(p.GhiChu || '').trim());
 function noNCC() {
   const m = {}, row = k => m[k] || (m[k] = { ten: k, nhap: 0, soPhieu: 0, tra: 0, cuoi: '' });
-  S.phieuKho.forEach(p => { if (p.Loai !== 'Nhập' || !String(p.DoiTac || '').trim() || NGUON_KHONG_NO.test(p.DoiTac)) return; const r = row(p.DoiTac.trim()); r.nhap += +p.GiaTri || 0; r.soPhieu++; if (String(p.Ngay) > r.cuoi) r.cuoi = String(p.Ngay); });
+  S.phieuKho.forEach(p => { if (!laNhapNCC(p)) return; const r = row(p.DoiTac.trim()); r.nhap += +p.GiaTri || 0; r.soPhieu++; if (String(p.Ngay) > r.cuoi) r.cuoi = String(p.Ngay); });
   S.phieuChi.forEach(c => { if (c.Loai === (S.loaiChi || [])[0] && c.DoiTac) row(String(c.DoiTac).trim()).tra += +c.SoTien || 0; });
   return Object.values(m).map(r => Object.assign(r, { no: r.nhap - r.tra }));
 }
@@ -3264,7 +3267,7 @@ function openChi(pc) {
   const isNew = !pc || !pc.SoPC, sua = isNew || isAdmin(), loai = S.loaiChi.length ? S.loaiChi : ['Chi khác'];
   const hinhThuc = S.congTy.hinhThuc || ['Tiền mặt', 'Chuyển khoản'];
   pc = Object.assign({ Ngay: today(), Loai: loai[loai.length - 1], DoiTac: '', SoTien: '', HinhThuc: hinhThuc.includes('Tiền mặt') ? 'Tiền mặt' : hinhThuc[0], GhiChu: '' }, pc || {});
-  const ncc = [...new Set(S.phieuKho.filter(p => p.Loai === 'Nhập' && p.DoiTac && !NGUON_KHONG_NO.test(p.DoiTac)).map(p => String(p.DoiTac).trim()).concat(S.phieuChi.map(c => c.DoiTac)).filter(Boolean))];
+  const ncc = [...new Set(S.phieuKho.filter(laNhapNCC).map(p => String(p.DoiTac).trim()).concat(S.phieuChi.map(c => c.DoiTac)).filter(Boolean))];
   const ro = sua ? '' : ' disabled', chon = (ds, v) => ds.concat(ds.includes(v) ? [] : [v]).map(x => `<option${x === v ? ' selected' : ''}>${esc(x)}</option>`).join('');
   modal({
     title: isNew ? 'Lập phiếu chi' : 'Phiếu chi ' + pc.SoPC,

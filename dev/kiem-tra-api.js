@@ -560,6 +560,8 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   assert.deepStrictEqual([kq.soQuet, kq.khop], [3, 1]); // mã trùng chỉ tính một lần
   assert.deepStrictEqual(kq.la.map(x => [x.IMEI, /Đã xuất/.test(x.lyDo) ? 'ban' : x.lyDo]), [['356789012345671', 'ban'], ['999999999999', 'Chưa nhập kho']]);
   assert.strictEqual(kq.thieu.length, trong.length - 1);
+  // mã lạ dài hơn một ký tự so với máy đã bán (không phải serial Apple có chữ S) thì là chưa nhập, không được nhận nhầm là máy kia
+  assert.deepStrictEqual(goi(binh4, 'kiemKho', ['9356789012345671']).la.map(x => x.lyDo), ['Chưa nhập kho']);
   assert.ok(kq.theoHang.some(h => h.thay === 1 && h.trongKho >= 1));
   const motHang = goi(binh4, 'kiemKho', ['359999000000017'], { MaHH: 'HH0001' });
   assert.deepStrictEqual([motHang.khop, motHang.la[0].lyDo], [0, 'Khác mặt hàng đang kiểm']);

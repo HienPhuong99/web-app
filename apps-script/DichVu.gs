@@ -231,7 +231,7 @@ function kiemKho(token, ds, o) {
   quet.forEach(x => {
     const m = kho[x] ? x : /^S[A-Z0-9]{10,12}$/.test(x) && kho[x.slice(1)] ? x.slice(1) : ''; // mã vạch serial Apple có chữ S đầu
     if (m && (!o.MaHH || kho[m].MaHH === o.MaHH)) { daThay[m] = 1; khop.push(Object.assign({ IMEI: m }, kho[m])); return; }
-    const xu = daXuat[x] || daXuat[x.slice(1)];
+    const xu = daXuat[x] || (/^S[A-Z0-9]{10,12}$/.test(x) && daXuat[x.slice(1)]); // chỉ bỏ chữ S đầu của serial Apple, không cắt mã khác
     la.push(m ? Object.assign({ IMEI: m, lyDo: 'Khác mặt hàng đang kiểm' }, kho[m]) : xu ? Object.assign({ IMEI: x, lyDo: 'Đã xuất ở phiếu ' + xu.SoPK + (xu.DoiTac ? ' (' + xu.DoiTac + ')' : '') }, xu) : { IMEI: x, MaHH: '', TenHang: '', lyDo: 'Chưa nhập kho' });
   });
   const thieu = Object.keys(kho).filter(x => !daThay[x] && (!o.MaHH || kho[x].MaHH === o.MaHH)).map(x => Object.assign({ IMEI: x }, kho[x]))

@@ -311,6 +311,24 @@ BUOC.push(['Màn soạn chứng từ: bảng dòng hàng vừa màn 1280px; trê
     assert.ok(mot, 'Màn danh sách (1 nút) vẫn như cũ');
   } finally { await page.setViewportSize(vp); await page.evaluate(() => { S.dirty = false; go('home'); }); }
 }]);
+BUOC.push(['Phiếu nhập từ khách (thu cũ, khách trả hàng) không thành nợ nhà cung cấp; đơn có phiếu trả hàng ghi đúng nhãn', async page => {
+  const r = await page.evaluate(() => {
+    const d = S.donHang[0], them = [
+      { SoPK: 'T-NCC', Loai: 'Nhập', Ngay: '2026-10-01', DoiTac: 'Công ty Phân Phối A', GhiChu: '', GiaTri: 5000000 },
+      { SoPK: 'T-CU', Loai: 'Nhập', Ngay: '2026-10-01', DoiTac: 'Anh Khách Đổi', GhiChu: 'Thu cũ đổi mới · đơn 001', GiaTri: 3000000 },
+      { SoPK: 'T-TRA', Loai: 'Nhập', Ngay: '2026-10-02', SoDH: d.SoDH, DoiTac: d.TenKH, GhiChu: 'Khách trả hàng · đơn ' + d.SoDH, GiaTri: 1000000 },
+    ];
+    S.phieuKho.push(...them);
+    const ncc = noNCC().map(x => x.ten);
+    return { ncc, so: d.SoDH };
+  });
+  assert.ok(r.ncc.includes('Công ty Phân Phối A'), 'Nhà cung cấp thật vẫn có: ' + r.ncc);
+  assert.ok(!r.ncc.includes('Anh Khách Đổi') && r.ncc.every(t => !/Khách Đổi/.test(t)), 'Khách thu cũ không là nhà cung cấp: ' + r.ncc);
+  await page.evaluate(so => openDoc('DH', S.donHang.find(x => x.SoDH === so)), r.so);
+  await page.waitForSelector('tr[data-go="pk:T-TRA"]');
+  assert.match(await page.locator('tr[data-go="pk:T-TRA"]').textContent(), /Khách trả hàng/);
+  await page.evaluate(() => { S.phieuKho = S.phieuKho.filter(p => !/^T-/.test(p.SoPK)); S.dirty = false; go('home'); });
+}]);
 try { require('./kiem-trinh-duyet-hopdong')(BUOC); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
 
 (async () => {
