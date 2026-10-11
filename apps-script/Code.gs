@@ -371,6 +371,7 @@ function user_(token, adminOnly) {
   if (c.schema !== SCHEMA) nangCap_(cache);
   if (adminOnly && user.vaiTro !== 'admin') throw new Error('Chỉ tài khoản quản trị được làm việc này.');
   CUR_SHOP = SHOPS[user.shop] ? user.shop : SHOP_MAC_DINH;
+  if (!BANG_DA_DOC_) BANG_DA_DOC_ = {}; // lần gọi từ web: mỗi trang tính đọc một lần (xem docMotLan_); mọi lần ghi đều qua ghiDong_/deleteWhere_ → daGhi_
   return user;
 }
 
@@ -930,7 +931,14 @@ function sheet_(name) {
   if (!sh) throw new Error('Thiếu trang tính "' + tableName_(name) + '". Chạy hàm caiDat một lần.');
   return sh;
 }
-function headers_(sh) { return sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String); }
+// Dòng tiêu đề: trong lần gọi đang nhớ bảng (BANG_DA_DOC_) chỉ đọc một lần mỗi trang – toRow_/rowObj_/ghiDong_ gọi rất nhiều lần
+function headers_(sh) {
+  const ten = BANG_DA_DOC_ && sh.getName(), nho = ten && TIEU_DE_DA_DOC_ && TIEU_DE_DA_DOC_[ten];
+  if (nho) return nho.slice();
+  const h = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  if (ten) (TIEU_DE_DA_DOC_ || (TIEU_DE_DA_DOC_ = {}))[ten] = h;
+  return h.slice();
+}
 function tz_() { return 'Asia/Ho_Chi_Minh'; }
 function now_() { return Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:mm'); }
 // Ô Sheets tự đổi thành ngày được hiểu theo múi giờ của file Sheet (có thể khác giờ Việt Nam): đọc lại cũng theo múi giờ đó
@@ -940,12 +948,14 @@ function cell_(v) { return v instanceof Date ? Utilities.formatDate(v, tzSheet_(
 
 // Trong một lần gọi từ app/web (docMotLan_), mỗi trang tính chỉ đọc từ Sheet một lần; ghi vào trang nào thì bỏ bản đã đọc của trang đó.
 // Mỗi lần đọc trả bản sao để hàm gọi sửa / sắp xếp thoải mái.
+// Lần gọi từ trang web cũng nhớ: user_() bật ở đầu mỗi hàm (mỗi lần google.script.run là một lần chạy riêng nên bộ nhớ chỉ sống trong lần gọi đó).
 let BANG_DA_DOC_ = null; // null = không nhớ (chạy trong trình soạn thảo, bộ hẹn giờ…)
+let TIEU_DE_DA_DOC_ = null;
 function docMotLan_(fn) {
   if (BANG_DA_DOC_) return fn();
-  BANG_DA_DOC_ = {};
+  BANG_DA_DOC_ = {}; TIEU_DE_DA_DOC_ = null;
   PHIEN_BAN_ = ''; // đọc lại phiên bản dữ liệu mỗi lần gọi
-  try { return fn(); } finally { BANG_DA_DOC_ = null; }
+  try { return fn(); } finally { BANG_DA_DOC_ = null; TIEU_DE_DA_DOC_ = null; }
 }
 function readTable_(name) {
   const ten = tableName_(name);
@@ -969,6 +979,7 @@ const KHONG_DOI_SO_LIEU = ['NhatKy', 'ThietBi'];
 function daGhi_(sh) {
   const ten = sh.getName();
   if (BANG_DA_DOC_) delete BANG_DA_DOC_[ten];
+  if (TIEU_DE_DA_DOC_) delete TIEU_DE_DA_DOC_[ten]; // có thể vừa thêm cột
   if (KHONG_DOI_SO_LIEU.some(n => ten === tableName_(n))) return;
   PHIEN_BAN_ = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   try { CacheService.getScriptCache().put('dv', PHIEN_BAN_, SESSION_TTL); } catch (e) {}

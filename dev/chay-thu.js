@@ -227,6 +227,17 @@ const ctx = vm.createContext({
 // Apps Script gộp mọi file .gs vào một phạm vi chung: nạp lần lượt như vậy (Code.gs trước)
 fs.readdirSync(ROOT).filter(f => f.endsWith('.gs')).sort((a, b) => (a === 'Code.gs' ? -1 : b === 'Code.gs' ? 1 : a.localeCompare(b)))
   .forEach(f => vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f }));
+// Trên Google mỗi lần gọi từ web / app / bộ hẹn giờ / trình soạn thảo là một lần chạy mới: biến toàn cục (bảng đã đọc, tiêu đề…) bắt đầu lại.
+// Ở đây mọi lần gọi dùng chung một ngữ cảnh, nên lần gọi hàm công khai từ ngoài (không lồng trong hàm khác) đặt lại các biến nhớ như lần chạy mới.
+let dangChay = 0;
+Object.keys(ctx).filter(k => typeof ctx[k] === 'function' && /^[a-z]\w*[A-Za-z0-9]$/.test(k)).forEach(k => {
+  const f = ctx[k];
+  ctx[k] = function (...a) {
+    if (!dangChay) vm.runInContext('BANG_DA_DOC_ = null; TIEU_DE_DA_DOC_ = null; PHIEN_BAN_ = "";', ctx);
+    dangChay++;
+    try { return f.apply(this, a); } finally { dangChay--; }
+  };
+});
 
 // ---- Dữ liệu
 const MAU_APP = process.argv.includes('--mau-app'); // thêm vài máy đã giao có IMEI để thử app điện thoại
