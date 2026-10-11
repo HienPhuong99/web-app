@@ -64,6 +64,8 @@ export default function ThemMan() {
       <The style={[s.muc, { paddingVertical: 6 }]}>
         <Dong chinh="Kho hàng" phu="Tồn kho, kiểm tra IMEI, thẻ kho" bieuTuong="cube-outline" onPress={() => router.push('/kho')} testID="mo-kho" />
         <Vach />
+        <Dong chinh="Sổ quỹ" phu="Tiền mặt, ngân hàng; ghi phiếu chi" bieuTuong="wallet-outline" mauBT={mau.xanh} onPress={() => router.push('/so-quy')} testID="mo-so-quy" />
+        <Vach />
         <Dong chinh="Hợp đồng" phu="Tìm và chia sẻ file PDF" bieuTuong="document-text-outline" mauBT={mau.camDam} onPress={() => router.push('/hop-dong')} testID="mo-hop-dong" />
         <Vach />
         <Dong chinh="Điện thoại đăng nhập" phu="Xem và đăng xuất máy khác" bieuTuong="phone-portrait-outline" mauBT={mau.xanh} onPress={() => router.push('/thiet-bi')} testID="mo-thiet-bi" />

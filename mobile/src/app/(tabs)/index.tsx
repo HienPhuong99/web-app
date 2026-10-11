@@ -71,6 +71,9 @@ export default function TongQuanMan() {
                   <So bieuTuong="wallet-outline" mauBT={mau.xanh} so={tienGon(du.thu)} nhan="Đã thu" onPress={() => xemNgay()} testID="so-thu" />
                   <So bieuTuong="time-outline" mauBT={mau.vang} so={tienGon(du.no.tong)} nhan="Khách còn nợ" onPress={xemNo} testID="so-no" />
                 </View>
+                {du.lai ? (
+                  <Text style={s.lai} testID="lai-hom-nay">Lãi gộp hôm nay <Text style={{ color: du.lai.lai >= 0 ? mau.xanh : mau.do }}>{tien(du.lai.lai)}</Text></Text>
+                ) : null}
                 <Text style={s.goiY}>Bấm vào số liệu để xem chi tiết</Text>
               </The>
 
@@ -207,4 +210,5 @@ const s = StyleSheet.create({
   lienKet: { fontSize: 15, color: mau.camDam, fontWeight: '700' },
   lienKetNho: { color: mau.camDam, fontWeight: '700' },
   goiY: { fontSize: 12, color: mau.chuNhat, marginTop: 10 },
+  lai: { fontSize: 14, color: mau.chuPhu, fontWeight: '700', marginTop: 12 },
 });

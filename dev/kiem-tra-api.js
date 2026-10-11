@@ -4,6 +4,7 @@ const assert = require('assert');
 const { ctx: G, sheets, logs, cache, props, thuMail, push } = require('./chay-thu');
 const adminPass = logs.join('\n').match(/mật khẩu: (\S+)/)[1];
 const today = G.now_().slice(0, 10);
+const plain = x => JSON.parse(JSON.stringify(x)); // đối tượng tạo trong vm khác prototype
 
 const api = body => {
   const out = G.doPost({ postData: { contents: typeof body === 'string' ? body : JSON.stringify(body) } });
@@ -417,6 +418,59 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   goiMoi(binh4, 'chiTietTongQuan', 'ngay', today);
   assert.strictEqual(lanDoc, 1);
   shTT.getDataRange = goc;
+}
+
+// Giá vốn bình quân, lãi gộp (chỉ quản trị), phiếu chi, sổ quỹ
+{
+  const adQ = may('admin', adminPass, 'Máy sổ quỹ'), t = G.dangNhap('admin', adminPass).token;
+  const iphone15 = { MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', DVT: 'Máy' };
+  G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'NCC Minh Phát', lines: [Object.assign({ SoLuong: 2, GiaVon: 10000000 }, iphone15)] });
+  G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'NCC Minh Phát', lines: [Object.assign({ SoLuong: 2, GiaVon: 11000000 }, iphone15)] });
+  assert.strictEqual(G.giaVonBQ_().HH0002, 10500000); // (2 × 10tr + 2 × 11tr) / 4; lần nhập không có giá không tính
+  const xk = G.luuChungTu(t, 'XK', { Ngay: today, DoiTac: 'Khách lẻ', lines: [Object.assign({ SoLuong: 1, GiaVon: 999 }, iphone15)] }).doc;
+  assert.strictEqual(sheets.PS_PhieuKhoCT.rows.find(r => r[0] === xk.SoPK)[sheets.PS_PhieuKhoCT.rows[0].indexOf('GiaVon')], ''); // phiếu xuất không lưu giá vốn
+  const dhLai = G.luuChungTu(t, 'DH', { Ngay: today, MaKH: 'KH00001', TenKH: 'Anh Minh', VAT: 10, lines: [Object.assign({ SoLuong: 2, DonGia: 12000000 }, iphone15), { TenHang: 'Dán cường lực', SoLuong: 1, DonGia: 100000 }] }).doc;
+  const ln = goi(adQ, 'loiNhuan', today, today);
+  assert.strictEqual(ln.tong.lai, ln.tong.doanhThu - ln.tong.giaVon);
+  const don = ln.theoDon.find(d => d.SoDH === dhLai.SoDH);
+  assert.deepStrictEqual([don.doanhThu, don.giaVon, don.lai], [24100000, 21000000, 3100000]); // chưa VAT; dịch vụ không có giá vốn
+  assert.ok(ln.thieuGiaVon.some(h => h.MaHH === 'HH0001')); // iPhone 16 chưa nhập có giá: báo để bổ sung
+  assert.strictEqual(ln.theoThang[0].thang, today.slice(0, 7));
+  assert.match(api({ may: binh4, fn: 'loiNhuan', args: [today, today] }).error, /quản trị/);
+  assert.throws(() => G.loiNhuan(t, today, '2000-01-01'), /không hợp lệ/);
+  assert.strictEqual(goi(binh4, 'tongQuanMay').lai, null);
+  assert.strictEqual(goiMoi(adQ, 'tongQuanMay').lai.lai, ln.tong.lai);
+
+  // Phiếu chi: nhân viên thêm được, trả nhà cung cấp phải có tên; sửa / xóa chỉ quản trị
+  assert.throws(() => goi(binh4, 'luuPhieuChi', { Loai: 'Trả nhà cung cấp', SoTien: 5000000 }), /nhà cung cấp/);
+  assert.throws(() => goi(binh4, 'luuPhieuChi', { Loai: 'Mặt bằng', SoTien: 0 }), /số tiền/);
+  const pc = goi(binh4, 'luuPhieuChi', { Ngay: today, Loai: 'Trả nhà cung cấp', DoiTac: 'NCC Minh Phát', SoTien: 30000000, HinhThuc: 'Chuyển khoản' });
+  assert.strictEqual(pc.SoPC, '001-' + today.slice(0, 4) + '/PC');
+  assert.throws(() => goi(binh4, 'luuPhieuChi', Object.assign({}, pc, { SoTien: 1 })), /quản trị/);
+  const ship = goi(binh4, 'luuPhieuChi', { Loai: 'Vận chuyển', SoTien: 50000, GhiChu: 'Ship giao máy' });
+  assert.deepStrictEqual([ship.Ngay, ship.HinhThuc], [today, 'Tiền mặt']);
+
+  // Sổ quỹ: từ ngày bắt đầu, tiền mặt và ngân hàng tách riêng
+  assert.throws(() => G.luuSoDuDau(G.dangNhap('binh', 'binh-456').token, { ngay: today }), /quản trị/);
+  G.luuSoDuDau(t, { ngay: today, tienMat: 1000000, nganHang: 2000000 });
+  const thuNay = G.readTable_('ThuTien').filter(p => String(p.Ngay).slice(0, 10) === today);
+  const thuTM = thuNay.filter(p => p.HinhThuc === 'Tiền mặt').reduce((s, p) => s + p.SoTien, 0), thuNH = thuNay.reduce((s, p) => s + p.SoTien, 0) - thuTM;
+  let sq = goi(binh4, 'soQuyMay', '');
+  assert.deepStrictEqual(sq.ton, { tienMat: 1000000 + thuTM - 50000, nganHang: 2000000 + thuNH - 30000000 });
+  assert.deepStrictEqual(sq.trongNgay, { thu: thuTM + thuNH, chi: 30050000 });
+  assert.ok(sq.ds.some(x => x.loai === 'chi' && x.so === pc.SoPC) && sq.ds.some(x => x.loai === 'thu'));
+  assert.deepStrictEqual([sq.ngay, sq.sau, sq.batDau], [today, '', today]);
+  const homQua = goi(binh4, 'soQuyMay', sq.truoc);
+  assert.deepStrictEqual([homQua.ton, homQua.ds.length], [{ tienMat: 1000000, nganHang: 2000000 }, 0]); // trước ngày bắt đầu: chỉ số dư đầu
+  G.xoaPhieuChi(t, ship.SoPC);
+  sq = goi(binh4, 'soQuyMay', ''); // máy chủ nhớ kết quả nhưng vừa có ghi nên tính lại
+  assert.strictEqual(sq.ton.tienMat, 1000000 + thuTM);
+  assert.throws(() => G.xoaPhieuChi(G.dangNhap('binh', 'binh-456').token, pc.SoPC), /quản trị/);
+  // Web nhận phiếu chi, số dư đầu, loại chi; giá vốn chỉ quản trị thấy
+  const dAd = G.taiDuLieu(t), dNv = G.taiDuLieu(G.dangNhap('binh', 'binh-456').token);
+  assert.deepStrictEqual([dAd.phieuChi.length, dAd.soDuDau.tienMat, dAd.loaiChi[0], dAd.giaVon.HH0002], [1, 1000000, 'Trả nhà cung cấp', 10500000]);
+  assert.deepStrictEqual(plain(dNv.giaVon), {});
+  assert.strictEqual(dAd.phieuKho.find(p => p.DoiTac === 'NCC Minh Phát').GiaTri, 20000000); // giá trị nhập: để tính nợ nhà cung cấp
 }
 
 // Sai mật khẩu 5 lần: chặn 10 phút như web

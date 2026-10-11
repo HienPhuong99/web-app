@@ -377,7 +377,7 @@ table.lines { width: 100%; border-collapse: collapse; min-width: 1040px; }
 
 <script>
 // ===================== Trạng thái & tiện ích =====================
-const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], hopDong: [], hopDongLich: [], mauHD: [], loaiHD: [], nganHang: [], emailSang: null, hd: null, ton: {},
+const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], phieuChi: [], soDuDau: { ngay: '', tienMat: 0, nganHang: 0 }, loaiChi: [], giaVon: {}, hopDong: [], hopDongLich: [], mauHD: [], loaiHD: [], nganHang: [], emailSang: null, hd: null, ton: {},
   thongKe: { topHang: [], theoNhom: [] }, taiKhoan: null, baoHanh: null, nhatKy: null, view: 'home', loai: '', doc: null, extra: {}, dirty: false, q: {}, onNew: null };
 const D = { thuDH: {}, thuKH: {}, muaKH: {}, noKH: {}, dhBG: {} }; // số liệu suy ra: đã thu, công nợ, báo giá đã chốt
 const LG = { si: 'Giá sỉ', le: 'Giá lẻ', tuy: 'Giá tùy chọn' };
@@ -439,6 +439,7 @@ const IC = {
   file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
   cart: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>',
   card: '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>',
+  wallet: '<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>',
   box: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
   truck: '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
   layers: '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
@@ -547,7 +548,7 @@ function tonBadge(h) {
   return t <= 0 ? badge('Hết hàng', 'b-red') : isLow(h) ? badge('Sắp hết', 'b-amber') : badge('Còn hàng', 'b-green');
 }
 const byDate = (a, b) => String(b.Ngay + b.NgayTao).localeCompare(String(a.Ngay + a.NgayTao));
-function sortAll() { S.khach.sort((a, b) => String(b.MaKH).localeCompare(String(a.MaKH))); [S.baoGia, S.donHang, S.phieuKho, S.thuTien, S.hopDong].forEach(l => l.sort(byDate)); }
+function sortAll() { S.khach.sort((a, b) => String(b.MaKH).localeCompare(String(a.MaKH))); [S.baoGia, S.donHang, S.phieuKho, S.thuTien, S.phieuChi, S.hopDong].forEach(l => l.sort(byDate)); }
 function upsertLocal(list, key, obj) {
   const i = S[list].findIndex(x => x[key] === obj[key]);
   if (i >= 0) S[list][i] = obj; else S[list].unshift(obj);
@@ -637,6 +638,7 @@ $('#btnPass').onclick = () => modal({
 const NAV = [
   ['', [['home', 'Tổng quan', 'home'], ['baocao', 'Báo cáo & sổ doanh thu', 'chart']]],
   ['Bán hàng', [['baogia', 'Báo giá', 'file'], ['donhang', 'Đơn hàng', 'cart'], ['congno', 'Thu tiền & công nợ', 'card'], ['baohanh', 'Bảo hành', 'award']]],
+  ['Tài chính', [['soquy', 'Sổ quỹ (thu – chi)', 'wallet'], ['ncc', 'Nợ nhà cung cấp', 'truck', true]]],
   ['Hợp đồng', [['hopdong', 'Hợp đồng', 'clipboard'], ['hdhan', 'Sắp hết hạn', 'alert'], ['hdlich', 'Lịch thanh toán', 'card']]],
   ['Kho hàng', [['hang', 'Hàng hóa & bảng giá', 'box'], ['kho', 'Nhập – xuất kho', 'truck'], ['ton', 'Tồn kho', 'layers']]],
   ['Danh mục', [['khach', 'Khách hàng', 'users']]],
@@ -733,8 +735,8 @@ function formData(root) {
 }
 const datalist = (id, list) => `<datalist id="${id}">${[...new Set(list.filter(Boolean))].map(x => `<option value="${esc(x)}">`).join('')}</datalist>`;
 
-// Ô tiền: bỏ dấu chấm khi sửa, hiện dấu chấm khi rời ô
-document.addEventListener('focusin', e => { if (e.target.classList && e.target.classList.contains('money')) e.target.value = parseMoney(e.target.value); });
+// Ô tiền: bỏ dấu chấm khi sửa (chọn sẵn cả số để gõ số mới là thay luôn), hiện dấu chấm khi rời ô
+document.addEventListener('focusin', e => { const t = e.target; if (t.classList && t.classList.contains('money')) { t.value = parseMoney(t.value); if (!t.readOnly) t.select(); } });
 document.addEventListener('focusout', e => { if (e.target.classList && e.target.classList.contains('money')) e.target.value = money(parseMoney(e.target.value)); });
 
 // ===================== Danh sách dùng chung =====================
@@ -1646,8 +1648,8 @@ function vDoc(el) {
   // [tiêu đề, độ rộng px] – cột tên hàng tự giãn
   const heads = price
     ? [['#', 40], ['Tên hàng hóa, dịch vụ'], ['Model', 110], ['ĐVT', 70], ['Xuất xứ', 110], ['SL', 70], ['Loại giá', 132], ['Đơn giá', 110], ['Thành tiền', 120]].concat(L === 'DH' && saved ? [['Đã giao', 80]] : [])
-    : [['#', 40], ['Tên hàng hóa'], ['Model', 150], ['ĐVT', 80], ['Số lượng', 100], ['IMEI / Serial', 260], [L === 'XK' ? 'Có thể xuất' : 'Tồn hiện tại', 120]];
-  const numCol = ['SL', 'Số lượng', 'Đơn giá', 'Thành tiền', 'Đã giao', 'Tồn hiện tại', 'Có thể xuất'];
+    : [['#', 40], ['Tên hàng hóa'], ['Model', 150], ['ĐVT', 80], ['Số lượng', 100], ['IMEI / Serial', 260]].concat(L === 'NK' ? [['Giá nhập', 130]] : [], [[L === 'XK' ? 'Có thể xuất' : 'Tồn hiện tại', 120]]);
+  const numCol = ['SL', 'Số lượng', 'Đơn giá', 'Thành tiền', 'Đã giao', 'Tồn hiện tại', 'Có thể xuất', 'Giá nhập'];
   const payCard = L === 'DH' && saved ? (() => {
     const pts = S.thuTien.filter(p => p.SoDH === d.SoDH), pks = S.phieuKho.filter(p => p.SoDH === d.SoDH);
     return `<div class="side-cards">
@@ -1657,15 +1659,16 @@ function vDoc(el) {
         ${miniTable(pts.map(p => `<tr data-go="pt:${esc(p.SoPT)}"><td><b>${esc(p.SoPT)}</b><span class="sub">${dmy(p.Ngay)} · ${esc(p.HinhThuc)}${p.GhiChu ? ' · ' + esc(p.GhiChu) : ''}</span></td><td class="num green"><b>${money(p.SoTien)} ₫</b></td></tr>`), 'Chưa thu tiền đơn này.')}</div></div>
       <div class="card"><div class="card-h"><h3>Giao hàng</h3>${d.TrangThai !== 'Hủy' && d.TrangThai !== 'Đã giao' ? '<a class="more" data-act="giao">+ Giao hàng</a>' : ''}</div><div class="card-b">
         ${miniTable(pks.map(p => `<tr data-go="pk:${esc(p.SoPK)}"><td><b>${esc(p.SoPK)}</b><span class="sub">${dmy(p.Ngay)}${p.GhiChu ? ' · ' + esc(p.GhiChu) : ''}</span></td><td class="num">${badge('Đã xuất kho', 'b-blue')}</td></tr>`), 'Chưa giao lần nào.')}</div></div>
+      ${laiDonHtml(d)}
     </div>`;
   })() : '';
 
   el.innerHTML = `<div class="card"><div class="doc-head">${head.join('')}</div>
     <div class="lines-wrap"><table class="lines"><thead><tr>${heads.map(([h, w]) => `<th class="${numCol.includes(h) ? 'num' : ''}"${w ? ` style="width:${w}px"` : ''}>${h}</th>`).join('')}<th style="width:44px"></th></tr></thead><tbody></tbody></table></div>
     <div class="doc-foot"><button class="btn sm" data-act="addline">${icon('plus')}Thêm dòng</button>
-      <span class="hint">${price ? 'Gõ tên hoặc model để chọn hàng. Cột "Loại giá": chọn Giá sỉ / Giá lẻ để lấy giá từ bảng giá; tự sửa đơn giá thì tự chuyển sang Giá tùy chọn.' : 'Gõ tên hoặc model để chọn hàng, rồi nhập số lượng. Máy có IMEI/serial: gõ hoặc quét mã vào cột IMEI, mỗi máy một mã – số lượng tự đếm theo số mã.'}</span>
+      <span class="hint">${price ? 'Gõ tên hoặc model để chọn hàng. Cột "Loại giá": chọn Giá sỉ / Giá lẻ để lấy giá từ bảng giá; tự sửa đơn giá thì tự chuyển sang Giá tùy chọn.' : 'Gõ tên hoặc model để chọn hàng, rồi nhập số lượng. Máy có IMEI/serial: gõ hoặc quét mã vào cột IMEI, mỗi máy một mã – số lượng tự đếm theo số mã.' + (L === 'NK' ? ' Giá nhập (giá 1 đơn vị) dùng để tính lãi và nợ nhà cung cấp.' : '')}</span>
       ${price ? `<div class="totals"><div><span>Cộng tiền hàng</span><b data-t="TienHang"></b></div><div><span>Thuế GTGT (<span data-t="VATp"></span>%)</span><b data-t="TienVAT"></b></div>
-        <div class="sum"><span>Tổng cộng</span><span data-t="TongCong"></span></div></div>` : `<div class="totals"><div class="sum"><span>Tổng số lượng</span><span data-t="SoLuong"></span></div></div>`}
+        <div class="sum"><span>Tổng cộng</span><span data-t="TongCong"></span></div></div>` : `<div class="totals">${L === 'NK' ? '<div><span>Giá trị nhập</span><b data-t="GiaTri"></b></div>' : ''}<div class="sum"><span>Tổng số lượng</span><span data-t="SoLuong"></span></div></div>`}
     </div></div>${payCard}`;
   drawLines(el); drawTotals(el);
 
@@ -1710,6 +1713,7 @@ function drawLines(el) {
       const t = l.MaHH ? tonOf(l.MaHH) + (L === 'XK' ? (S.extra.goc && S.extra.goc[l.MaHH]) || 0 : 0) : null;
       return `<tr data-i="${i}"><td class="c muted">${i + 1}</td>${name}${txt('Model')}${txt('DVT')}${qty}
         <td><input data-f="IMEI" value="${esc(l.IMEI)}" aria-label="IMEI hoặc serial dòng ${i + 1}"${i ? '' : ' placeholder="Mỗi máy một mã, cách nhau dấu phẩy"'}></td>
+        ${L === 'NK' ? `<td><input data-f="GiaVon" class="num money" inputmode="numeric" value="${money(l.GiaVon)}" aria-label="Giá nhập một đơn vị dòng ${i + 1}"${i ? '' : ' placeholder="Giá 1 máy"'}></td>` : ''}
         <td class="c num" data-c="ton">${t === null ? '' : `<span data-av="${t}" class="${L === 'XK' && +l.SoLuong > t ? 'red' : ''}">${money(t)}</span>`}</td>${rm}</tr>`;
     }
     let giao = '';
@@ -1727,7 +1731,12 @@ function drawLines(el) {
 
 function drawTotals(el) {
   const d = S.doc;
-  if (!DOC[S.loai].price) { $('[data-t="SoLuong"]', el).textContent = money(sum(filled(d.lines), l => l.SoLuong)); return; }
+  if (!DOC[S.loai].price) {
+    $('[data-t="SoLuong"]', el).textContent = money(sum(filled(d.lines), l => l.SoLuong));
+    const gt = $('[data-t="GiaTri"]', el);
+    if (gt) gt.textContent = money(sum(filled(d.lines), l => (+l.SoLuong || 0) * (+l.GiaVon || 0))) + ' ₫';
+    return;
+  }
   const tien = sum(d.lines, lineTotal), vat = +d.VAT || 0, tienVat = Math.round(tien * vat / 100);
   $('[data-t="TienHang"]', el).textContent = money(tien) + ' ₫';
   $('[data-t="VATp"]', el).textContent = vat;
@@ -1771,6 +1780,7 @@ function onDocInput(el, t) {
   if (!tr || !f || f === 'LoaiGia') return;
   const i = +tr.dataset.i, l = d.lines[i];
   if (f === 'DonGia') { l.DonGia = parseMoney(t.value); l.LoaiGia = detectType(l); }
+  else if (f === 'GiaVon') l.GiaVon = parseMoney(t.value);
   else if (f === 'SoLuong') l.SoLuong = t.value === '' ? '' : +t.value;
   else l[f] = t.value;
   if (f === 'IMEI') { // số lượng đếm theo số mã đã nhập
@@ -1808,7 +1818,10 @@ function pickHang(i, h) {
     const p = type === LG.si ? h.GiaSi : h.GiaLe;
     Object.assign(l, { MaHH: h.MaHH, TenHang: h.TenHang, Model: h.Model, DVT: h.DVT, XuatXu: h.XuatXu, SoLuong: l.SoLuong || 1, LoaiGia: type, DonGia: p });
     if (p === '') toast(`"${h.TenHang}" chưa có ${type.toLowerCase()} – hãy nhập đơn giá.`, 'err');
-  } else Object.assign(l, { MaHH: h.MaHH, TenHang: h.TenHang, Model: h.Model, DVT: h.DVT, XuatXu: h.XuatXu, SoLuong: l.SoLuong || 1 });
+  } else {
+    Object.assign(l, { MaHH: h.MaHH, TenHang: h.TenHang, Model: h.Model, DVT: h.DVT, XuatXu: h.XuatXu, SoLuong: l.SoLuong || 1 });
+    if (S.loai === 'NK' && (l.GiaVon === '' || l.GiaVon == null) && S.giaVon[h.MaHH]) l.GiaVon = S.giaVon[h.MaHH]; // gợi ý giá nhập bình quân (quản trị)
+  }
   ensureTail();
   drawLines(el); drawTotals(el); setDirty(true);
   focusCell(el, i, DOC[S.loai].price && l.DonGia === '' ? 'DonGia' : 'SoLuong');
@@ -1824,7 +1837,9 @@ function pickKhach(kh) {
 
 // Cập nhật danh sách sau khi lưu/xóa: chứng từ, tồn kho, trạng thái đơn bị ảnh hưởng
 function applyResult(r) {
+  if (S.q.baocao) S.q.baocao.loi = null;
   if (r.ton) S.ton = r.ton;
+  if (r.giaVon) S.giaVon = r.giaVon;
   if (S.q.baocao) S.q.baocao.hang = null;
   (r.donHang || []).forEach(dh => upsertLocal('donHang', 'SoDH', dh));
   sortAll(); derive();
@@ -2829,8 +2844,32 @@ function vBaoCao(el) {
     kh: ['Theo khách hàng', 'Khách hàng', () => gop(d => d.MaKH, p => p.MaKH, ma => (S.khach.find(k => k.MaKH === ma) || { TenKH: ma }).TenKH).sort((a, b) => b.ds - a.ds)],
     hang: ['Theo mặt hàng', 'Mặt hàng'],
   };
-  let head, body, csv, empty = 'Không có đơn hàng hay phiếu thu trong kỳ.';
-  if (st.tab === 'hang') {
+  if (isAdmin()) TABS.loi = ['Lợi nhuận', 'Mặt hàng'];
+  if (!TABS[st.tab]) st.tab = 'ngay';
+  let head, body, csv, empty = 'Không có đơn hàng hay phiếu thu trong kỳ.', them = '';
+  if (st.tab === 'loi') { // lãi gộp = doanh thu chưa VAT − giá vốn bình quân (chỉ quản trị)
+    const key = st.from + '|' + st.to;
+    if (!st.loi || st.loi.key !== key) {
+      const l = st.loi = { key, data: null };
+      api('loiNhuan', st.from, st.to).then(r => { l.data = r; }).catch(e => { l.data = { tong: { doanhThu: 0, giaVon: 0, lai: 0 }, theoThang: [], theoNhom: [], theoHang: [], thieuGiaVon: [] }; toast(errMsg(e), 'err'); })
+        .then(() => { if (S.view === 'baocao' && st.loi === l) render(); });
+    }
+    const r = st.loi.data, tl = x => x.doanhThu ? (x.lai / x.doanhThu * 100).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) + '%' : '—';
+    if (!r) empty = 'Đang tải…';
+    else {
+      const st2 = (l, v, cls = '') => `<div class="stat"><div class="l">${l}</div><div class="v ${cls}">${v}</div></div>`;
+      them = `<div class="card" style="margin-bottom:16px" data-loi><div class="card-b"><div class="stats" style="margin-top:0">${st2('Doanh thu (chưa VAT)', money(r.tong.doanhThu) + ' ₫')}${st2('Giá vốn hàng bán', money(r.tong.giaVon) + ' ₫')}${st2('Lãi gộp', money(r.tong.lai) + ' ₫', r.tong.lai >= 0 ? 'green' : 'red')}${st2('Tỷ lệ lãi gộp', tl(r.tong))}</div>
+        ${r.theoNhom.length ? `<p style="margin:12px 0 0"><b>Theo nhóm hàng:</b> ${r.theoNhom.map(n => `${esc(n.nhom)} <b>${money(n.lai)} ₫</b> (${tl(n)})`).join(' · ')}</p>` : ''}
+        ${r.theoThang.length > 1 ? `<p style="margin:6px 0 0"><b>Theo tháng:</b> ${r.theoThang.map(m => `${m.thang.slice(5)}/${m.thang.slice(0, 4)} <b>${money(m.lai)} ₫</b>`).join(' · ')}</p>` : ''}
+        ${r.thieuGiaVon.length ? `<p class="warn" style="margin:10px 0 0">Chưa có giá nhập (đang tính giá vốn 0, lãi cao hơn thực tế): ${r.thieuGiaVon.map(h => esc(h.TenHang)).join(', ')}. Ghi giá nhập ở phiếu nhập kho của các mặt hàng này.</p>` : ''}
+        <p class="muted" style="margin:8px 0 0">Giá vốn = giá nhập bình quân của các phiếu nhập có ghi giá. Dịch vụ (dòng không có mã hàng) không có giá vốn. Không tính đơn đã hủy.</p></div></div>`;
+    }
+    const rs = r ? r.theoHang : [];
+    head = [['Mặt hàng'], ['Số lượng', 'num'], ['Doanh thu (chưa VAT)', 'num'], ['Giá vốn', 'num'], ['Lãi gộp', 'num'], ['Tỷ lệ', 'num']];
+    body = rs.map(x => [`<b>${esc(x.TenHang)}</b>${x.coGiaVon ? '' : '<span class="sub warn">chưa có giá nhập</span>'}`, money(x.soLuong), money(x.doanhThu), money(x.giaVon), `<b class="${x.lai >= 0 ? 'green' : 'red'}">${money(x.lai)}</b>`, tl(x)]);
+    csv = rs.map(x => [x.TenHang, x.soLuong, x.doanhThu, x.giaVon, x.lai]);
+    if (r) empty = 'Không có đơn hàng trong kỳ.';
+  } else if (st.tab === 'hang') {
     const key = st.from + '|' + st.to;
     if (!st.hang || st.hang.key !== key) {
       const h = st.hang = { key, data: null };
@@ -2860,7 +2899,7 @@ function vBaoCao(el) {
     <div class="card-b" style="padding-top:0"><div class="stats" style="margin-top:0">
       ${stat('Doanh thu (gồm thuế GTGT)', money(dsTong) + ' ₫')}${stat('Số đơn hàng', dh.length)}${stat('Trung bình mỗi đơn', money(dh.length ? dsTong / dh.length : 0) + ' ₫')}${stat('Tiền đã thu trong kỳ', money(sum(pt, p => p.SoTien)) + ' ₫', 'green')}</div>
       <p class="muted" style="margin:10px 0 0">Doanh thu tính theo ngày lập đơn, không gồm đơn đã hủy. Sổ doanh thu in theo mẫu S1a-HKD (Thông tư 152/2025/TT-BTC) cho hộ kinh doanh, mỗi ngày một dòng; tên chủ hộ và mã số thuế điền ở Cài đặt.</p></div></div>
-    <div class="seg" role="tablist">${Object.keys(TABS).map(k => `<button data-tab="${k}" class="${st.tab === k ? 'on' : ''}">${TABS[k][0]}</button>`).join('')}</div>
+    <div class="seg" role="tablist">${Object.keys(TABS).map(k => `<button data-tab="${k}" class="${st.tab === k ? 'on' : ''}">${TABS[k][0]}</button>`).join('')}</div>${them}
     <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr>${head.map(h => `<th class="${h[1] || ''}">${h[0]}</th>`).join('')}</tr></thead>
       <tbody>${body.map(r => `<tr>${r.map((c, i) => `<td class="${head[i][1] || ''}">${c}</td>`).join('')}</tr>`).join('') || `<tr><td class="empty" colspan="${head.length}">${empty}</td></tr>`}</tbody></table></div></div>`;
   el.onclick = e => {
@@ -2893,6 +2932,144 @@ function soDoanhThuHtml(st, dh) {
       || '<tr><td colspan="3" style="text-align:center">Không phát sinh doanh thu trong kỳ</td></tr>'}</tbody>
     <tfoot><tr><td></td><td>Tổng cộng</td><td class="num">${money(sum(dh, d => d.TongCong))}</td></tr></tfoot></table>
     <div class="p-sign"><div style="flex:0 0 320px;margin-left:auto"><i>Ngày ${t.slice(8)} tháng ${t.slice(5, 7)} năm ${t.slice(0, 4)}</i>NGƯỜI ĐẠI DIỆN HỘ KINH DOANH/<br>CÁ NHÂN KINH DOANH<i>(Ký, họ tên, đóng dấu)</i></div></div></div>`;
+}
+
+// ===================== Tài chính: lãi gộp, sổ quỹ, phiếu chi, nợ nhà cung cấp =====================
+// Lãi gộp của một đơn (quản trị): tiền hàng chưa VAT − giá vốn bình quân. Dòng dịch vụ (không mã hàng) không có giá vốn.
+function laiDonHtml(d) {
+  if (!isAdmin()) return '';
+  const ls = filled(d.lines), dt = sum(ls, lineTotal), von = sum(ls, l => l.MaHH ? (+l.SoLuong || 0) * (S.giaVon[l.MaHH] || 0) : 0);
+  const thieu = ls.filter(l => l.MaHH && !S.giaVon[l.MaHH]);
+  return `<div class="card"><div class="card-h"><h3>Lãi gộp</h3></div><div class="card-b">
+    <div class="stats" style="margin-top:0"><div class="stat"><div class="l">Tiền hàng (chưa VAT)</div><div class="v">${money(dt)}</div></div>
+    <div class="stat"><div class="l">Giá vốn</div><div class="v">${money(von)}</div></div><div class="stat"><div class="l">Lãi gộp</div><div class="v ${dt - von >= 0 ? 'green' : 'red'}" data-lai>${money(dt - von)}</div></div></div>
+    <p class="muted" style="margin:8px 0 0">${thieu.length ? 'Chưa có giá nhập: ' + thieu.map(l => esc(l.TenHang)).join(', ') + ' – lãi đang tính giá vốn 0. Ghi giá nhập ở phiếu nhập kho để có lãi đúng.' : 'Giá vốn = giá nhập bình quân của các phiếu nhập có ghi giá.'}</p></div></div>`;
+}
+
+const laTienMat = ht => String(ht || '').trim().toLowerCase() === 'tiền mặt';
+// Mỗi phiếu thu / chi thành một dòng sổ quỹ
+const dongQuy = () => S.thuTien.map(p => ({ loai: 'Thu', so: p.SoPT, Ngay: p.Ngay, NgayTao: p.NgayTao, noiDung: p.TenKH + (p.SoDH ? ' · đơn ' + p.SoDH : ''), ghiChu: p.GhiChu, HinhThuc: p.HinhThuc, thu: +p.SoTien || 0, chi: 0, NguoiTao: p.NguoiTao, goc: p }))
+  .concat(S.phieuChi.map(c => ({ loai: 'Chi', so: c.SoPC, Ngay: c.Ngay, NgayTao: c.NgayTao, noiDung: c.Loai + (c.DoiTac ? ' · ' + c.DoiTac : ''), nhom: c.Loai, ghiChu: c.GhiChu, HinhThuc: c.HinhThuc, thu: 0, chi: +c.SoTien || 0, NguoiTao: c.NguoiTao, goc: c })));
+// Tồn quỹ tới hết ngày den (mặc định hôm nay): số dư đầu + thu − chi, tách tiền mặt / ngân hàng
+function tonQuy(den) {
+  const dau = S.soDuDau || {}, t = { tienMat: +dau.tienMat || 0, nganHang: +dau.nganHang || 0 }, d = den || today();
+  dongQuy().forEach(r => { const n = String(r.Ngay).slice(0, 10); if ((dau.ngay && n < dau.ngay) || n > d) return; t[laTienMat(r.HinhThuc) ? 'tienMat' : 'nganHang'] += r.thu - r.chi; });
+  return t;
+}
+
+function vSoQuy(el) {
+  setTop('Tài chính', 'Sổ quỹ', [{ t: 'Lập phiếu chi', ic: 'plus', cls: 'primary', fn: () => openChi() }, { t: 'Thu tiền', ic: 'card', fn: () => openThu() }]
+    .concat(isAdmin() ? [{ t: 'Số dư đầu kỳ', ic: 'settings', fn: openSoDuDau }] : []));
+  S.onNew = () => openChi();
+  const t = tonQuy(), dau = S.soDuDau || {}, hn = today();
+  const homNay = dongQuy().filter(r => String(r.Ngay).slice(0, 10) === hn);
+  const stat = (l, v, cls = '', sub = '') => `<div class="stat"><div class="l">${l}</div><div class="v ${cls}">${v}</div>${sub ? `<div class="muted" style="font-size:12px;margin-top:2px">${sub}</div>` : ''}</div>`;
+  const box = document.createElement('div');
+  box.className = 'card'; box.style.marginBottom = '16px';
+  box.innerHTML = `<div class="card-b"><div class="stats" style="margin-top:0" data-ton>
+    ${stat('Tiền mặt tại quầy', money(t.tienMat) + ' ₫', t.tienMat < 0 ? 'red' : '')}${stat('Tiền trong ngân hàng', money(t.nganHang) + ' ₫', t.nganHang < 0 ? 'red' : '', 'chuyển khoản, thẻ, ví…')}
+    ${stat('Thu hôm nay', money(sum(homNay, r => r.thu)) + ' ₫', 'green')}${stat('Chi hôm nay', money(sum(homNay, r => r.chi)) + ' ₫', 'red')}</div>
+    <p class="muted" style="margin:10px 0 0">${dau.ngay ? `Tính từ ngày ${dmy(dau.ngay)} với số dư đầu: tiền mặt ${money(dau.tienMat)} ₫, ngân hàng ${money(dau.nganHang)} ₫.` : 'Chưa đặt số dư đầu kỳ: đang tính từ phiếu đầu tiên với số dư 0.' + (isAdmin() ? ' Bấm "Số dư đầu kỳ" để nhập số tiền đang có.' : '')}
+    Tiền thu, chi bằng "Tiền mặt" tính vào quỹ tiền mặt, các hình thức khác vào ngân hàng.</p></div>`;
+  el.append(box);
+  listCard(el, {
+    id: 'soquy', ph: 'Tìm số phiếu, khách, nhà cung cấp, ghi chú…',
+    filters: [{ id: 'loai', options: [['', 'Thu và chi'], ['Thu', 'Chỉ phiếu thu'], ['Chi', 'Chỉ phiếu chi']] },
+      { id: 'quy', options: [['', 'Mọi quỹ'], ['tm', 'Tiền mặt'], ['nh', 'Ngân hàng']] },
+      locGiaTri('nhom', 'Mọi loại chi', (S.loaiChi || []).concat(S.phieuChi.map(c => c.Loai))), { id: 'ngay', type: 'dates' }],
+    filter: (r, f) => (!f.loai || r.loai === f.loai) && (!f.quy || (f.quy === 'tm') === laTienMat(r.HinhThuc)) && (!f.nhom || r.nhom === f.nhom) && inRange(r.Ngay, f, 'ngay'),
+    sorts: [TC_NGAY, ['tien', 'Số tiền', soCua(r => r.thu + r.chi), 'giam']],
+    cols: [
+      { t: 'Số phiếu', k: 'so', cls: 'code' }, { t: 'Ngày', f: r => dmy(r.Ngay) },
+      { t: 'Loại', f: r => r.loai === 'Thu' ? badge('Thu', 'b-green') : badge('Chi', 'b-red') },
+      { t: 'Nội dung', cls: 'wrap', f: r => `${esc(r.noiDung)}${r.ghiChu ? `<span class="sub">${esc(r.ghiChu)}</span>` : ''}` },
+      { t: 'Hình thức', k: 'HinhThuc' },
+      { t: 'Thu', cls: 'num', f: r => r.thu ? `<b class="green">${money(r.thu)}</b>` : '' }, { t: 'Chi', cls: 'num', f: r => r.chi ? `<b class="red">${money(r.chi)}</b>` : '' },
+      { t: 'Người lập', k: 'NguoiTao' },
+    ],
+    data: () => dongQuy().sort((a, b) => String(b.Ngay + b.NgayTao).localeCompare(String(a.Ngay + a.NgayTao))),
+    text: r => [r.so, r.noiDung, r.ghiChu, r.HinhThuc, r.NguoiTao].join(' '),
+    open: r => r.loai === 'Thu' ? openThu(r.goc) : openChi(r.goc),
+    foot: rs => `<span>${rs.length} phiếu</span><span>Thu <b class="green">${money(sum(rs, r => r.thu))} ₫</b></span><span>Chi <b class="red">${money(sum(rs, r => r.chi))} ₫</b></span><span>Chênh lệch <b>${money(sum(rs, r => r.thu - r.chi))} ₫</b></span>`,
+  });
+}
+
+// Nhà cung cấp = đối tác của phiếu nhập (trừ tồn đầu kỳ, kiểm kê). Nợ = giá trị nhập (theo giá nhập) − đã trả bằng phiếu chi "Trả nhà cung cấp".
+const NGUON_KHONG_NO = /tồn đầu|đầu kỳ|kiểm kê|chuyển kho/i;
+function noNCC() {
+  const m = {}, row = k => m[k] || (m[k] = { ten: k, nhap: 0, soPhieu: 0, tra: 0, cuoi: '' });
+  S.phieuKho.forEach(p => { if (p.Loai !== 'Nhập' || !String(p.DoiTac || '').trim() || NGUON_KHONG_NO.test(p.DoiTac)) return; const r = row(p.DoiTac.trim()); r.nhap += +p.GiaTri || 0; r.soPhieu++; if (String(p.Ngay) > r.cuoi) r.cuoi = String(p.Ngay); });
+  S.phieuChi.forEach(c => { if (c.Loai === (S.loaiChi || [])[0] && c.DoiTac) row(String(c.DoiTac).trim()).tra += +c.SoTien || 0; });
+  return Object.values(m).map(r => Object.assign(r, { no: r.nhap - r.tra }));
+}
+function vNCC(el) {
+  setTop('Tài chính', 'Nợ nhà cung cấp', [{ t: 'Trả tiền nhà cung cấp', ic: 'plus', cls: 'primary', fn: () => openChi({ Loai: (S.loaiChi || [])[0] }) }]);
+  listCard(el, {
+    id: 'ncc', ph: 'Tìm nhà cung cấp…',
+    filters: [{ id: 'loc', options: [['no', 'Còn nợ'], ['', 'Tất cả nhà cung cấp']], def: 'no' }],
+    filter: (r, f) => !f.loc || r.no > 0,
+    sorts: [['no', 'Còn nợ', soCua(r => r.no), 'giam'], ['nhap', 'Đã nhập', soCua(r => r.nhap), 'giam'], ['cuoi', 'Lần nhập cuối', r => r.cuoi, 'giam'], ['ten', 'Tên', r => r.ten, 'tang']],
+    cols: [
+      { t: 'Nhà cung cấp', cls: 'wrap', f: r => `<b>${esc(r.ten)}</b><span class="sub">${r.soPhieu} phiếu nhập${r.cuoi ? ' · lần cuối ' + dmy(r.cuoi) : ''}</span>` },
+      { t: 'Giá trị đã nhập', cls: 'num', f: r => money(r.nhap) }, { t: 'Đã trả', cls: 'num', f: r => money(r.tra) },
+      { t: 'Còn nợ', cls: 'num', f: r => r.no > 0 ? `<b class="red">${money(r.no)}</b>` : r.no < 0 ? `<span class="green">Trả trước ${money(-r.no)}</span>` : '<span class="muted">0</span>' },
+      { t: '', cls: 'num', f: r => r.no > 0 ? '<button class="btn sm soft" data-act="tra">Trả tiền</button>' : '' },
+    ],
+    data: noNCC, text: r => r.ten,
+    act: (r, a) => { if (a === 'tra') openChi({ Loai: (S.loaiChi || [])[0], DoiTac: r.ten, SoTien: r.no }); },
+    open: r => { S.q.kho = { text: r.ten, f: { loai: 'Nhập' } }; go('kho'); },
+    foot: rs => `<span>${rs.length} nhà cung cấp</span><span>Tổng còn nợ <b class="red">${money(sum(rs, r => Math.max(0, r.no)))} ₫</b></span>`,
+  });
+  const p = document.createElement('p');
+  p.className = 'muted'; p.style.margin = '10px 4px 0';
+  p.textContent = 'Giá trị đã nhập tính theo giá nhập ghi ở phiếu nhập kho (dòng không ghi giá thì không tính). Bấm một nhà cung cấp để xem các phiếu nhập.';
+  el.append(p);
+}
+
+function openChi(pc) {
+  const isNew = !pc || !pc.SoPC, sua = isNew || isAdmin(), loai = S.loaiChi.length ? S.loaiChi : ['Chi khác'];
+  const hinhThuc = S.congTy.hinhThuc || ['Tiền mặt', 'Chuyển khoản'];
+  pc = Object.assign({ Ngay: today(), Loai: loai[loai.length - 1], DoiTac: '', SoTien: '', HinhThuc: hinhThuc.includes('Tiền mặt') ? 'Tiền mặt' : hinhThuc[0], GhiChu: '' }, pc || {});
+  const ncc = [...new Set(S.phieuKho.filter(p => p.Loai === 'Nhập' && p.DoiTac && !NGUON_KHONG_NO.test(p.DoiTac)).map(p => String(p.DoiTac).trim()).concat(S.phieuChi.map(c => c.DoiTac)).filter(Boolean))];
+  const ro = sua ? '' : ' disabled', chon = (ds, v) => ds.concat(ds.includes(v) ? [] : [v]).map(x => `<option${x === v ? ' selected' : ''}>${esc(x)}</option>`).join('');
+  modal({
+    title: isNew ? 'Lập phiếu chi' : 'Phiếu chi ' + pc.SoPC,
+    body: `<div class="fgrid">
+      <label class="field"><span class="lb">Loại chi *</span><select name="Loai"${ro}>${chon(loai, pc.Loai)}</select></label>
+      <label class="field"><span class="lb">Chi cho (nhà cung cấp, người nhận)</span><input name="DoiTac" list="dsNCC" value="${esc(pc.DoiTac)}" autocomplete="off"${ro}>${datalist('dsNCC', ncc)}</label>
+      <label class="field"><span class="lb">Số tiền *</span><input name="SoTien" class="money num" inputmode="numeric" value="${money(pc.SoTien)}"${ro}></label>
+      <label class="field"><span class="lb">Ngày chi</span><input name="Ngay" type="date" value="${esc(pc.Ngay)}"${ro}></label>
+      <label class="field"><span class="lb">Hình thức</span><select name="HinhThuc"${ro}>${chon(hinhThuc, pc.HinhThuc)}</select></label>
+      <label class="field"><span class="lb">Ghi chú</span><input name="GhiChu" value="${esc(pc.GhiChu)}" placeholder="vd: Tiền nhà tháng 10"${ro}></label>
+    </div>${isNew ? '' : `<p class="muted">Lập bởi ${esc(pc.NguoiTao)} lúc ${esc(pc.NgayTao)}${sua ? '' : ' · chỉ tài khoản quản trị được sửa, xóa phiếu chi'}</p>`}`,
+    buttons: (sua ? [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', save: true, fn: run(async m => {
+      const d = formData(m);
+      if (!(d.SoTien > 0)) throw new Error('Nhập số tiền chi.');
+      const saved = await api('luuPhieuChi', Object.assign({}, d, { SoPC: pc.SoPC || '' }));
+      upsertLocal('phieuChi', 'SoPC', saved); sortAll();
+      closeModal(); render(); toast(`Đã lưu phiếu chi ${saved.SoPC}: ${money(saved.SoTien)} ₫.`);
+    }) }] : []).concat(!isNew && isAdmin() ? [{ t: 'Xóa', ic: 'trash', cls: 'danger', fn: run(async () => {
+      if (!confirm(`Xóa phiếu chi ${pc.SoPC} (${money(pc.SoTien)} ₫)?`)) return;
+      await api('xoaPhieuChi', pc.SoPC);
+      S.phieuChi = S.phieuChi.filter(x => x.SoPC !== pc.SoPC);
+      closeModal(); render(); toast('Đã xóa phiếu chi.');
+    }) }] : []),
+  });
+}
+
+function openSoDuDau() {
+  const d = S.soDuDau || {};
+  modal({
+    title: 'Số dư đầu kỳ của sổ quỹ',
+    body: `<p class="muted" style="margin-top:0">Nhập số tiền đang có vào một ngày (thường là hôm nay hoặc đầu tháng). Sổ quỹ tính từ ngày đó: số dư này + phiếu thu − phiếu chi.</p><div class="fgrid">
+      <label class="field"><span class="lb">Từ ngày *</span><input name="ngay" type="date" value="${esc(d.ngay || today())}"></label><span></span>
+      <label class="field"><span class="lb">Tiền mặt tại quầy</span><input name="tienMat" class="money num" inputmode="numeric" value="${money(d.tienMat || 0)}"></label>
+      <label class="field"><span class="lb">Tiền trong ngân hàng</span><input name="nganHang" class="money num" inputmode="numeric" value="${money(d.nganHang || 0)}"></label></div>`,
+    buttons: [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', save: true, fn: run(async m => {
+      S.soDuDau = await api('luuSoDuDau', formData(m));
+      closeModal(); render(); toast('Đã lưu số dư đầu kỳ.');
+    }) }],
+  });
 }
 
 // ===================== Nhật ký thao tác (quản trị) =====================
@@ -3121,7 +3298,7 @@ function openCuaHang() {
 }
 
 // ===================== Phím tắt: F2 mới, F3 tìm, F8 lưu, Esc đóng =====================
-const VIEWS = { home: vHome, baogia: vBaoGia, donhang: vDonHang, congno: vCongNo, hang: vHang, kho: vKho, ton: vTon, khach: vKhach, taikhoan: vTaiKhoan, thietbi: vThietBi, caidat: vCaiDat, baohanh: vBaoHanh, hopdong: vHopDong, hd: vHD, hdhan: vHDHan, hdlich: vHDLich, baocao: vBaoCao, nhatky: vNhatKy, doc: vDoc };
+const VIEWS = { soquy: vSoQuy, ncc: vNCC, home: vHome, baogia: vBaoGia, donhang: vDonHang, congno: vCongNo, hang: vHang, kho: vKho, ton: vTon, khach: vKhach, taikhoan: vTaiKhoan, thietbi: vThietBi, caidat: vCaiDat, baohanh: vBaoHanh, hopdong: vHopDong, hd: vHD, hdhan: vHDHan, hdlich: vHDLich, baocao: vBaoCao, nhatky: vNhatKy, doc: vDoc };
 document.addEventListener('keydown', e => {
   if ($('#app').classList.contains('hidden')) return;
   const modalOpen = !$('#modal').classList.contains('hidden');

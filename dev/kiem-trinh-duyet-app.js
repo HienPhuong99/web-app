@@ -349,6 +349,32 @@ buoc('Tổng quan động: bấm số đơn → đơn và phiếu thu hôm nay, 
   await v(page, 'the-doanh-so').waitFor();
 });
 
+buoc('Sổ quỹ: tồn tiền mặt / ngân hàng, ghi phiếu chi; lãi gộp hôm nay trên Tổng quan (quản trị)', async page => {
+  await page.getByTestId('tab-index').click();
+  await v(page, 'lai-hom-nay').waitFor({ timeout: 15000 });
+  await page.getByTestId('tab-tai-khoan').click();
+  await v(page, 'mo-so-quy').click();
+  await v(page, 'ton-quy').waitFor({ timeout: 15000 });
+  await v(page, 'ds-quy').getByText('Tiền mặt', { exact: false }).first().waitFor(); // phiếu thu hôm nay của chay-thu --mau-app
+  assert.ok(await v(page, 'quy-sau').isDisabled(), 'Hôm nay: không lật sang ngày sau');
+  await v(page, 'nut-ghi-chi').click();
+  await v(page, 'nut-luu-chi').click();
+  await v(page, 'loi-chi').getByText('Nhập số tiền chi.').waitFor();
+  await v(page, 'loai-chi-Trả nhà cung cấp').click();
+  await v(page, 'o-tien-chi').fill('45000');
+  await v(page, 'nut-luu-chi').click();
+  await v(page, 'loi-chi').getByText('Nhập tên nhà cung cấp', { exact: false }).waitFor();
+  await v(page, 'loai-chi-Vận chuyển').click();
+  await v(page, 'nut-luu-chi').click();
+  await v(page, 'ds-quy').getByText('Vận chuyển').waitFor({ timeout: 15000 });
+  await v(page, 'ds-quy').getByText('−45.000', { exact: false }).waitFor();
+  await khongTranNgang(page);
+  await chup(page, '13-so-quy');
+  await v(page, 'quy-truoc').click();
+  await v(page, 'ds-quy').getByText('Không có phiếu thu, chi nào trong ngày.').waitFor({ timeout: 15000 });
+  await v(page, 'nut-lui').click();
+});
+
 buoc('Tài khoản → Đăng xuất: hỏi lại, về màn hình đăng nhập, mở lại vẫn phải đăng nhập', async (page, c) => {
   await page.getByTestId('tab-tai-khoan').click();
   await page.getByTestId('tk-ten').getByText('Quản trị').waitFor();

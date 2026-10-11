@@ -54,7 +54,19 @@ export type TongQuan = {
   donTre: { SoDH: string; MaKH: string; TenKH: string; NgayGiao: string; TongCong: number }[];
   hang: { MaHH: string; TenHang: string; ton: number; toiThieu: number }[];
   soMuc: number; no: { soKhach: number; tong: number; top: { MaKH: string; TenKH: string; SDT: string; tien: number }[] };
+  /** lãi gộp hôm nay (doanh thu chưa VAT − giá vốn); null khi không phải quản trị, không có ở máy chủ bản cũ */
+  lai?: LaiGop | null;
 };
+export type LaiGop = { doanhThu: number; giaVon: number; lai: number };
+
+/** soQuyMay(ngày): tồn quỹ cuối ngày (tiền mặt / ngân hàng), thu – chi trong ngày và từng phiếu */
+export type SoQuy = {
+  ngay: string; homNay: string; truoc: string; sau: string; batDau: string;
+  ton: { tienMat: number; nganHang: number }; trongNgay: { thu: number; chi: number };
+  ds: { loai: 'thu' | 'chi'; so: string; noiDung: string; SoTien: number; HinhThuc: string; MaKH: string; luc: string }[];
+  loaiChi: string[]; hinhThuc: string[];
+};
+export type PhieuChi = { SoPC: string; Ngay: string; Loai: string; DoiTac: string; SoTien: number; HinhThuc: string; GhiChu: string };
 
 /** chiTietTongQuan('ngay', ngày): đơn hàng và phiếu thu của một ngày; truoc / sau để lật ngày (sau rỗng khi là hôm nay) */
 export type ChiTietNgay = {

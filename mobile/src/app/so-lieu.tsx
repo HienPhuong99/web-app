@@ -38,7 +38,7 @@ function BanTrongNgay({ ngayDau }: { ngayDau: string }) {
         <NutLat bieuTuong="chevron-forward" chu="Ngày sau" an={!du || !du.sau} onPress={() => du?.sau && setNgay(du.sau)} testID="ngay-sau" />
       </View>
       <ChuLoi chu={loi} testID="loi-so-lieu" />
-      {!dangXem && !loi ? <ChuNhat chu="Đang tải…" /> : null}
+      {!dangXem && !loi ? <KhungCho dong={4} /> : null}
       {dangXem ? (
         <>
           <The style={s.muc} testID="tong-ngay">

@@ -15,11 +15,12 @@ function apiHam_() {
     luuKhach: luuKhach, luuChungTu: luuChungTu, luuThuTien: luuThuTien, doiMatKhau: doiMatKhau,
     cauHinhMay: cauHinhMay, khoMay: khoMay, traMaKho: traMaKho, dsKhachMay: dsKhachMay, chiTietKhach: chiTietKhach, banNhanh: banNhanh,
     dsHopDongMay: dsHopDongMay, taiPdfHopDong: taiPdfHopDong, dsThietBi: dsThietBi, xoaThietBi: xoaThietBi, thuThongBao: thuThongBao, chiTietTongQuan: chiTietTongQuan,
+    soQuyMay: soQuyMay, luuPhieuChi: luuPhieuChi, loiNhuan: loiNhuan,
   };
 }
 
 // Hàm chỉ đọc: kết quả được ghi nhớ (ketQuaNho_ trong Code.gs) tới khi có dữ liệu mới. App gửi moi: true (kéo xuống làm mới) để lấy số mới nhất.
-const DOC_NHO = ['tongQuanMay', 'chiTietTongQuan', 'khoMay', 'dsKhachMay', 'chiTietKhach', 'dsHopDongMay', 'theKho', 'cauHinhMay', 'traMaKho', 'traBaoHanh'];
+const DOC_NHO = ['tongQuanMay', 'chiTietTongQuan', 'khoMay', 'dsKhachMay', 'chiTietKhach', 'dsHopDongMay', 'theKho', 'cauHinhMay', 'traMaKho', 'traBaoHanh', 'soQuyMay', 'loiNhuan'];
 
 let MAY_HIEN_TAI_ = ''; // mã băm của điện thoại đang gọi API: để đánh dấu "máy này" và gửi thông báo thử
 
@@ -146,6 +147,7 @@ function tongQuanMay(token) {
     homNay: du.homNay, ban: du.homNayBan, thu: du.homNayThu, homQua: du.homQuaBan, ban7: du.ban7,
     hopDong: du.hopDong.slice(0, 20), dot: du.dot.slice(0, 20), donTre: du.donTre.slice(0, 20), hang: du.hang.slice(0, 20),
     soMuc: du.soMuc, no: { soKhach: du.no.soKhach, tong: du.no.tong, top: du.no.top },
+    lai: user.vaiTro === 'admin' ? loiNhuanKy_(du.homNay, du.homNay).tong : null, // lãi gộp hôm nay: chỉ quản trị
   };
 }
 

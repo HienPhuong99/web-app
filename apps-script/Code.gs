@@ -42,8 +42,9 @@ const TABLES = {
   DonHang: ['SoDH', 'Ngay', 'SoBG', 'MaKH', 'TenKH', 'NguoiNhan', 'SDT', 'DiaChi', 'NgayGiao', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'TrangThai', 'GhiChu', 'NguoiTao', 'NgayTao', 'NgaySua'],
   DonHangCT: ['SoDH', 'STT', 'MaHH', 'TenHang', 'Model', 'DVT', 'XuatXu', 'SoLuong', 'LoaiGia', 'DonGia', 'ThanhTien'],
   PhieuKho: ['SoPK', 'Ngay', 'Loai', 'SoDH', 'DoiTac', 'GhiChu', 'NguoiTao', 'NgayTao', 'NgaySua'],
-  PhieuKhoCT: ['SoPK', 'STT', 'MaHH', 'TenHang', 'Model', 'DVT', 'SoLuong', 'IMEI'],
+  PhieuKhoCT: ['SoPK', 'STT', 'MaHH', 'TenHang', 'Model', 'DVT', 'SoLuong', 'IMEI', 'GiaVon'], // GiaVon: giá nhập một đơn vị (dòng của phiếu nhập) để tính lợi nhuận
   ThuTien: ['SoPT', 'Ngay', 'MaKH', 'TenKH', 'SoDH', 'SoTien', 'HinhThuc', 'GhiChu', 'NguoiTao', 'NgayTao'],
+  PhieuChi: ['SoPC', 'Ngay', 'Loai', 'DoiTac', 'SoTien', 'HinhThuc', 'GhiChu', 'NguoiTao', 'NgayTao'], // sổ quỹ: tiền chi ra (trả nhà cung cấp, chi phí); SoQuy.gs
   NhatKy: ['ThoiGian', 'NguoiDung', 'HanhDong', 'DoiTuong', 'ChiTiet'],
   // Hợp đồng: bên A = khách (các cột TenDN…NganHang), bên B = cửa hàng (lấy từ cài đặt cửa hàng khi tạo file)
   HopDong: ['SoHD', 'Ngay', 'LoaiHD', 'SoDH', 'MaKH', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang', 'SoCCCD', 'CCCDCap', 'IMEI',
@@ -62,9 +63,9 @@ const NGAN_HANG = [['970436', 'Vietcombank'], ['970415', 'VietinBank'], ['970418
   ['970438', 'BaoViet Bank'], ['970433', 'VietBank'], ['970430', 'PGBank'], ['970454', 'Viet Capital Bank'], ['970414', 'MBV'], ['970446', 'Co-opBank'],
   ['970424', 'Shinhan Bank'], ['970457', 'Woori Bank'], ['422589', 'CIMB'], ['668888', 'KBank'], ['546034', 'CAKE'], ['546035', 'Ubank'], ['963388', 'Timo']];
 const SHARED = ['TaiKhoan', 'CaiDat', 'ThietBi']; // trang dùng chung cho mọi cửa hàng, không có tiền tố
-const NUMBER_COLS = ['Dot', 'BaoTruocNgay', 'ThangGiaHan', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien'];
+const NUMBER_COLS = ['Dot', 'BaoTruocNgay', 'ThangGiaHan', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien', 'GiaVon'];
 const SESSION_TTL = 6 * 60 * 60; // giây; tối đa của CacheService, tự gia hạn khi còn dùng
-const SCHEMA = '11'; // tăng số này khi thêm bảng/cột ở TABLES (hoặc cần sửa dữ liệu một lần): app tự làm ở lần gọi đầu sau khi triển khai
+const SCHEMA = '12'; // tăng số này khi thêm bảng/cột ở TABLES (hoặc cần sửa dữ liệu một lần): app tự làm ở lần gọi đầu sau khi triển khai
 
 // Loại chứng từ có dòng hàng. Số chứng từ dạng 001-2026/DH, mỗi năm đánh lại từ 001 (riêng từng cửa hàng).
 const CT = {
@@ -425,7 +426,8 @@ function taiDuLieu(token) {
     user: user, congTy: ch.congTy,
     cuaHang: { id: CUR_SHOP, ten: ch.ten, moTa: ch.moTa, icon: s.icon, mau: s.mau }, dsCuaHang: ds,
     khach: readTable_('KhachHang'), hang: hang, baoGia: readTable_('BaoGia'), donHang: donHang,
-    phieuKho: phieuKho, thuTien: readTable_('ThuTien'), hopDong: readTable_('HopDong').map(h => hdChoUser_(user, h)), mauHD: user.vaiTro === 'admin' ? mauHD : [], loaiHD: loaiHopDong_(mauHD), hopDongLich: readTable_('HopDongLich'), nganHang: NGAN_HANG, emailSang: user.vaiTro === 'admin' ? cauHinhEmailSang_(CUR_SHOP, cd) : null,
+    phieuKho: phieuKho, thuTien: readTable_('ThuTien'), phieuChi: readTable_('PhieuChi'), soDuDau: soDuDau_(cd), loaiChi: LOAI_CHI,
+    giaVon: user.vaiTro === 'admin' ? giaVonBQ_(phieuKho, pkCT) : {}, hopDong: readTable_('HopDong').map(h => hdChoUser_(user, h)), mauHD: user.vaiTro === 'admin' ? mauHD : [], loaiHD: loaiHopDong_(mauHD), hopDongLich: readTable_('HopDongLich'), nganHang: NGAN_HANG, emailSang: user.vaiTro === 'admin' ? cauHinhEmailSang_(CUR_SHOP, cd) : null,
     ton: tonKho_(phieuKho, pkCT), thongKe: thongKe_(donHang, hang, Utilities.formatDate(new Date(Date.now() - 90 * 864e5), tz_(), 'yyyy-MM-dd'), '', 8),
   };
 }
@@ -592,7 +594,7 @@ function luuChungTu(token, loai, doc) {
   delete head.lines;
   let imeis = [];
   if (c.loai) {
-    lines.forEach((l, i) => { l.STT = i + 1; l.SoLuong = +l.SoLuong || 0; });
+    lines.forEach((l, i) => { l.STT = i + 1; l.SoLuong = +l.SoLuong || 0; l.GiaVon = c.loai === 'Nhập' && +l.GiaVon > 0 ? Math.round(+l.GiaVon) : ''; });
     if (lines.some(l => l.SoLuong <= 0)) throw new Error('Số lượng mỗi dòng phải lớn hơn 0.');
     // IMEI/serial: mỗi máy một mã; có nhập thì số mã phải bằng số lượng
     lines.forEach(l => {
@@ -638,7 +640,7 @@ function luuChungTu(token, loai, doc) {
       c.loai ? [head.DoiTac, head.SoDH && 'đơn ' + head.SoDH].filter(Boolean).join(' · ') : head.TenKH + ' · ' + head.TongCong + ' đ');
     head.lines = lines;
     if (c.loai) Object.assign(head, tomTatPK_(lines)); // cho danh sách phiếu kho (không phải cột trong Sheet)
-    return { doc: head, ton: c.loai ? tonKho_() : null, donHang: donHang };
+    return { doc: head, ton: c.loai ? tonKho_() : null, donHang: donHang, giaVon: c.loai === 'Nhập' && user.vaiTro === 'admin' ? giaVonBQ_() : null };
   });
 }
 
@@ -717,7 +719,8 @@ function tonKho_(phieuKho, pkCT) { // phieuKho, pkCT = bảng PhieuKho, PhieuKho
 // Tóm tắt dòng hàng của một phiếu kho cho danh sách: tổng số lượng và tên hàng (tối đa 3 mặt hàng)
 function tomTatPK_(lines) {
   const ten = lines.slice().sort((a, b) => a.STT - b.STT).map(l => l.TenHang + (+l.SoLuong !== 1 ? ' ×' + (+l.SoLuong || 0) : ''));
-  return { SoLuong: lines.reduce((s, l) => s + (+l.SoLuong || 0), 0), Hang: ten.slice(0, 3).join(', ') + (ten.length > 3 ? ' và ' + (ten.length - 3) + ' mặt hàng khác' : '') };
+  return { SoLuong: lines.reduce((s, l) => s + (+l.SoLuong || 0), 0), Hang: ten.slice(0, 3).join(', ') + (ten.length > 3 ? ' và ' + (ten.length - 3) + ' mặt hàng khác' : ''),
+    GiaTri: lines.reduce((s, l) => s + (+l.SoLuong || 0) * (+l.GiaVon || 0), 0) }; // giá trị nhập (phiếu nhập có giá vốn): để tính công nợ nhà cung cấp
 }
 
 // Thẻ kho: các lần nhập/xuất của một mặt hàng, cũ trước mới sau

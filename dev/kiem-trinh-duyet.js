@@ -137,6 +137,47 @@ BUOC.push(['Tổng quan động: chọn kỳ, bấm số liệu xem chi tiết, 
   await page.waitForSelector('#modal h3:has-text("Công nợ phải thu")');
   await page.locator('#modal [data-close]').first().click();
 }]);
+BUOC.push(['Tài chính: giá nhập ở phiếu nhập, nợ nhà cung cấp, phiếu chi, sổ quỹ, báo cáo lợi nhuận', async page => {
+  await page.click('#nav a[data-go="kho"]');
+  await page.locator('#topActions .btn', { hasText: 'Nhập kho' }).click();
+  await page.fill('input[data-h="DoiTac"]', 'NCC Thử Một');
+  await page.fill('tr[data-i="0"] [data-f="TenHang"]', 'iphone 15');
+  await page.locator('#picker [data-i]').first().click();
+  await page.fill('tr[data-i="0"] [data-f="SoLuong"]', '2');
+  await page.fill('tr[data-i="0"] [data-f="GiaVon"]', '10000000');
+  assert.match(await page.locator('#view [data-t="GiaTri"]').innerText(), /20\.000\.000/);
+  await page.locator('#topActions .btn', { hasText: 'Lưu' }).click();
+  await page.waitForFunction(() => document.querySelector('#title').textContent === 'Nhập – xuất kho', null, { timeout: 8000 }); // lưu xong về danh sách
+  // Nợ nhà cung cấp: trả một phần bằng phiếu chi
+  await page.click('#nav a[data-go="ncc"]');
+  const dong = page.locator('#view tbody tr:has-text("NCC Thử Một")');
+  assert.match(await dong.innerText(), /20\.000\.000/);
+  await dong.locator('[data-act="tra"]').click();
+  await page.waitForSelector('#modal [name=SoTien]');
+  assert.deepStrictEqual([await page.inputValue('#modal [name=Loai]'), await page.inputValue('#modal [name=DoiTac]'), await page.inputValue('#modal [name=SoTien]')], ['Trả nhà cung cấp', 'NCC Thử Một', '20.000.000']);
+  await page.fill('#modal [name=SoTien]', '5000000');
+  await page.locator('#modal .btn', { hasText: 'Lưu' }).click();
+  await page.waitForSelector('#modal', { state: 'hidden' });
+  assert.match(await page.locator('#view tbody tr:has-text("NCC Thử Một")').innerText(), /15\.000\.000/);
+  // Sổ quỹ: phiếu chi vừa lập, tiền mặt giảm; lập thêm phiếu chi phí
+  await page.click('#nav a[data-go="soquy"]');
+  await page.waitForSelector('#view tbody tr:has-text("NCC Thử Một")');
+  const tm = async () => +(await page.locator('#view [data-ton] .stat').first().locator('.v').innerText()).replace(/\D/g, '') * ((await page.locator('#view [data-ton] .stat').first().locator('.v').innerText()).includes('-') ? -1 : 1);
+  const truoc = await tm();
+  await page.locator('#topActions .btn', { hasText: 'Lập phiếu chi' }).click();
+  await page.selectOption('#modal [name=Loai]', 'Vận chuyển');
+  await page.fill('#modal [name=SoTien]', '30000');
+  await page.locator('#modal .btn', { hasText: 'Lưu' }).click();
+  await page.waitForSelector('#modal', { state: 'hidden' });
+  assert.strictEqual(await tm(), truoc - 30000);
+  await page.selectOption('#view .toolbar [data-f="loai"]', 'Chi');
+  assert.match(await page.locator('#view .foot').innerText(), /Chi 5\.030\.000/);
+  // Báo cáo: tab Lợi nhuận (quản trị)
+  await page.click('#nav a[data-go="baocao"]');
+  await page.click('#view [data-tab="loi"]');
+  await page.waitForSelector('#view [data-loi]');
+  assert.match(await page.locator('#view [data-loi]').innerText(), /Lãi gộp/);
+}]);
 try { require('./kiem-trinh-duyet-hopdong')(BUOC); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
 
 (async () => {
