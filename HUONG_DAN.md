@@ -50,7 +50,7 @@ Thư mục `mobile/` là app cho nhân viên đứng quầy: **Tổng quan**, **
    - **Mất điện thoại**: trên web vào **Hệ thống → Điện thoại đăng nhập** (hoặc trong app: Thêm → Điện thoại đăng nhập) → **Đăng xuất máy này**. Không cần đổi mật khẩu. Nhân viên chỉ thấy và đăng xuất được máy của mình; quản trị thấy mọi máy.
    - Mỗi tài khoản tối đa 10 máy; đăng nhập máy thứ 11 thì máy lâu không dùng nhất bị đăng xuất.
    - Có thể bật **khóa app bằng Face ID / vân tay** (Thêm → Bảo mật): hỏi khi mở app và khi quay lại sau hơn 1 phút.
-5. **Thông báo mỗi sáng**: mỗi máy tự bật trong Thêm → Thông báo (bấm *Gửi thử thông báo* để kiểm tra). Gửi cùng giờ với email sáng (mặc định 7 giờ, đổi trong *Cài đặt → Email tổng hợp mỗi sáng*), chỉ khi có việc: đợt trả góp cần thu, hợp đồng sắp/quá hạn, đơn trễ giao, hàng sắp hết. App cần `projectId` của Expo (xem `mobile/README.md`).
+5. **Thông báo mỗi sáng**: mỗi máy tự bật trong Thêm → Thông báo (bấm *Gửi thử thông báo* để kiểm tra). Gửi cùng giờ với email sáng (mặc định 7 giờ, đổi trong *Cài đặt → Email tổng hợp mỗi sáng*), chỉ khi có việc: đợt trả góp cần thu, hợp đồng sắp/quá hạn, đơn trễ giao, hàng sắp hết. App đã gắn với dự án Expo (xem `mobile/README.md`).
 6. **Lưu ý**:
    - App báo "Máy chủ trả dữ liệu không đọc được" nghĩa là web app chưa để *Bất kỳ ai* truy cập, hoặc link sai (trong app: *Máy chủ*).
    - Link `/dev` không dùng được cho app, vì link này đòi đăng nhập Google.

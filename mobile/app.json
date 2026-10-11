@@ -64,7 +64,11 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiUrl": "https://script.google.com/macros/s/AKfycbx66egogcD-sQxv48gLIjCJqeIIEeD_jwkIdmSYAKRsrHKjF_2hV1SMfa-yHRMTt02Z/exec"
-    }
+      "apiUrl": "https://script.google.com/macros/s/AKfycbx66egogcD-sQxv48gLIjCJqeIIEeD_jwkIdmSYAKRsrHKjF_2hV1SMfa-yHRMTt02Z/exec",
+      "eas": {
+        "projectId": "cdee3625-77cb-42a9-a5e5-318d0dbc1dc4"
+      }
+    },
+    "owner": "hienphuong"
   }
 }
