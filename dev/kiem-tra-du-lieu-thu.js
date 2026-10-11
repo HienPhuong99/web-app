@@ -24,7 +24,7 @@ thuMail.nguoiChay = undefined;
 const cu = execFileSync('git', ['show', 'c8f217d:apps-script/DuLieuThu.gs'], { cwd: path.join(__dirname, '..') }).toString()
   .replace(/\bphienThu_\b/g, 'phienThuCu_').replace(/\bhenGio_\b/g, 'henGioCu_').replace(/\bnapDuLieuThu\b/g, 'napDuLieuThuCu').replace(/\bxoaDuLieuThu\b/g, 'xoaDuLieuThuCu').replace(/\bTHU_\b/g, 'THU_CU_BAN_TRUOC');
 vm.runInContext(cu, G, { filename: 'DuLieuThu-cu.gs' });
-props.set('boNhanThu.phone', ''); // giả như Sheet chưa từng chạy bản mới
+props.set('boNhanThu.phone', ''); props.set('suaKieuO.phone', ''); // giả như Sheet chưa từng chạy bản mới
 G.napDuLieuThuCu();
 const kh1 = { HangHoa: dem('HangHoa'), KhachHang: dem('KhachHang'), DonHang: dem('DonHang'), BaoGia: dem('BaoGia'), PhieuKho: dem('PhieuKho'), ThuTien: dem('ThuTien'), HopDong: dem('HopDong') };
 assert.ok(oCoDau().length > 100);
@@ -107,6 +107,12 @@ assert.ok(ds.phieuKho.every(p => p.SoLuong > 0 && p.Hang));
 const dong = PS().map(k => sheets[k].rows.length).join();
 G.napDuLieuThu();
 assert.strictEqual(PS().filter(k => k !== 'PS_NhatKy').map(k => sheets[k].rows.length).join(), dong.split(',').filter((_, i) => PS()[i] !== 'PS_NhatKy').join());
+// Đã xóa bớt dữ liệu thử (một mặt hàng mẫu, một hợp đồng mẫu): lần nâng cấp sau không tự tạo lại
+const soTruoc = soThu(), hdTruoc = dem('HopDong'), hhTruoc = dem('HangHoa');
+G.xoaHang(admin, soTruoc['h:11']); G.xoaHopDong(admin, soTruoc['hd:ctv']);
+props.set('schema', '9'); props.set('boSung.' + vm.runInContext('SCHEMA', G), ''); cache.delete('schema');
+G.taiDuLieu(admin);
+assert.deepStrictEqual([dem('HangHoa'), dem('HopDong')], [hhTruoc - 1, hdTruoc - 1]);
 G.xoaDuLieuThu();
 assert.deepStrictEqual([dem('HangHoa'), dem('KhachHang'), dem('DonHang'), dem('PhieuKho'), dem('HopDong')], [truoc.HangHoa, truoc.KhachHang, 0, 0, 0]);
 

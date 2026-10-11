@@ -81,7 +81,7 @@ function boSungDuLieuThu_() {
   if (!ma.length) return 0;
   const co = {};
   Object.keys(NHOM).forEach(n => { co[n] = new Set(readTable_(NHOM[n]).map(r => String(r[TABLES[NHOM[n]][0]]))); });
-  
+  if (!ma.every(k => co[k.split(':')[0]].has(String(so[k])))) return 0;
   const truoc = readTable_('HopDong').length;
   try { napDuLieuThu_(phienNoiBo_(), henGio_('napDuLieuThu'), so); } finally { luuSoThu_(so); }
   return readTable_('HopDong').length - truoc;
