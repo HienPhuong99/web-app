@@ -69,7 +69,7 @@ function guiThuEmailSang(token) {
 function guiEmailSang(e) {
   if (!e || typeof e !== 'object' || !(e.triggerUid || e.year)) return;
   const homNay = homNay_(), cd = caiDatMap_(), props = PropertiesService.getScriptProperties();
-  Object.keys(SHOPS).forEach(id => {
+  docMotLan_(() => Object.keys(SHOPS).forEach(id => { // email và thông báo cùng tính tongHopSang_: mỗi trang tính chỉ đọc một lần
     CUR_SHOP = id;
     if (cauHinhEmailSang_(id, cd).bat && props.getProperty('emailSang.' + id) !== homNay) {
       try { if (guiEmailSang_(id, cauHinhEmailSang_(id, cd), homNay, false).daGui) props.setProperty('emailSang.' + id, homNay); }
@@ -79,7 +79,7 @@ function guiEmailSang(e) {
       try { guiThongBaoSang_(id, homNay); props.setProperty('thongBao.' + id, homNay); }
       catch (err) { Logger.log('Không gửi được thông báo sáng của ' + id + ': ' + err); }
     }
-  });
+  }));
 }
 
 const homNay_ = () => Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd');
@@ -128,7 +128,8 @@ function tongHopSang_(homNay) {
     .map(d => ({ SoDH: d.SoDH, MaKH: d.MaKH || '', TenKH: d.TenKH, NgayGiao: ngay(d.NgayGiao), TongCong: +d.TongCong || 0 }));
   // Hàng sắp hết: tồn <= mức tối thiểu (hàng có nhập xuất), hoặc có đặt mức tối thiểu mà chưa có phiếu kho nào
   const ton = tonKho_();
-  const hang = readTable_('HangHoa').filter(h => ton[h.MaHH] ? ton[h.MaHH].nhap - ton[h.MaHH].xuat <= (+h.TonToiThieu || 0) : h.TonToiThieu !== '' && +h.TonToiThieu > 0)
+  // Máy cũ thu về (mỗi mã một chiếc) bán xong là tồn 0: không tính sắp hết trừ khi có đặt mức tối thiểu, kẻo sáng nào cũng có "việc"
+  const hang = readTable_('HangHoa').filter(h => !(h.NhomHang === NHOM_MAY_CU && !(+h.TonToiThieu > 0)) && (ton[h.MaHH] ? ton[h.MaHH].nhap - ton[h.MaHH].xuat <= (+h.TonToiThieu || 0) : h.TonToiThieu !== '' && +h.TonToiThieu > 0))
     .map(h => ({ MaHH: h.MaHH, TenHang: h.TenHang, ton: ton[h.MaHH] ? ton[h.MaHH].nhap - ton[h.MaHH].xuat : 0, toiThieu: +h.TonToiThieu || 0 }))
     .sort((a, b) => (a.ton - a.toiThieu) - (b.ton - b.toiThieu));
   const noDs = dsNo_(song, thu, khach);

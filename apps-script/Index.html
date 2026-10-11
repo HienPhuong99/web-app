@@ -549,7 +549,7 @@ function derive() {
 const daThu = d => D.thuDH[d.SoDH] || 0;
 const conNo = d => d.TrangThai === 'Hủy' ? 0 : Math.max(0, (+d.TongCong || 0) - daThu(d));
 const tonOf = ma => { const t = S.ton[ma]; return t ? t.nhap - t.xuat : 0; };
-const isLow = h => S.ton[h.MaHH] ? tonOf(h.MaHH) <= (+h.TonToiThieu || 0) : h.TonToiThieu !== '' && +h.TonToiThieu > 0;
+const isLow = h => !(h.NhomHang === 'Máy cũ' && !(+h.TonToiThieu > 0)) && (S.ton[h.MaHH] ? tonOf(h.MaHH) <= (+h.TonToiThieu || 0) : h.TonToiThieu !== '' && +h.TonToiThieu > 0); // máy cũ bán xong không tính sắp hết (như email sáng)
 const TT_DH = { 'Chờ giao': 'b-amber', 'Giao một phần': 'b-blue', 'Đã giao': 'b-green', 'Hủy': 'b-gray' };
 const ttGiao = d => badge(d.TrangThai || 'Chờ giao', TT_DH[d.TrangThai] || 'b-amber');
 function ttThu(d) {

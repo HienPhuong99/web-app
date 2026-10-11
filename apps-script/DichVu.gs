@@ -129,6 +129,9 @@ function luuSuaChua(token, p) {
   Object.assign(o, kh ? { MaKH: kh.MaKH, TenKH: kh.TenKH, SDT: String(kh.SDT || '') } : { MaKH: cu.MaKH, TenKH: cu.TenKH, SDT: String(cu.SDT || '') });
   return withLock_(() => {
     const moi = !o.SoPN, now = now_();
+    // đọc lại trong khóa: máy khác vừa bấm Trả máy thì không ghi đè trạng thái cũ (phiếu hiện lại như đang sửa, trả lần nữa là tính tiền hai lần)
+    const hien = moi ? null : findObj_('SuaChua', o.SoPN);
+    if (hien && hien.TrangThai === 'Đã trả khách' && cu.TrangThai !== 'Đã trả khách') throw new Error('Phiếu ' + o.SoPN + ' vừa được trả khách ở máy khác. Tải lại phiếu rồi sửa.');
     if (moi) Object.assign(o, { NgayNhan: homNay_(), NguoiTao: user.ten, NgayTao: now });
     o.NgaySua = now;
     upsert_('SuaChua', o, () => nextSo_('SuaChua', 'PN', homNay_()), ['NgayNhan', 'NguoiTao', 'NgayTao', 'NgayTra', 'SoDH', 'Anh']);

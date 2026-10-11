@@ -848,6 +848,7 @@ function ghiPhieuThu_(user, pt) {
     pt.SoTien = Math.round(+pt.SoTien || 0);
     if (pt.SoTien <= 0) throw new Error('Nhập số tiền thu.');
   }
+  pt.HinhThuc = String(pt.HinhThuc || '').trim() || 'Tiền mặt'; // trống thì sổ quỹ từng tính vào ngân hàng; như phiếu chi, mặc định tiền mặt
   if (pt.SoDH) {
     const dh = findObj_('DonHang', pt.SoDH);
     if (!dh) throw new Error('Không tìm thấy đơn hàng ' + pt.SoDH + '.');

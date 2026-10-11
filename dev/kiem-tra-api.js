@@ -582,6 +582,17 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   assert.ok(sheets.PS_NhatKy.rows.some(r => r[2] === 'Kiểm kho theo IMEI'));
 }
 
+// Phiếu thu không ghi hình thức: tính là tiền mặt (sổ quỹ không đẩy sang ngân hàng); máy cũ bán hết không thành hàng sắp hết
+{
+  const t = G.dangNhap('admin', adminPass).token, kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Không Hình Thức', SDT: '0966000666' });
+  assert.strictEqual(G.luuThuTien(t, { Ngay: today, MaKH: kh.MaKH, SoTien: 5000 }).HinhThuc, 'Tiền mặt');
+  const cu = G.luuHang(t, { TenHang: 'iPhone 7 32GB (máy cũ) thử', NhomHang: 'Máy cũ', GiaLe: 1000000 }), moi = G.luuHang(t, { TenHang: 'Cáp thử hết hàng', GiaLe: 50000 });
+  G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'NCC', lines: [{ MaHH: cu.MaHH, TenHang: cu.TenHang, SoLuong: 1 }, { MaHH: moi.MaHH, TenHang: moi.TenHang, SoLuong: 1 }] });
+  G.luuChungTu(t, 'XK', { Ngay: today, DoiTac: 'Khách', lines: [{ MaHH: cu.MaHH, TenHang: cu.TenHang, SoLuong: 1 }, { MaHH: moi.MaHH, TenHang: moi.TenHang, SoLuong: 1 }] });
+  const sap = G.tongHopSang_(today).hang.map(h => h.MaHH);
+  assert.ok(sap.includes(moi.MaHH) && !sap.includes(cu.MaHH), JSON.stringify(sap));
+}
+
 // Lệnh ghi kèm mã lần gửi: gửi lại cùng mã (app báo lỗi mạng mà máy chủ đã ghi) nhận kết quả cũ, không ghi thêm phiếu
 {
   const kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Gửi Lại', SDT: '0966000555' }), so0 = sheets.PS_ThuTien.rows.length;
