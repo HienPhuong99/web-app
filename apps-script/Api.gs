@@ -18,6 +18,9 @@ function apiHam_() {
   };
 }
 
+// Hàm chỉ đọc: kết quả được ghi nhớ (ketQuaNho_ trong Code.gs) tới khi có dữ liệu mới. App gửi moi: true (kéo xuống làm mới) để lấy số mới nhất.
+const DOC_NHO = ['tongQuanMay', 'chiTietTongQuan', 'khoMay', 'dsKhachMay', 'chiTietKhach', 'dsHopDongMay', 'theKho', 'cauHinhMay', 'traMaKho', 'traBaoHanh'];
+
 let MAY_HIEN_TAI_ = ''; // mã băm của điện thoại đang gọi API: để đánh dấu "máy này" và gửi thông báo thử
 
 function doPost(e) {
@@ -46,7 +49,15 @@ function goiApi_(q) {
   const token = phienMay_(q.may);
   MAY_HIEN_TAI_ = bamMay_(q.may);
   let r;
-  try { r = fn === 'datThongBao' ? datThongBao_(token, args[0]) : ham[fn].apply(null, [token].concat(args)); }
+  try {
+    r = docMotLan_(() => {
+      if (fn === 'datThongBao') return datThongBao_(token, args[0]);
+      const chay = () => ham[fn].apply(null, [token].concat(args));
+      if (DOC_NHO.indexOf(fn) < 0) return chay();
+      const user = user_(token); // kiểm tra phiên trước khi trả kết quả ghi nhớ
+      return ketQuaNho_([fn, args, user.u, user.vaiTro, homNay_()], q.moi === true, chay);
+    });
+  }
   catch (e) { // phiên bị thu hồi (khóa tài khoản, đặt lại mật khẩu…): xóa luôn máy này khỏi danh sách
     if (e && e.message === 'HET_PHIEN') withLock_(() => xoaMay_(bamMay_(q.may)));
     throw e;
@@ -503,5 +514,6 @@ function boPushToken_(pushToken) {
     if (c < 0) return;
     const v = sh.getDataRange().getValues();
     for (let r = 1; r < v.length; r++) if (v[r][c] === pushToken) sh.getRange(r + 1, c + 1).setValues([['']]);
+    daGhi_(sh);
   });
 }

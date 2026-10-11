@@ -1,67 +1,55 @@
 // Khách hàng: tìm theo tên (không cần dấu) / số điện thoại, lọc còn nợ / đã mua / chưa mua, sắp xếp; bấm vào khách để xem hồ sơ; thêm khách mới.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/auth';
 import type { DsKhach } from '../../lib/api';
 import { ngay, tien } from '../../lib/dinhDang';
+import { useDuLieu } from '../../lib/useDuLieu';
 import { LOC_KHACH, SX_KHACH, moTaSx, nhanCua, sxMacDinh, type LocKhach, type SxKhach } from '../../lib/locDs';
 import { BoLoc, BoSapXep } from '../../ui/BoLoc';
-import { ChuLoi, ChuNhat, Dong, KhungTrang, OTim, Vach } from '../../ui/DanhSach';
+import { ChuLoi, ChuNhat, Dong, KhungDanhSach, OTim } from '../../ui/DanhSach';
 import { Nut } from '../../ui/Nut';
 import { The } from '../../ui/The';
+import { DongCapNhat, KhungCho, useKeo } from '../../ui/TrangThaiTai';
 import { mau } from '../../ui/theme';
 
 export default function KhachMan() {
-  const { goi } = useAuth();
-  const [q, setQ] = useState(''), [kq, setKq] = useState<DsKhach | null>(null), [loi, setLoi] = useState(''), [dangTai, setDangTai] = useState(false);
-  const [moi, setMoi] = useState(false), [loc, setLoc] = useState<LocKhach>('tat'), [sx, setSx] = useState<SxKhach>(sxMacDinh(SX_KHACH));
-  const lan = useRef(0); // chỉ nhận kết quả của lần tìm mới nhất
-
-  const tai = useCallback(async (tu: string) => {
-    const so = ++lan.current;
-    setDangTai(true);
-    try { const r = await goi<DsKhach>('dsKhachMay', tu, { loc, sx: sx.theo, chieu: sx.chieu }); if (so === lan.current) { setKq(r); setLoi(''); } }
-    catch (e) { if (so === lan.current) setLoi((e as Error).message); }
-    finally { if (so === lan.current) setDangTai(false); }
-  }, [goi, loc, sx]);
-
-  useEffect(() => { const t = setTimeout(() => tai(q.trim()), q ? 350 : 0); return () => clearTimeout(t); }, [q, tai]);
-  // Quay lại tab thì lấy công nợ mới (chỉ khi tab được mở lại; đổi lọc / sắp xếp đã có effect trên tải)
-  const taiLai = useRef(() => {});
-  useEffect(() => { taiLai.current = () => { if (kq) tai(q.trim()); }; });
-  useFocusEffect(useCallback(() => { taiLai.current(); }, []));
+  const [q, setQ] = useState(''), [tu, setTu] = useState(''), [moi, setMoi] = useState(false);
+  const [loc, setLoc] = useState<LocKhach>('tat'), [sx, setSx] = useState<SxKhach>(sxMacDinh(SX_KHACH));
+  useEffect(() => { const t = setTimeout(() => setTu(q.trim()), q ? 350 : 0); return () => clearTimeout(t); }, [q]); // gõ xong mới tìm
+  // Danh sách không tìm theo chữ thì lưu trên máy (mở lại hiện ngay); kết quả tìm chỉ nhớ trong lần chạy này. Đang tìm thì vẫn hiện kết quả cũ.
+  const dl = useDuLieu<DsKhach>('dsKhachMay', [tu, { loc, sx: sx.theo, chieu: sx.chieu }], { luuMay: !tu, giuCu: true }), kq = dl.du, keo = useKeo(dl.lamMoi);
 
   return (
-    <KhungTrang refreshControl={<RefreshControl refreshing={dangTai && !!kq} onRefresh={() => tai(q.trim())} tintColor={mau.cam} />}>
-      <View style={s.dau}>
-        <Text style={s.tieuDe}>Khách hàng</Text>
-        <Pressable onPress={() => setMoi(!moi)} style={s.nutThem} accessibilityRole="button" accessibilityLabel="Thêm khách mới" testID="nut-them-khach">
-          <Ionicons name={moi ? 'close' : 'person-add'} size={20} color="#fff" />
-        </Pressable>
-      </View>
-      {moi ? <KhachMoi onXong={ma => { setMoi(false); router.push({ pathname: '/khach/[ma]', params: { ma } }); }} /> : null}
-      <OTim value={q} onChangeText={setQ} placeholder="Tên, số điện thoại hoặc mã khách" testID="o-tim-khach" />
-      <BoLoc ds={LOC_KHACH} chon={loc} onChon={setLoc} testID="loc-khach" />
-      <BoSapXep ds={SX_KHACH} chon={sx} onChon={setSx} testID="sx-khach" />
-      <ChuLoi chu={loi} testID="loi-khach" />
-      {kq ? (
-        <The style={{ marginTop: 14, paddingVertical: 6 }} testID="ds-khach">
-          {!kq.ds.length ? <ChuNhat chu={q ? `Không có khách nào khớp "${q.trim()}"${loc !== 'tat' ? ' trong mục ' + nhanCua(LOC_KHACH, loc).toLowerCase() : ''}.`
-            : loc !== 'tat' ? `Không có khách nào ${nhanCua(LOC_KHACH, loc).toLowerCase()}.` : 'Chưa có khách hàng.'} style={{ marginVertical: 12 }} /> : null}
-          {kq.ds.map((k, i) => (
-            <View key={k.MaKH}>
-              {i ? <Vach /> : null}
-              <Dong chinh={k.TenKH} phu={[k.SDT, k.muaCuoi && 'mua ' + ngay(k.muaCuoi)].filter(Boolean).join(' · ') || k.MaKH}
-                ben={k.no > 0 ? tien(k.no) : undefined} benMau={mau.vang} benPhu={k.no > 0 ? 'còn nợ' : undefined}
-                onPress={() => router.push({ pathname: '/khach/[ma]', params: { ma: k.MaKH } })} testID={'khach-' + k.MaKH} />
-            </View>
-          ))}
-        </The>
-      ) : !loi ? <ChuNhat chu="Đang tải…" /> : null}
-      {kq && kq.tong > kq.ds.length ? <ChuNhat chu={`Hiện ${kq.ds.length} / ${kq.tong} khách (${moTaSx(SX_KHACH, sx)}). Gõ tên hoặc số điện thoại để tìm.`} /> : null}
-    </KhungTrang>
+    <KhungDanhSach refreshControl={<RefreshControl {...keo} />} testID="ds-khach"
+      dau={
+        <View style={{ marginBottom: 14 }}>
+          <View style={s.dau}>
+            <Text style={s.tieuDe}>Khách hàng</Text>
+            <Pressable onPress={() => setMoi(!moi)} style={s.nutThem} accessibilityRole="button" accessibilityLabel="Thêm khách mới" testID="nut-them-khach">
+              <Ionicons name={moi ? 'close' : 'person-add'} size={20} color="#fff" />
+            </Pressable>
+          </View>
+          <DongCapNhat dl={dl} />
+          {moi ? <KhachMoi onXong={ma => { setMoi(false); router.push({ pathname: '/khach/[ma]', params: { ma } }); }} /> : null}
+          <OTim value={q} onChangeText={setQ} placeholder="Tên, số điện thoại hoặc mã khách" testID="o-tim-khach" />
+          <BoLoc ds={LOC_KHACH} chon={loc} onChon={setLoc} testID="loc-khach" />
+          <BoSapXep ds={SX_KHACH} chon={sx} onChon={setSx} testID="sx-khach" />
+          {!kq ? <ChuLoi chu={dl.loi} testID="loi-khach" /> : null}
+        </View>
+      }
+      ds={kq ? kq.ds : null} khoa={k => k.MaKH} choTai={dl.loi ? null : <KhungCho dong={6} />}
+      rong={tu ? `Không có khách nào khớp "${tu}"${loc !== 'tat' ? ' trong mục ' + nhanCua(LOC_KHACH, loc).toLowerCase() : ''}.`
+        : loc !== 'tat' ? `Không có khách nào ${nhanCua(LOC_KHACH, loc).toLowerCase()}.` : 'Chưa có khách hàng.'}
+      ve={k => (
+        <Dong chinh={k.TenKH} phu={[k.SDT, k.muaCuoi && 'mua ' + ngay(k.muaCuoi)].filter(Boolean).join(' · ') || k.MaKH}
+          ben={k.no > 0 ? tien(k.no) : undefined} benMau={mau.vang} benPhu={k.no > 0 ? 'còn nợ' : undefined}
+          onPress={() => router.push({ pathname: '/khach/[ma]', params: { ma: k.MaKH } })} testID={'khach-' + k.MaKH} />
+      )}
+      cuoi={kq && kq.tong > kq.ds.length ? <ChuNhat chu={`Hiện ${kq.ds.length} / ${kq.tong} khách (${moTaSx(SX_KHACH, sx)}). Gõ tên hoặc số điện thoại để tìm.`} /> : null}
+    />
   );
 }
 

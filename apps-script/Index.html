@@ -121,6 +121,20 @@ textarea { resize: vertical; }
 .toolbar .count { margin-left: auto; color: var(--muted); font-size: 13px; }
 .toolbar .sort { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
 .toolbar .sort svg { width: 16px; height: 16px; flex: none; }
+.toolbar .sort select { color: var(--ink); }
+/* Điện thoại: bộ lọc và sắp xếp gom vào nút "Bộ lọc (n)" để danh sách lên gần đầu màn hình */
+.toolbar .locs { display: contents; }
+.toolbar .nut-loc { display: none; }
+@media (max-width: 600px) {
+  .toolbar { padding: 12px; gap: 8px; }
+  .toolbar .search { flex: 1 1 0; max-width: none; }
+  .toolbar .nut-loc { display: inline-flex; }
+  .toolbar .nut-loc.on { border-color: var(--brand); background: var(--brand-50); color: var(--brand-d); }
+  .toolbar .locs { display: none; flex-basis: 100%; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .toolbar.mo .locs { display: flex; }
+  .toolbar .locs select { flex: 1 1 140px; }
+  .toolbar .count { flex-basis: 100%; margin-left: 0; text-align: right; }
+}
 .toolbar select.on, .toolbar input.on { border-color: var(--brand); background: var(--brand-50); color: var(--brand-d); font-weight: 600; }
 .toolbar .chieu { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid #dfe3ea; border-radius: 10px; background: #fff; color: var(--ink); cursor: pointer; flex: none; }
 .toolbar .chieu:hover { border-color: var(--brand); color: var(--brand); }
@@ -742,11 +756,12 @@ function listCard(el, cfg) {
   const sxHtml = sorts.length ? `<span class="sort">${icon('sort')}${sel('sx', sorts.map(s => [s[0], s[1]]), 'Sắp xếp theo')}<button type="button" class="chieu" data-f="chieu"></button></span>` : '';
   const card = document.createElement('div');
   card.className = 'card';
-  card.innerHTML = `<div class="toolbar"><label class="search">${icon('search')}<input type="search" placeholder="${esc(cfg.ph)} (F3)" value="${esc(st.text)}"></label>${fHtml}${sxHtml}<button type="button" class="btn sm bo-loc hidden" title="Bỏ chữ tìm và mọi bộ lọc, về cách sắp xếp mặc định">${icon('x')}Bỏ lọc</button><span class="count"></span></div>
+  const coLoc = !!(filters.length || sorts.length);
+  card.innerHTML = `<div class="toolbar"><label class="search">${icon('search')}<input type="search" placeholder="${esc(cfg.ph)} (F3)" value="${esc(st.text)}"></label>${coLoc ? `<button type="button" class="btn sm nut-loc" aria-expanded="false">${icon('sort')}<span>Bộ lọc</span></button><div class="locs">${fHtml}${sxHtml}</div>` : ''}<button type="button" class="btn sm bo-loc hidden" title="Bỏ chữ tìm và mọi bộ lọc, về cách sắp xếp mặc định">${icon('x')}Bỏ lọc</button><span class="count"></span></div>
     <div class="tbl-wrap"><table class="tbl click"><thead><tr>${cfg.cols.map(c => `<th class="${c.cls || ''}">${c.t}</th>`).join('')}</tr></thead><tbody></tbody></table></div>
     ${cfg.foot ? '<div class="foot"></div>' : ''}`;
   el.append(card);
-  const q = $('.search input', card), body = $('tbody', card), count = $('.count', card), boLoc = $('.bo-loc', card), nutChieu = $('.chieu', card);
+  const q = $('.search input', card), body = $('tbody', card), count = $('.count', card), boLoc = $('.bo-loc', card), nutChieu = $('.chieu', card), nutLoc = $('.nut-loc', card);
   const veChieu = () => {
     if (!nutChieu) return;
     const giam = st.f.chieu === 'giam', t = `Đang xếp ${giam ? 'giảm dần (lớn, mới, Z trước)' : 'tăng dần (nhỏ, cũ, A trước)'}. Bấm để đảo chiều`;
@@ -768,6 +783,12 @@ function listCard(el, cfg) {
     const khac = k => k === 'chieu' ? !!sx && st.f.chieu !== sx[3] : String(st.f[k] ?? '') !== String(md[k] ?? ''); // chiều: so với mặc định của tiêu chí đang chọn
     card.querySelectorAll('[data-f]').forEach(i => i.classList.toggle('on', khac(i.dataset.f)));
     boLoc.classList.toggle('hidden', !st.text && !Object.keys(Object.assign({}, md, st.f)).some(khac));
+    if (nutLoc) { // nút Bộ lọc trên điện thoại: số bộ lọc / cách sắp xếp đang khác mặc định
+      const n = filters.filter(f => f.type === 'dates' ? khac(f.id + 'From') || khac(f.id + 'To') : khac(f.id)).length
+        + (sorts.length && (khac('sx') || khac('chieu')) ? 1 : 0); // khoảng ngày (từ + đến), sắp xếp (tiêu chí + chiều) tính là một
+      $('span', nutLoc).textContent = n ? `Bộ lọc (${n})` : 'Bộ lọc';
+      nutLoc.classList.toggle('on', n > 0);
+    }
   };
   let t;
   q.oninput = () => { st.text = q.value; clearTimeout(t); t = setTimeout(refresh, 120); };
@@ -777,6 +798,7 @@ function listCard(el, cfg) {
     refresh();
   }; });
   if (nutChieu) nutChieu.onclick = () => { st.f.chieu = st.f.chieu === 'giam' ? 'tang' : 'giam'; refresh(); };
+  if (nutLoc) nutLoc.onclick = () => { const mo = $('.toolbar', card).classList.toggle('mo'); nutLoc.setAttribute('aria-expanded', String(mo)); };
   boLoc.onclick = () => {
     st.text = ''; st.f = macDinh(); q.value = '';
     card.querySelectorAll('[data-f]').forEach(i => { if (i !== nutChieu) i.value = st.f[i.dataset.f] ?? ''; });

@@ -116,7 +116,7 @@ function taoBang_(dayDu) {
       const missing = cols.filter(c => have.indexOf(c) < 0);
       const thieuCot = have.length + missing.length - sh.getMaxColumns(); // trang tính đã dùng hết số cột của lưới
       if (thieuCot > 0) sh.insertColumnsAfter(sh.getMaxColumns(), thieuCot);
-      if (missing.length) sh.getRange(1, have.length + 1, 1, missing.length).setValues([missing]);
+      if (missing.length) { sh.getRange(1, have.length + 1, 1, missing.length).setValues([missing]); daGhi_(sh); }
       // Cột chữ để dạng văn bản: giữ số 0 đầu SĐT, mã số thuế, IMEI
       const all = have.concat(missing);
       (dayDu ? all : missing).forEach(c => { if (c && !NUMBER_COLS.includes(c)) sh.getRange(1, all.indexOf(c) + 1, sh.getMaxRows(), 1).setNumberFormat('@'); });
@@ -908,14 +908,61 @@ let TZ_SHEET_ = '';
 function tzSheet_() { return TZ_SHEET_ || (TZ_SHEET_ = SpreadsheetApp.getActive().getSpreadsheetTimeZone() || tz_()); }
 function cell_(v) { return v instanceof Date ? Utilities.formatDate(v, tzSheet_(), 'yyyy-MM-dd') : v; }
 
+// Trong một lần gọi từ app/web (docMotLan_), mỗi trang tính chỉ đọc từ Sheet một lần; ghi vào trang nào thì bỏ bản đã đọc của trang đó.
+// Mỗi lần đọc trả bản sao để hàm gọi sửa / sắp xếp thoải mái.
+let BANG_DA_DOC_ = null; // null = không nhớ (chạy trong trình soạn thảo, bộ hẹn giờ…)
+function docMotLan_(fn) {
+  if (BANG_DA_DOC_) return fn();
+  BANG_DA_DOC_ = {};
+  PHIEN_BAN_ = ''; // đọc lại phiên bản dữ liệu mỗi lần gọi
+  try { return fn(); } finally { BANG_DA_DOC_ = null; }
+}
 function readTable_(name) {
-  const values = sheet_(name).getDataRange().getValues();
-  const head = values.shift().map(String);
-  return values.filter(r => r[0] !== '').map(r => {
-    const o = {};
-    head.forEach((h, i) => { if (h) o[h] = cell_(r[i]); });
-    return o;
-  });
+  const ten = tableName_(name);
+  let ds = BANG_DA_DOC_ && BANG_DA_DOC_[ten];
+  if (!ds) {
+    const values = sheet_(name).getDataRange().getValues();
+    const head = values.shift().map(String);
+    ds = values.filter(r => r[0] !== '').map(r => {
+      const o = {};
+      head.forEach((h, i) => { if (h) o[h] = cell_(r[i]); });
+      return o;
+    });
+    if (BANG_DA_DOC_) BANG_DA_DOC_[ten] = ds;
+  }
+  return BANG_DA_DOC_ ? ds.map(o => Object.assign({}, o)) : ds;
+}
+
+// Gọi sau mỗi lần ghi / xóa dòng: bỏ bản đã đọc của trang đó và đổi phiên bản dữ liệu để kết quả ghi nhớ (ketQuaNho_) không dùng nữa.
+// Nhật ký và danh sách điện thoại không ảnh hưởng số liệu nên không đổi phiên bản.
+const KHONG_DOI_SO_LIEU = ['NhatKy', 'ThietBi'];
+function daGhi_(sh) {
+  const ten = sh.getName();
+  if (BANG_DA_DOC_) delete BANG_DA_DOC_[ten];
+  if (KHONG_DOI_SO_LIEU.some(n => ten === tableName_(n))) return;
+  PHIEN_BAN_ = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  try { CacheService.getScriptCache().put('dv', PHIEN_BAN_, SESSION_TTL); } catch (e) {}
+}
+
+// ===== Ghi nhớ kết quả các hàm chỉ đọc (Tổng quan, kho, khách…) trong CacheService =====
+// Khóa gồm phiên bản dữ liệu 'dv' (đổi mỗi lần ghi) nên ghi xong là kết quả cũ tự bỏ. Sửa thẳng trên Google Sheet (không qua app)
+// thì tối đa KQ_GIAY giây sau mới thấy, hoặc kéo xuống để làm mới trên app (moi = true: bỏ qua bản ghi nhớ).
+const KQ_GIAY = 300;
+let PHIEN_BAN_ = '';
+function ketQuaNho_(phan, moi, tinh) {
+  let cache = null, khoa = '';
+  try {
+    cache = CacheService.getScriptCache();
+    if (!PHIEN_BAN_) PHIEN_BAN_ = cache.get('dv') || '0';
+    const bam = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, JSON.stringify(phan), Utilities.Charset.UTF_8)
+      .map(b => ((b + 256) % 256).toString(16).padStart(2, '0')).join('');
+    khoa = 'kq_' + CUR_SHOP + '_' + PHIEN_BAN_ + '_' + bam.slice(0, 40);
+    const c = moi ? null : cache.get(khoa);
+    if (c) return JSON.parse(c);
+  } catch (e) { cache = null; }
+  const kq = tinh();
+  if (cache) { try { const s = JSON.stringify(kq); if (s.length < 90000) cache.put(khoa, s, KQ_GIAY); } catch (e) {} }
+  return kq;
 }
 
 function toRow_(sh, o) {
@@ -950,6 +997,7 @@ function ghiDong_(sh, rows, r) {
   const chu = headers_(sh).map((c, i) => (c && !NUMBER_COLS.includes(c) ? cot_(i + 1) : '')).filter(Boolean);
   if (chu.length) sh.getRangeList(chu.map(c => c + r + ':' + c + cuoi)).setNumberFormat('@');
   sh.getRange(r, 1, rows.length, rows[0].length).setValues(rows);
+  daGhi_(sh);
 }
 const cot_ = n => { let s = ''; for (; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; }; // 1 → A, 27 → AA
 
@@ -996,6 +1044,7 @@ function deleteWhere_(name, key) {
     let j = i;
     while (j - 1 >= 1 && ids[j - 1] === String(key)) j--;
     sh.deleteRows(j + 1, i - j + 1);
+    daGhi_(sh);
     i = j;
   }
 }

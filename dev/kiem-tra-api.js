@@ -287,12 +287,16 @@ assert.strictEqual(goi(binh, 'dsKhachMay', 'chi', { loc: 'no' }).tong, 1); // t�
 
 // Hợp đồng: tìm theo số / tên / SĐT; biết hợp đồng nào đã có file để tải PDF
 const shHD = G.sheet_('HopDong');
+// Thêm dòng thẳng trên Sheet (không qua app) rồi kéo xuống làm mới: app gửi moi = true, bỏ qua kết quả máy chủ đã ghi nhớ
+const goiMoi = (may, fn, ...args) => { const r = api({ may, fn, args, moi: true }); if (!r.ok) throw new Error(r.error); return r.result; };
 shHD.appendRow(G.toRow_(shHD, { SoHD: '001-2026/HĐMB', Ngay: today, LoaiHD: 'Mua bán', MaKH: bn.MaKH, TenDN: 'Chị Mai', SDT: '0977123456', TongCong: 11300000 }));
 shHD.appendRow(G.toRow_(shHD, { SoHD: '002-2026/HĐMB', Ngay: today, LoaiHD: 'Mua bán', MaKH: 'KH00001', TenDN: 'Anh Minh', FileId: 'file-x', FileCu: '1' }));
-assert.deepStrictEqual(goi(binh, 'dsHopDongMay', '').ds.map(h => [h.SoHD, h.coFile, h.fileCu]), [['002-2026/HĐMB', true, true], ['001-2026/HĐMB', false, false]]);
+assert.deepStrictEqual(goiMoi(binh, 'dsHopDongMay', '').ds.map(h => [h.SoHD, h.coFile, h.fileCu]), [['002-2026/HĐMB', true, true], ['001-2026/HĐMB', false, false]]);
 assert.deepStrictEqual(goi(binh, 'dsHopDongMay', 'chi mai').ds.map(h => h.SoHD), ['001-2026/HĐMB']);
 assert.deepStrictEqual(goi(binh, 'dsHopDongMay', '0977 123').ds.map(h => h.SoHD), ['001-2026/HĐMB']);
-assert.strictEqual(goi(binh, 'chiTietKhach', bn.MaKH).hopDong[0].SoHD, '001-2026/HĐMB');
+assert.strictEqual(goi(binh, 'chiTietKhach', bn.MaKH).hopDong.length, 0); // máy chủ còn nhớ hồ sơ vừa xem: chưa thấy dòng sửa tay
+assert.strictEqual(goiMoi(binh, 'chiTietKhach', bn.MaKH).hopDong[0].SoHD, '001-2026/HĐMB');
+assert.strictEqual(goi(binh, 'chiTietKhach', bn.MaKH).hopDong[0].SoHD, '001-2026/HĐMB'); // lần sau dùng kết quả mới
 // Lọc, sắp xếp hợp đồng
 const ngayCach = n => new Date(Date.parse(today) + n * 864e5).toISOString().slice(0, 10);
 shHD.appendRow(G.toRow_(shHD, { SoHD: '003-2026/HĐMB', Ngay: ngayCach(-400), LoaiHD: 'Mua bán', TenDN: 'Công ty Hết Hạn', TrangThai: 'Đang hiệu lực', NgayHetHan: ngayCach(-3), TongCong: 50000000 }));
@@ -379,6 +383,41 @@ assert.strictEqual(goi(binh4, 'dsThietBi')[0].thongBao, false);
 G.datHenGioEmailSang_();
 assert.strictEqual(thuMail.henGio.length, 0);
 assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có chức năng/);
+
+// Máy chủ ghi nhớ kết quả chỉ đọc: gọi lại không đọc Sheet nữa; ghi qua app (thu tiền, bán…) là thấy số mới ngay
+{
+  const shDH = sheets.PS_DonHang, goc = shDH.getDataRange.bind(shDH);
+  let lanDoc = 0;
+  shDH.getDataRange = () => { lanDoc++; return goc(); };
+  const tq1 = goi(binh4, 'tongQuanMay');
+  const docLan1 = lanDoc;
+  assert.ok(docLan1 >= 1);
+  assert.deepStrictEqual(goi(binh4, 'tongQuanMay'), tq1);
+  assert.strictEqual(lanDoc, docLan1); // lần 2: không đọc trang Đơn hàng
+  goi(binh4, 'chiTietTongQuan', 'ngay', today); // mỗi trang chỉ đọc một lần trong một lần gọi dù hàm cần nhiều lần (ThuTien)
+  const kh = goi(binh4, 'dsKhachMay', '', {}).ds.find(k => k.no > 0);
+  goi(binh4, 'luuThuTien', { Ngay: today, MaKH: kh.MaKH, TenKH: kh.TenKH, SoTien: 1000, HinhThuc: 'Tiền mặt' });
+  const tq2 = goi(binh4, 'tongQuanMay');
+  assert.strictEqual(tq2.thu, tq1.thu + 1000);
+  assert.strictEqual(tq2.no.tong, tq1.no.tong - 1000);
+  assert.ok(lanDoc > docLan1);
+  const lan3 = lanDoc;
+  goi(binh4, 'tongQuanMay');
+  assert.strictEqual(lanDoc, lan3);
+  goiMoi(binh4, 'tongQuanMay'); // kéo xuống làm mới: đọc lại
+  assert.strictEqual(lanDoc, lan3 + 1);
+  shDH.getDataRange = goc;
+  // Đăng xuất / hết phiên thì không trả kết quả đã ghi nhớ
+  assert.strictEqual(api({ may: 'x'.repeat(64), fn: 'tongQuanMay' }).error, 'HET_PHIEN');
+}
+{ // chiTietTongQuan cần ThuTien hai lần: chỉ đọc một lần
+  const shTT = sheets.PS_ThuTien, goc = shTT.getDataRange.bind(shTT);
+  let lanDoc = 0;
+  shTT.getDataRange = () => { lanDoc++; return goc(); };
+  goiMoi(binh4, 'chiTietTongQuan', 'ngay', today);
+  assert.strictEqual(lanDoc, 1);
+  shTT.getDataRange = goc;
+}
 
 // Sai mật khẩu 5 lần: chặn 10 phút như web
 for (let i = 0; i < 5; i++) api({ fn: 'dangNhapMay', args: ['admin', 'sai'] });

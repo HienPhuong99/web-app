@@ -1,15 +1,16 @@
 // Chi tiết số liệu trên Tổng quan: bán hàng một ngày (đơn hàng, phiếu thu; lật sang ngày trước / sau) hoặc mọi khách còn nợ.
 // Bấm một dòng để mở hồ sơ khách.
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { Linking, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../lib/auth';
 import type { ChiTietNgay, KhachNo } from '../lib/api';
 import { ngay as dmy, thu, tien, tienGon } from '../lib/dinhDang';
+import { useDuLieu } from '../lib/useDuLieu';
 import { ChuLoi, ChuNhat, Dong, KhungTrang, Nhan, TieuDeMuc, Vach } from '../ui/DanhSach';
 import { DauTrang } from '../ui/DauTrang';
 import { The } from '../ui/The';
+import { DongCapNhat, KhungCho, useKeo } from '../ui/TrangThaiTai';
 import { mau } from '../ui/theme';
 
 const MAU_DON: Record<string, 'xanh' | 'vang' | 'xam'> = { 'Đã giao': 'xanh', 'Giao một phần': 'vang', 'Chờ giao': 'vang', 'Hủy': 'xam' };
@@ -21,20 +22,16 @@ export default function SoLieuMan() {
 }
 
 function BanTrongNgay({ ngayDau }: { ngayDau: string }) {
-  const { goi } = useAuth();
-  const [ngay, setNgay] = useState(ngayDau), [du, setDu] = useState<ChiTietNgay | null>(null), [loi, setLoi] = useState(''), [dangTai, setDangTai] = useState(false);
-  const tai = useCallback(async () => {
-    setDangTai(true);
-    try { setDu(await goi<ChiTietNgay>('chiTietTongQuan', 'ngay', ngay)); setLoi(''); } catch (e) { setLoi((e as Error).message); } finally { setDangTai(false); }
-  }, [goi, ngay]);
-  useFocusEffect(useCallback(() => { tai(); }, [tai])); // đổi ngày: tải lại
+  const [ngay, setNgay] = useState(ngayDau);
+  const dl = useDuLieu<ChiTietNgay>('chiTietTongQuan', ['ngay', ngay]), du = dl.du, loi = du ? '' : dl.loi, keo = useKeo(dl.lamMoi); // đổi ngày: ngày đã xem thì hiện ngay
 
   const dangXem = du && (!ngay || du.ngay === ngay) ? du : null; // vừa lật ngày: chưa hiện số của ngày cũ
   const ngayHien = ngay || du?.ngay || '';
   const tieuDe = !dangXem ? 'Bán hàng' : dangXem.ngay === dangXem.homNay ? 'Bán hàng hôm nay' : `Bán hàng ${thu(dangXem.ngay)} ${dmy(dangXem.ngay)}`;
   return (
-    <KhungTrang coTab={false} refreshControl={<RefreshControl refreshing={dangTai && !!dangXem} onRefresh={tai} tintColor={mau.cam} />}>
+    <KhungTrang coTab={false} refreshControl={<RefreshControl {...keo} />}>
       <DauTrang tieuDe={tieuDe} phu="Đơn hàng và tiền thu trong ngày. Bấm một dòng để mở hồ sơ khách." />
+      <DongCapNhat dl={dl} />
       <View style={s.lat}>
         <NutLat bieuTuong="chevron-back" chu="Ngày trước" an={!du} onPress={() => du && setNgay(du.truoc)} testID="ngay-truoc" />
         <Text style={s.latChu} testID="ngay-dang-xem">{ngayHien ? `${thu(ngayHien)} · ${dmy(ngayHien)}` : '…'}</Text>
@@ -88,18 +85,13 @@ function BanTrongNgay({ ngayDau }: { ngayDau: string }) {
 }
 
 function KhachConNo() {
-  const { goi } = useAuth();
-  const [du, setDu] = useState<KhachNo | null>(null), [loi, setLoi] = useState(''), [dangTai, setDangTai] = useState(false);
-  const tai = useCallback(async () => {
-    setDangTai(true);
-    try { setDu(await goi<KhachNo>('chiTietTongQuan', 'no')); setLoi(''); } catch (e) { setLoi((e as Error).message); } finally { setDangTai(false); }
-  }, [goi]);
-  useFocusEffect(useCallback(() => { tai(); }, [tai])); // thu tiền xong quay lại: số mới
+  const dl = useDuLieu<KhachNo>('chiTietTongQuan', ['no']), du = dl.du, loi = du ? '' : dl.loi, keo = useKeo(dl.lamMoi); // thu tiền xong quay lại: số đã sửa sẵn
   return (
-    <KhungTrang coTab={false} refreshControl={<RefreshControl refreshing={dangTai && !!du} onRefresh={tai} tintColor={mau.cam} />}>
+    <KhungTrang coTab={false} refreshControl={<RefreshControl {...keo} />}>
       <DauTrang tieuDe="Khách còn nợ" phu={du ? `${du.ds.length} khách · tổng ${tien(du.tong)}` : 'Nợ nhiều nhất trước. Bấm để mở hồ sơ và thu tiền.'} />
+      <DongCapNhat dl={dl} />
       <ChuLoi chu={loi} testID="loi-so-lieu" />
-      {!du && !loi ? <ChuNhat chu="Đang tải…" /> : null}
+      {!du && !loi ? <KhungCho dong={5} /> : null}
       {du ? (
         <The style={{ paddingVertical: 6 }} testID="ds-khach-no">
           {!du.ds.length ? <ChuNhat chu="Không có khách nào còn nợ." style={{ marginVertical: 10 }} /> : null}

@@ -7,11 +7,13 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/auth';
-import type { BanNhanhKQ, CauHinh, DsKhach, HangKho, KhachTom, MaKho } from '../../lib/api';
-import { ngay, tien } from '../../lib/dinhDang';
+import type { BanNhanhKQ, CauHinh, DsKhach, HangKho, HoSoKhach, KhachTom, MaKho, TongQuan } from '../../lib/api';
+import { homNay, ngay, tien } from '../../lib/dinhDang';
 import { docTien, doiSoLuong, dongGui, soTienNhap, suaGia, themHang, themMay, tongGio, xoaDong, type DongGio } from '../../lib/gioHang';
 import { boDau } from '../../lib/lienHe';
 import { chuanHoaMa, goiYMa } from '../../lib/maQuet';
+import { dsKhachDoiNo, hoSoSauBan, khoSauBan, tongQuanSauBan } from '../../lib/sauGhi';
+import { useDuLieu, useSuaBoNho } from '../../lib/useDuLieu';
 import { ChuLoi, ChuNhat, Dong, DongTT, KhungTrang, Nhan, OTim, TieuDeMuc, Vach } from '../../ui/DanhSach';
 import { hoi } from '../../ui/hoi';
 import { Chip } from '../../ui/Chip';
@@ -28,7 +30,10 @@ export default function BanMan() {
   const p = useLocalSearchParams<{ ma?: string; ten?: string }>();
   const [gio, setGio] = useState<DongGio[]>([]);
   const [khach, setKhach] = useState<Khach | null>(null);
-  const [ch, setCh] = useState<CauHinh | null>(null), [hang, setHang] = useState<HangKho[] | null>(null);
+  // Cài đặt (hình thức thu, VAT, tài khoản nhận tiền) và danh sách hàng: hiện ngay bản đã nhớ, lấy bản mới mỗi lần mở tab
+  const dlCh = useDuLieu<CauHinh>('cauHinhMay', []), ch = dlCh.du;
+  const dlKho = useDuLieu<HangKho[]>('khoMay', []), hang = dlKho.du;
+  const boNho = useSuaBoNho();
   const [vat, setVat] = useState(0), [soThu, setSoThu] = useState<number | null>(null), [hinhThuc, setHinhThuc] = useState('Tiền mặt'), [ghiChu, setGhiChu] = useState('');
   const [camera, setCamera] = useState(false), [focus, setFocus] = useState(false);
   const [maGo, setMaGo] = useState(''), [loiMa, setLoiMa] = useState(''), [dangTraMa, setDangTraMa] = useState(false);
@@ -39,11 +44,11 @@ export default function BanMan() {
 
   useFocusEffect(useCallback(() => { setFocus(true); return () => setFocus(false); }, []));
 
-  // Cài đặt (hình thức thu, VAT, tài khoản nhận tiền) và danh sách hàng: lấy một lần khi mở tab
+  const daDat = useRef(false); // VAT, hình thức thu mặc định: đặt một lần khi có cài đặt
   useEffect(() => {
-    goi<CauHinh>('cauHinhMay').then(c => { setCh(c); setVat(c.vat); setHinhThuc(c.hinhThuc[0] || 'Tiền mặt'); }).catch(e => setLoi((e as Error).message));
-    goi<HangKho[]>('khoMay').then(setHang).catch(() => {});
-  }, [goi]);
+    if (!ch || daDat.current) return;
+    daDat.current = true; setVat(ch.vat); setHinhThuc(ch.hinhThuc[0] || 'Tiền mặt');
+  }, [ch]);
 
   // Từ hồ sơ khách bấm "Bán tiếp": chọn sẵn khách (mỗi lần tham số đổi)
   const [thamSo, setThamSo] = useState('');
@@ -96,13 +101,19 @@ export default function BanMan() {
     if (!(await hoi(`Bán cho ${ten}?`, cau, 'Bán'))) return;
     setDangLuu(true);
     try {
+      const lines = dongGui(gio);
       const r = await goi<BanNhanhKQ>('banNhanh', {
         ...('moi' in khach ? { khachMoi: { TenKH: khach.TenKH, SDT: khach.SDT } } : { MaKH: khach.MaKH }),
-        lines: dongGui(gio), VAT: vat, GhiChu: ghiChu.trim(), thu: { SoTien: thu, HinhThuc: hinhThuc },
+        lines, VAT: vat, GhiChu: ghiChu.trim(), thu: { SoTien: thu, HinhThuc: hinhThuc },
       });
       setKq(r);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      goi<HangKho[]>('khoMay').then(setHang).catch(() => {}); // tồn kho mới
+      // Máy chủ đã ghi xong: sửa luôn số trên Tổng quan, kho, công nợ, hồ sơ khách; lần mở sau vẫn lấy số máy chủ làm chuẩn
+      boNho.mot<HangKho[]>('khoMay', [], h => khoSauBan(h, lines));
+      boNho.mot<TongQuan>('tongQuanMay', [], tq => tongQuanSauBan(tq, r));
+      boNho.mot<HoSoKhach>('chiTietKhach', [r.MaKH], hs => hoSoSauBan(hs, r, homNay()));
+      boNho.moi<DsKhach>('dsKhachMay', ds => dsKhachDoiNo(ds, r.MaKH, r.TongCong - r.daThu));
+      dlKho.tai(); // tồn kho mới từ máy chủ
     } catch (e) { setLoi((e as Error).message); } finally { setDangLuu(false); }
   };
 
@@ -180,7 +191,7 @@ export default function BanMan() {
         <TextInput style={[s.o, { marginTop: 12, flex: 0 }]} value={ghiChu} onChangeText={setGhiChu} placeholder="Ghi chú (không bắt buộc)" placeholderTextColor={mau.xam} />
       </The>
 
-      <ChuLoi chu={loi} testID="loi-ban" />
+      <ChuLoi chu={loi || (!ch ? dlCh.loi : '')} testID="loi-ban" />
       <Nut chu={gio.length ? `Bán · ${tien(tong.tong)}` : 'Bán'} bieuTuong="checkmark-circle" onPress={ban} dangChay={dangLuu} style={{ marginTop: 12 }} testID="nut-ban" />
       {gio.length ? <Nut chu="Xóa đơn đang soạn" phu nguyHiem onPress={async () => { if (await hoi('Xóa đơn đang soạn?', 'Bỏ hết hàng và khách đã chọn.', 'Xóa')) donMoi(); }} style={{ marginTop: 10, minHeight: 46 }} /> : null}
     </KhungTrang>

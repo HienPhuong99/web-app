@@ -1,17 +1,19 @@
 // Tổng quan: doanh số hôm nay (vòng lớn), đơn / đã thu / còn nợ, 7 ngày gần nhất và việc cần làm (cùng cách tính với email sáng).
 // Bấm số liệu nào cũng xem được chi tiết: doanh số, đơn, đã thu, cột 7 ngày → đơn và phiếu thu của ngày đó; còn nợ → mọi khách còn nợ;
 // mỗi việc cần làm → hồ sơ khách / thẻ kho; nhóm việc dài thì bấm để mở hết.
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/auth';
 import type { TongQuan } from '../../lib/api';
 import { loiChao, ngay, tien, tienGon } from '../../lib/dinhDang';
+import { useDuLieu } from '../../lib/useDuLieu';
 import { BieuDo7Ngay } from '../../ui/BieuDo7Ngay';
 import { Nen } from '../../ui/Nen';
 import { The } from '../../ui/The';
+import { DongCapNhat, KhungChoTongQuan, useKeo } from '../../ui/TrangThaiTai';
 import { VongSo } from '../../ui/VongSo';
 import { DEM_DUOI, mau } from '../../ui/theme';
 
@@ -21,14 +23,8 @@ const xemNo = () => router.push({ pathname: '/so-lieu', params: { loai: 'no' } }
 const moKhach = (ma: string) => { if (ma) router.push({ pathname: '/khach/[ma]', params: { ma } }); };
 
 export default function TongQuanMan() {
-  const { goi, user, tenCuaHang } = useAuth();
-  const [du, setDu] = useState<TongQuan | null>(null), [loi, setLoi] = useState(''), [dangTai, setDangTai] = useState(false);
-
-  const tai = useCallback(async () => {
-    setDangTai(true);
-    try { setDu(await goi<TongQuan>('tongQuanMay')); setLoi(''); } catch (e) { setLoi((e as Error).message); } finally { setDangTai(false); }
-  }, [goi]);
-  useFocusEffect(useCallback(() => { tai(); }, [tai])); // mỗi lần mở tab lấy số mới
+  const { user, tenCuaHang } = useAuth();
+  const dl = useDuLieu<TongQuan>('tongQuanMay', []), du = dl.du, keo = useKeo(dl.lamMoi); // hiện số lần trước ngay, mỗi lần mở tab lấy số mới ở nền
 
   const max7 = du ? Math.max(...du.ban7.map(x => x.tien), 1) : 1;
   const ten = du?.user.ten ?? user?.ten ?? '';
@@ -36,7 +32,7 @@ export default function TongQuanMan() {
     <View style={{ flex: 1 }}>
       <Nen />
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={s.khung} refreshControl={<RefreshControl refreshing={dangTai && !!du} onRefresh={tai} tintColor={mau.cam} />}>
+        <ScrollView contentContainerStyle={s.khung} refreshControl={<RefreshControl {...keo} />}>
           <View style={s.dau}>
             <View style={{ flex: 1 }}>
               <Text style={s.chao}>{loiChao(new Date().getHours())},</Text>
@@ -45,6 +41,7 @@ export default function TongQuanMan() {
             </View>
             <View style={s.anh}><Text style={s.anhChu}>{(ten || '?').trim().charAt(0).toUpperCase()}</Text></View>
           </View>
+          <DongCapNhat dl={dl} />
 
           <View style={s.phimTat}>
             <PhimTat bieuTuong="bag-add" chu="Bán nhanh" mauBT={mau.camDam} onPress={() => router.navigate('/ban')} testID="pt-ban" />
@@ -53,14 +50,14 @@ export default function TongQuanMan() {
             <PhimTat bieuTuong="document-text" chu="Hợp đồng" mauBT={mau.vang} onPress={() => router.push('/hop-dong')} />
           </View>
 
-          {loi ? (
+          {dl.loi && !du ? (
             <The nhan="Không tải được" mauNhan={mau.do} style={s.muc} testID="loi-tong-quan">
-              <Text style={s.chuThuong}>{loi}</Text>
-              <Pressable onPress={tai} style={{ marginTop: 10 }}><Text style={s.lienKet}>Thử lại</Text></Pressable>
+              <Text style={s.chuThuong}>{dl.loi}</Text>
+              <Pressable onPress={dl.lamMoi} style={{ marginTop: 10 }}><Text style={s.lienKet}>Thử lại</Text></Pressable>
             </The>
           ) : null}
 
-          {!du && !loi ? <The style={s.muc}><Text style={s.chuNhat}>Đang tải số liệu…</Text></The> : null}
+          {!du && !dl.loi ? <KhungChoTongQuan /> : null}
 
           {du ? (
             <>

@@ -273,7 +273,7 @@ buoc('Kho: tồn kho, kiểm tra IMEI, thẻ kho; Hợp đồng; Thêm: Face ID 
   assert.strictEqual(await v(page, 'the-kho').getByText('Tồn đầu kỳ').count(), 0);
   await v(page, 'loc-phieu-tat').click();
   await v(page, 'sx-phieu-sl').click(); // số lượng: nhiều trước
-  assert.match(await v(page, 'the-kho').innerText(), /^Tồn đầu kỳ/); // phiếu nhập 5 máy lên đầu
+  assert.match(await v(page, 'the-kho').first().innerText(), /^Tồn đầu kỳ/); // phiếu nhập 5 máy lên đầu (mỗi dòng danh sách là một ô riêng)
   await chup(page, '10a-the-kho-loc');
   await v(page, 'nut-lui').click();
   await v(page, 'nut-lui').click();

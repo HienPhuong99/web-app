@@ -1,9 +1,9 @@
 // Mảnh ghép dùng chung cho các danh sách: ô tìm kiếm, một dòng bấm được, nhãn trạng thái, dòng "nhãn: giá trị", khung trang.
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type RefreshControlProps, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
+import { FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type RefreshControlProps, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Nen } from './Nen';
-import { DEM_DUOI, mau } from './theme';
+import { DEM_DUOI, bo, mau } from './theme';
 
 /** Khung chung của một màn hình: nền đào, vùng an toàn, cuộn dọc, rộng tối đa 560 */
 export function KhungTrang({ children, refreshControl, coTab = true }: { children: React.ReactNode; refreshControl?: React.ReactElement<RefreshControlProps>; coTab?: boolean }) {
@@ -14,6 +14,36 @@ export function KhungTrang({ children, refreshControl, coTab = true }: { childre
         <ScrollView contentContainerStyle={[s.khung, !coTab && { paddingBottom: 40 }]} keyboardShouldPersistTaps="handled" refreshControl={refreshControl}>
           {children}
         </ScrollView>
+      </SafeAreaView>
+    </View>
+  );
+}
+
+/**
+ * Màn hình danh sách dài (kho, khách, thẻ kho…): phần đầu (tìm, lọc) cuộn cùng danh sách, các dòng nằm chung một thẻ kính,
+ * nhưng chỉ vẽ các dòng đang hiện trên màn hình (FlatList) nên vài trăm dòng vẫn cuộn mượt.
+ * ds = null: chưa có dữ liệu (hiện choTai, vd. khung xương). rong: chữ khi danh sách trống. testID gắn vào từng đoạn thẻ chứa dòng.
+ */
+export function KhungDanhSach<T>({ dau, ds, khoa, ve, rong, cuoi, choTai, refreshControl, coTab = true, testID }: {
+  dau: React.ReactElement; ds: readonly T[] | null; khoa: (x: T, i: number) => string; ve: (x: T) => React.ReactElement;
+  rong?: string; cuoi?: React.ReactElement | null; choTai?: React.ReactElement | null; refreshControl?: React.ReactElement<RefreshControlProps>; coTab?: boolean; testID?: string;
+}) {
+  const n = ds?.length ?? 0;
+  return (
+    <View style={{ flex: 1 }}>
+      <Nen />
+      <SafeAreaView edges={coTab ? ['top'] : ['top', 'bottom']} style={{ flex: 1 }}>
+        <FlatList
+          data={ds ?? []} keyExtractor={khoa} contentContainerStyle={[s.khung, !coTab && { paddingBottom: 40 }]}
+          keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" refreshControl={refreshControl}
+          initialNumToRender={14} maxToRenderPerBatch={12} windowSize={9} removeClippedSubviews={Platform.OS === 'android'}
+          ListHeaderComponent={dau}
+          renderItem={({ item, index }) => (
+            <View testID={testID} style={[s.doan, index === 0 && s.doanDau, index === n - 1 && s.doanCuoi, index > 0 && s.doanVach]}>{ve(item)}</View>
+          )}
+          ListEmptyComponent={ds ? (rong ? <View testID={testID} style={[s.doan, s.doanDau, s.doanCuoi]}><ChuNhat chu={rong} style={{ marginVertical: 12 }} /></View> : null) : choTai ?? null}
+          ListFooterComponent={cuoi ?? null}
+        />
       </SafeAreaView>
     </View>
   );
@@ -85,6 +115,11 @@ export const ChuLoi = ({ chu, testID }: { chu: string; testID?: string }) => (ch
 
 export const s = StyleSheet.create({
   khung: { padding: 18, paddingBottom: DEM_DUOI, maxWidth: 560, width: '100%', alignSelf: 'center' },
+  // Mỗi dòng của KhungDanhSach là một đoạn của thẻ kính (như The): dòng đầu bo góc trên, dòng cuối bo góc dưới
+  doan: { backgroundColor: mau.kinh, borderColor: mau.vienKinh, borderLeftWidth: 1, borderRightWidth: 1, paddingHorizontal: 18 },
+  doanDau: { borderTopWidth: 1, borderTopLeftRadius: bo.lon, borderTopRightRadius: bo.lon, paddingTop: 6 },
+  doanCuoi: { borderBottomWidth: 1, borderBottomLeftRadius: bo.lon, borderBottomRightRadius: bo.lon, paddingBottom: 6 },
+  doanVach: { borderTopWidth: 1, borderTopColor: mau.vach },
   oTim: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 16, borderWidth: 1, borderColor: mau.vach, paddingHorizontal: 14 },
   oTimChu: { flex: 1, paddingVertical: 13, fontSize: 17, color: mau.chu, minWidth: 0 },
   dong: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 },
