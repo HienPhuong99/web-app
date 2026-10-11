@@ -68,16 +68,25 @@ BUOC.push(['Danh sách: sắp xếp, lọc mới, Bỏ lọc, nhớ lựa chọn
   const chon = async (f, v) => { await page.selectOption(`#view .toolbar [data-f="${f}"]`, v); };
   const dau = () => page.locator('#view tbody tr[data-i]').first().innerText();
   await page.click('#nav a[data-go="hang"]');
-  await chon('sx', 'giaTang');
-  assert.match(await dau(), /Ốp nhập thử/);
-  await chon('sx', 'giaGiam');
+  const chieu = () => page.getAttribute('#view .toolbar .chieu', 'aria-label');
+  assert.match(await chieu(), /tăng dần/); // mã hàng: A → Z
+  await chon('sx', 'gia'); // giá: mặc định cao trước
   assert.match(await dau(), /iPhone 16 Pro Max/);
+  assert.match(await chieu(), /giảm dần/);
   assert.ok(await page.locator('#view .bo-loc').isVisible(), 'Đổi sắp xếp thì hiện nút Bỏ lọc');
+  assert.ok(!(await page.locator('#view .toolbar .chieu.on').count()), 'Chiều mặc định của tiêu chí: nút ↓ không tô đậm');
+  await page.click('#view .toolbar .chieu'); // đảo chiều: thấp trước
+  assert.match(await dau(), /Ốp nhập thử/);
+  assert.match(await chieu(), /tăng dần/);
+  assert.ok(await page.locator('#view .toolbar .chieu.on').count(), 'Đã đảo chiều: nút tô đậm');
   await page.click('#nav a[data-go="khach"]');
   await page.click('#nav a[data-go="hang"]');
-  assert.strictEqual(await page.inputValue('#view [data-f="sx"]'), 'giaGiam'); // nhớ lựa chọn
+  assert.strictEqual(await page.inputValue('#view [data-f="sx"]'), 'gia'); // nhớ tiêu chí và chiều
+  assert.match(await chieu(), /tăng dần/);
+  assert.match(await dau(), /Ốp nhập thử/);
   await page.locator('#view .bo-loc').click();
   assert.deepStrictEqual([await page.inputValue('#view [data-f="sx"]'), await page.locator('#view .bo-loc').isVisible()], ['ma', false]);
+  assert.match(await chieu(), /tăng dần/);
   // Phiếu kho: tạo 1 phiếu nhập 5 máy, 1 phiếu nhập 1 cái, 1 phiếu xuất 2 máy
   await page.evaluate(async () => {
     const h = S.hang.find(x => /iPhone 16/.test(x.TenHang)), op = S.hang.find(x => x.TenHang === 'Ốp nhập thử');
@@ -89,9 +98,9 @@ BUOC.push(['Danh sách: sắp xếp, lọc mới, Bỏ lọc, nhớ lựa chọn
   });
   await page.click('#nav a[data-go="kho"]');
   await page.waitForSelector('#view tbody tr:has-text("iPhone 16 Pro Max 256GB - Titan Đen ×5")');
-  await chon('sx', 'slGiam');
+  await chon('sx', 'sl'); // số lượng: mặc định nhiều trước
   assert.match(await dau(), /Nhà cung cấp A[\s\S]*\+5/);
-  await chon('sx', 'slTang');
+  await page.click('#view .toolbar .chieu');
   assert.match(await dau(), /Nhà cung cấp B[\s\S]*\+1/);
   await chon('loai', 'Xuất');
   assert.deepStrictEqual(await page.locator('#view tbody tr[data-i]').allInnerTexts().then(t => t.map(x => /Khách lẻ/.test(x))), [true]);

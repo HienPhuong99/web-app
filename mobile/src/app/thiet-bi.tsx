@@ -5,8 +5,8 @@ import { useFocusEffect } from 'expo-router';
 import { useAuth } from '../lib/auth';
 import type { ThietBi } from '../lib/api';
 import { ngay } from '../lib/dinhDang';
-import { LOC_MAY, SX_MAY, locMay, type LocMay, type SxMay } from '../lib/locDs';
-import { BoLoc } from '../ui/BoLoc';
+import { LOC_MAY, SX_MAY, locMay, sxMacDinh, type LocMay, type SxMay } from '../lib/locDs';
+import { BoLoc, BoSapXep } from '../ui/BoLoc';
 import { ChuLoi, ChuNhat, KhungTrang, Nhan, Vach } from '../ui/DanhSach';
 import { DauTrang } from '../ui/DauTrang';
 import { hoi } from '../ui/hoi';
@@ -19,7 +19,7 @@ const gio = (s: string) => `${ngay(s)} ${String(s || '').slice(11, 16)}`.trim();
 export default function ThietBiMan() {
   const { goi, user } = useAuth();
   const [goc, setGoc] = useState<ThietBi[] | null>(null), [loi, setLoi] = useState(''), [dangTai, setDangTai] = useState(false), [dangXoa, setDangXoa] = useState('');
-  const [loc, setLoc] = useState<LocMay>('tat'), [sx, setSx] = useState<SxMay>('gan');
+  const [loc, setLoc] = useState<LocMay>('tat'), [sx, setSx] = useState<SxMay>(sxMacDinh(SX_MAY));
   const ds = useMemo(() => (goc ? locMay(goc, loc, sx) : null), [goc, loc, sx]);
   const tai = useCallback(async () => {
     setDangTai(true);
@@ -42,7 +42,7 @@ export default function ThietBiMan() {
       {goc && goc.length > 1 ? (
         <View style={{ marginBottom: 12, marginTop: -4 }}>
           <BoLoc ds={LOC_MAY} chon={loc} onChon={setLoc} testID="loc-may" />
-          <BoLoc ds={SX_MAY} chon={sx} onChon={setSx} sapXep testID="sx-may" />
+          <BoSapXep ds={SX_MAY} chon={sx} onChon={setSx} testID="sx-may" />
         </View>
       ) : null}
       {ds ? (

@@ -5,8 +5,8 @@ import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../../lib/auth';
 import type { DongTheKho } from '../../lib/api';
 import { ngay } from '../../lib/dinhDang';
-import { LOC_PHIEU, SX_PHIEU, locTheKho, type LocPhieu, type SxPhieu } from '../../lib/locDs';
-import { BoLoc } from '../../ui/BoLoc';
+import { LOC_PHIEU, SX_PHIEU, locTheKho, sxMacDinh, type LocPhieu, type SxPhieu } from '../../lib/locDs';
+import { BoLoc, BoSapXep } from '../../ui/BoLoc';
 import { ChuLoi, ChuNhat, KhungTrang, Nhan, Vach } from '../../ui/DanhSach';
 import { DauTrang } from '../../ui/DauTrang';
 import { The } from '../../ui/The';
@@ -16,7 +16,7 @@ export default function TheKhoMan() {
   const { ma, ten } = useLocalSearchParams<{ ma: string; ten?: string }>();
   const { goi } = useAuth();
   const [goc, setGoc] = useState<DongTheKho[] | null>(null), [loi, setLoi] = useState(''), [dangTai, setDangTai] = useState(false);
-  const [loc, setLoc] = useState<LocPhieu>('tat'), [sx, setSx] = useState<SxPhieu>('moi');
+  const [loc, setLoc] = useState<LocPhieu>('tat'), [sx, setSx] = useState<SxPhieu>(sxMacDinh(SX_PHIEU));
   const tai = useCallback(async () => {
     setDangTai(true);
     try { setGoc(await goi<DongTheKho[]>('theKho', ma)); setLoi(''); } catch (e) { setLoi((e as Error).message); } finally { setDangTai(false); }
@@ -33,7 +33,7 @@ export default function TheKhoMan() {
       {goc && goc.length > 1 ? (
         <View style={{ marginBottom: 12, marginTop: -4 }}>
           <BoLoc ds={LOC_PHIEU} chon={loc} onChon={setLoc} testID="loc-phieu" />
-          <BoLoc ds={SX_PHIEU} chon={sx} onChon={setSx} sapXep testID="sx-phieu" />
+          <BoSapXep ds={SX_PHIEU} chon={sx} onChon={setSx} testID="sx-phieu" />
         </View>
       ) : null}
       {ds ? (

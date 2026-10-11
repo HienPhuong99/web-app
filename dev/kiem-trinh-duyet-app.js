@@ -220,9 +220,14 @@ buoc('Khách: tìm không dấu, mở hồ sơ; thêm khách mới', async page 
   await v(page, 'loc-khach-chua').click();
   await page.getByText('Không có khách nào chưa mua.').filter({ visible: true }).waitFor({ timeout: 15000 });
   await v(page, 'loc-khach-tat').click();
+  // Sắp theo tên: bấm lần đầu A → Z, bấm lại Z → A
+  const theoTen = chieu => page.waitForFunction(c => { const t = [...document.querySelectorAll('[data-testid^="khach-KH"]')].filter(e => e.offsetParent).map(e => e.innerText.split('\n')[0]); return t.length >= 2 && t.every((x, i) => !i || c * t[i - 1].localeCompare(x, 'vi') <= 0) && t[0] !== t[t.length - 1]; }, chieu, { timeout: 15000 });
   await v(page, 'sx-khach-ten').click();
-  await page.waitForFunction(() => { const t = [...document.querySelectorAll('[data-testid^="khach-KH"]')].filter(e => e.offsetParent).map(e => e.innerText.split('\n')[0]); return t.length >= 2 && t.every((x, i) => !i || t[i - 1].localeCompare(x, 'vi') <= 0); }, null, { timeout: 15000 });
+  await theoTen(1);
   await chup(page, '9a-khach-loc');
+  await v(page, 'sx-khach-ten').click();
+  await theoTen(-1);
+  assert.match(await v(page, 'sx-khach-ten').getAttribute('aria-label'), /giảm dần/);
   await v(page, 'sx-khach-gan').click();
   await v(page, 'nut-them-khach').click();
   await v(page, 'o-ten-khach').fill('Anh Phát');
@@ -245,12 +250,14 @@ buoc('Kho: tồn kho, kiểm tra IMEI, thẻ kho; Hợp đồng; Thêm: Face ID 
   await v(page, 'nut-kiem-imei').click();
   await v(page, 'tt-imei').getByText('Đã bán').waitFor({ timeout: 15000 });
   await khongTranNgang(page);
-  // Sắp theo tồn: iPhone 16 Pro Max (HH0001) nhiều máy hơn iPhone 15 (HH0002)
+  // Sắp theo tồn: iPhone 16 Pro Max (HH0001) nhiều máy hơn iPhone 15 (HH0002). Bấm lần đầu: ít trước; bấm lại: nhiều trước
   const dauKho = () => page.evaluate(() => [...document.querySelectorAll('[data-testid^="kho-HH"]')].filter(e => e.offsetParent).map(e => e.dataset.testid)[0]);
-  await v(page, 'sx-kho-tonNhieu').click();
-  assert.strictEqual(await dauKho(), 'kho-HH0001');
-  await v(page, 'sx-kho-tonIt').click();
+  await v(page, 'sx-kho-ton').click();
   assert.strictEqual(await dauKho(), 'kho-HH0002');
+  assert.match(await v(page, 'sx-kho-ton').getAttribute('aria-label'), /tồn, tăng dần/);
+  await v(page, 'sx-kho-ton').click();
+  assert.strictEqual(await dauKho(), 'kho-HH0001');
+  assert.match(await v(page, 'sx-kho-ton').getAttribute('aria-label'), /tồn, giảm dần/);
   await v(page, 'loc-kho-con').getByText(/Còn hàng \(\d+\)/).waitFor();
   await chup(page, '10-kho');
   await v(page, 'sx-kho-ten').click();
@@ -265,7 +272,7 @@ buoc('Kho: tồn kho, kiểm tra IMEI, thẻ kho; Hợp đồng; Thêm: Face ID 
   await v(page, 'the-kho').getByText('Chị Lan').waitFor();
   assert.strictEqual(await v(page, 'the-kho').getByText('Tồn đầu kỳ').count(), 0);
   await v(page, 'loc-phieu-tat').click();
-  await v(page, 'sx-phieu-slNhieu').click();
+  await v(page, 'sx-phieu-sl').click(); // số lượng: nhiều trước
   assert.match(await v(page, 'the-kho').innerText(), /^Tồn đầu kỳ/); // phiếu nhập 5 máy lên đầu
   await chup(page, '10a-the-kho-loc');
   await v(page, 'nut-lui').click();
@@ -290,9 +297,9 @@ buoc('Điện thoại đăng nhập: thấy "Máy này", đăng xuất từ xa m
   await v(page, 'loc-may-tb').click(); // chưa máy nào bật thông báo
   await page.getByText('Không có điện thoại nào phù hợp.').filter({ visible: true }).waitFor();
   await v(page, 'loc-may-tat').click();
-  await v(page, 'sx-may-lau').click(); // thứ tự đã kiểm ở test/loc.test.ts; ở đây hai máy cùng phút nên chỉ xem còn đủ
+  await v(page, 'sx-may-dung').click(); // đang chọn nên đảo chiều: lâu không dùng trước. Thứ tự đã kiểm ở test/loc.test.ts; ở đây hai máy cùng phút nên chỉ xem còn đủ
   assert.strictEqual(await v(page, 'ds-thiet-bi').getByTestId('thiet-bi').count(), 2);
-  await v(page, 'sx-may-gan').click();
+  await v(page, 'sx-may-dung').click();
   page.once('dialog', d => d.accept());
   await v(page, 'nut-xoa-thiet-bi').first().click();
   await page.waitForFunction(() => !document.body.innerText.includes('iPad quầy'), null, { timeout: 15000 });

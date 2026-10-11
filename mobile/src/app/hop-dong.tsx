@@ -4,9 +4,9 @@ import { RefreshControl, View } from 'react-native';
 import { useAuth } from '../lib/auth';
 import type { HopDongTom } from '../lib/api';
 import { ngay, tien } from '../lib/dinhDang';
-import { LOC_HD, SX_HD, nhanCua, type LocHD, type SxHD } from '../lib/locDs';
+import { LOC_HD, SX_HD, moTaSx, nhanCua, sxMacDinh, type LocHD, type SxHD } from '../lib/locDs';
 import { useTaiPdf } from '../lib/pdf';
-import { BoLoc } from '../ui/BoLoc';
+import { BoLoc, BoSapXep } from '../ui/BoLoc';
 import { ChuLoi, ChuNhat, Dong, KhungTrang, OTim, Vach } from '../ui/DanhSach';
 import { DauTrang } from '../ui/DauTrang';
 import { The } from '../ui/The';
@@ -15,13 +15,13 @@ import { mau } from '../ui/theme';
 export default function HopDongMan() {
   const { goi } = useAuth();
   const [q, setQ] = useState(''), [kq, setKq] = useState<{ tong: number; ds: HopDongTom[] } | null>(null), [loi, setLoi] = useState(''), [dangTai, setDangTai] = useState(false);
-  const [loc, setLoc] = useState<LocHD>('tat'), [sx, setSx] = useState<SxHD>('moi');
+  const [loc, setLoc] = useState<LocHD>('tat'), [sx, setSx] = useState<SxHD>(sxMacDinh(SX_HD));
   const pdf = useTaiPdf(), lan = useRef(0);
 
   const tai = useCallback(async (tu: string) => {
     const so = ++lan.current;
     setDangTai(true);
-    try { const r = await goi<{ tong: number; ds: HopDongTom[] }>('dsHopDongMay', tu, { loc, sx }); if (so === lan.current) { setKq(r); setLoi(''); } }
+    try { const r = await goi<{ tong: number; ds: HopDongTom[] }>('dsHopDongMay', tu, { loc, sx: sx.theo, chieu: sx.chieu }); if (so === lan.current) { setKq(r); setLoi(''); } }
     catch (e) { if (so === lan.current) setLoi((e as Error).message); }
     finally { if (so === lan.current) setDangTai(false); }
   }, [goi, loc, sx]);
@@ -32,7 +32,7 @@ export default function HopDongMan() {
       <DauTrang tieuDe="Hợp đồng" phu="Bấm hợp đồng đã có file để tải PDF và gửi cho khách. Lập, sửa, tạo file hợp đồng làm trên web." />
       <OTim value={q} onChangeText={setQ} placeholder="Số hợp đồng, tên bên A, số điện thoại" testID="o-tim-hd" />
       <BoLoc ds={LOC_HD} chon={loc} onChon={setLoc} testID="loc-hd" />
-      <BoLoc ds={SX_HD} chon={sx} onChon={setSx} sapXep testID="sx-hd" />
+      <BoSapXep ds={SX_HD} chon={sx} onChon={setSx} testID="sx-hd" />
       <ChuLoi chu={loi || pdf.loi} testID="loi-hd" />
       {!kq && !loi ? <ChuNhat chu="Đang tải…" /> : null}
       {kq ? (
@@ -49,7 +49,7 @@ export default function HopDongMan() {
           ))}
         </The>
       ) : null}
-      {kq && kq.tong > kq.ds.length ? <ChuNhat chu={`Hiện ${kq.ds.length} / ${kq.tong} hợp đồng (${nhanCua(SX_HD, sx).toLowerCase()}). Gõ để tìm.`} /> : null}
+      {kq && kq.tong > kq.ds.length ? <ChuNhat chu={`Hiện ${kq.ds.length} / ${kq.tong} hợp đồng (${moTaSx(SX_HD, sx)}). Gõ để tìm.`} /> : null}
     </KhungTrang>
   );
 }

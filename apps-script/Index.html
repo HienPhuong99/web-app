@@ -122,6 +122,10 @@ textarea { resize: vertical; }
 .toolbar .sort { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
 .toolbar .sort svg { width: 16px; height: 16px; flex: none; }
 .toolbar select.on, .toolbar input.on { border-color: var(--brand); background: var(--brand-50); color: var(--brand-d); font-weight: 600; }
+.toolbar .chieu { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid #dfe3ea; border-radius: 10px; background: #fff; color: var(--ink); cursor: pointer; flex: none; }
+.toolbar .chieu:hover { border-color: var(--brand); color: var(--brand); }
+.toolbar .chieu.on { border-color: var(--brand); background: var(--brand-50); color: var(--brand-d); }
+.toolbar .sort .chieu svg { width: 17px; height: 17px; }
 .seg { display: inline-flex; background: #eceef2; border-radius: 11px; padding: 3px; margin-bottom: 14px; }
 .seg button { border: none; background: none; padding: 7px 14px; border-radius: 9px; font-weight: 600; color: var(--ink2); cursor: pointer; transition: background-color .25s var(--ease), box-shadow .25s, color .2s; }
 .seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
@@ -441,6 +445,8 @@ const IC = {
   save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
   refresh: '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
   sort: '<path d="M7 20V4M3 8l4-4 4 4M17 4v16M13 16l4 4 4-4"/>',
+  arrowDown: '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>',
+  arrowUp: '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',
   down: '<circle cx="12" cy="12" r="10"/><polyline points="8 12 12 16 16 12"/><line x1="12" y1="8" x2="12" y2="16"/>',
   up: '<circle cx="12" cy="12" r="10"/><polyline points="16 12 12 8 8 12"/><line x1="12" y1="16" x2="12" y2="8"/>',
   phone: '<rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
@@ -718,47 +724,62 @@ document.addEventListener('focusin', e => { if (e.target.classList && e.target.c
 document.addEventListener('focusout', e => { if (e.target.classList && e.target.classList.contains('money')) e.target.value = money(parseMoney(e.target.value)); });
 
 // ===================== Danh sách dùng chung =====================
-// cfg: {id, ph, cols:[{t,k,f,cls}], data(), text(r), filters:[{id, options|type:'dates', def, t}], filter(r,f), sorts:[[id, nhãn, so sánh]], open(r), foot(rows)}
-// sorts: cách sắp xếp chọn được, cái đầu là mặc định. Lọc, sắp xếp, chữ tìm của từng danh sách được nhớ trong S.q khi chuyển màn hình.
+// cfg: {id, ph, cols:[{t,k,f,cls}], data(), text(r), filters:[{id, options|type:'dates', def, t}], filter(r,f), sorts:[[id, nhãn, khoá(r), chiều]], open(r), foot(rows)}
+// sorts: tiêu chí sắp xếp chọn được, cái đầu là mặc định (xem TC_NGAY); nút ↓ / ↑ cạnh ô chọn đảo chiều.
+// Lọc, sắp xếp, chữ tìm của từng danh sách được nhớ trong S.q khi chuyển màn hình.
 function listCard(el, cfg) {
   const st = S.q[cfg.id] || (S.q[cfg.id] = { text: '', f: {} });
   const filters = cfg.filters || [], sorts = cfg.sorts || [];
-  const macDinh = () => { const m = {}; filters.forEach(f => { if (f.def !== undefined) m[f.id] = f.def; }); if (sorts.length) m.sx = sorts[0][0]; return m; };
+  const tieuChi = id => sorts.find(s => s[0] === id);
+  const macDinh = () => { const m = {}; filters.forEach(f => { if (f.def !== undefined) m[f.id] = f.def; }); if (sorts.length) { m.sx = sorts[0][0]; m.chieu = sorts[0][3]; } return m; };
   Object.entries(macDinh()).forEach(([k, v]) => { if (st.f[k] === undefined) st.f[k] = v; });
-  if (sorts.length && !sorts.some(s => s[0] === st.f.sx)) st.f.sx = sorts[0][0];
+  if (sorts.length && !tieuChi(st.f.sx)) Object.assign(st.f, { sx: sorts[0][0], chieu: sorts[0][3] });
+  if (sorts.length && st.f.chieu !== 'giam' && st.f.chieu !== 'tang') st.f.chieu = tieuChi(st.f.sx)[3];
   const sel = (id, opts, label) => `<select data-f="${id}" aria-label="${esc(label)}" title="${esc(label)}">${opts.map(([v, t]) => `<option value="${esc(v)}"${String(st.f[id] ?? '') === String(v) ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
   const fHtml = filters.map(f => f.type === 'dates'
     ? `<input type="date" data-f="${f.id}From" value="${esc(st.f[f.id + 'From'] || '')}" title="Từ ngày" aria-label="Từ ngày"><span class="muted">→</span><input type="date" data-f="${f.id}To" value="${esc(st.f[f.id + 'To'] || '')}" title="Đến ngày" aria-label="Đến ngày">`
     : sel(f.id, f.options, f.t || 'Lọc')).join('');
-  const sxHtml = sorts.length ? `<label class="sort">${icon('sort')}${sel('sx', sorts.map(s => [s[0], s[1]]), 'Sắp xếp')}</label>` : '';
+  const sxHtml = sorts.length ? `<span class="sort">${icon('sort')}${sel('sx', sorts.map(s => [s[0], s[1]]), 'Sắp xếp theo')}<button type="button" class="chieu" data-f="chieu"></button></span>` : '';
   const card = document.createElement('div');
   card.className = 'card';
   card.innerHTML = `<div class="toolbar"><label class="search">${icon('search')}<input type="search" placeholder="${esc(cfg.ph)} (F3)" value="${esc(st.text)}"></label>${fHtml}${sxHtml}<button type="button" class="btn sm bo-loc hidden" title="Bỏ chữ tìm và mọi bộ lọc, về cách sắp xếp mặc định">${icon('x')}Bỏ lọc</button><span class="count"></span></div>
     <div class="tbl-wrap"><table class="tbl click"><thead><tr>${cfg.cols.map(c => `<th class="${c.cls || ''}">${c.t}</th>`).join('')}</tr></thead><tbody></tbody></table></div>
     ${cfg.foot ? '<div class="foot"></div>' : ''}`;
   el.append(card);
-  const q = $('.search input', card), body = $('tbody', card), count = $('.count', card), boLoc = $('.bo-loc', card);
+  const q = $('.search input', card), body = $('tbody', card), count = $('.count', card), boLoc = $('.bo-loc', card), nutChieu = $('.chieu', card);
+  const veChieu = () => {
+    if (!nutChieu) return;
+    const giam = st.f.chieu === 'giam', t = `Đang xếp ${giam ? 'giảm dần (lớn, mới, Z trước)' : 'tăng dần (nhỏ, cũ, A trước)'}. Bấm để đảo chiều`;
+    nutChieu.innerHTML = icon(giam ? 'arrowDown' : 'arrowUp');
+    nutChieu.title = t; nutChieu.setAttribute('aria-label', t);
+  };
   let rows = [];
   const refresh = () => {
-    const w = words(st.text), md = macDinh(), sx = sorts.find(s => s[0] === st.f.sx);
+    const w = words(st.text), md = macDinh(), sx = tieuChi(st.f.sx);
     rows = cfg.data().filter(r => (!cfg.filter || cfg.filter(r, st.f)) && matches(w, r, cfg.text));
-    if (sx) rows = rows.slice().sort(sx[2]);
+    if (sx) rows = sapXep(rows, sx[2], st.f.chieu);
+    veChieu();
     const shown = rows.slice(0, LIMIT);
     body.innerHTML = shown.length ? shown.map((r, i) => `<tr data-i="${i}">${cfg.cols.map(c => `<td class="${c.cls || ''}">${c.f ? c.f(r) : esc(r[c.k])}</td>`).join('')}</tr>`).join('')
       : `<tr><td class="empty" colspan="${cfg.cols.length}">Không có dữ liệu phù hợp</td></tr>`;
     count.textContent = rows.length > LIMIT ? `Hiện ${LIMIT} / ${rows.length} dòng` : `${rows.length} dòng`;
     if (cfg.foot) $('.foot', card).innerHTML = cfg.foot(rows);
     // Đang lọc / tìm / sắp xếp khác mặc định: hiện nút Bỏ lọc, tô đậm ô lọc đang dùng
-    const khac = k => String(st.f[k] ?? '') !== String(md[k] ?? '');
+    const khac = k => k === 'chieu' ? !!sx && st.f.chieu !== sx[3] : String(st.f[k] ?? '') !== String(md[k] ?? ''); // chiều: so với mặc định của tiêu chí đang chọn
     card.querySelectorAll('[data-f]').forEach(i => i.classList.toggle('on', khac(i.dataset.f)));
     boLoc.classList.toggle('hidden', !st.text && !Object.keys(Object.assign({}, md, st.f)).some(khac));
   };
   let t;
   q.oninput = () => { st.text = q.value; clearTimeout(t); t = setTimeout(refresh, 120); };
-  card.querySelectorAll('[data-f]').forEach(inp => { inp.onchange = () => { st.f[inp.dataset.f] = inp.value; refresh(); }; });
+  card.querySelectorAll('[data-f]').forEach(inp => { inp.onchange = () => {
+    st.f[inp.dataset.f] = inp.value;
+    if (inp.dataset.f === 'sx') st.f.chieu = tieuChi(inp.value)[3]; // tiêu chí mới: về chiều mặc định của nó
+    refresh();
+  }; });
+  if (nutChieu) nutChieu.onclick = () => { st.f.chieu = st.f.chieu === 'giam' ? 'tang' : 'giam'; refresh(); };
   boLoc.onclick = () => {
     st.text = ''; st.f = macDinh(); q.value = '';
-    card.querySelectorAll('[data-f]').forEach(i => { i.value = st.f[i.dataset.f] ?? ''; });
+    card.querySelectorAll('[data-f]').forEach(i => { if (i !== nutChieu) i.value = st.f[i.dataset.f] ?? ''; });
     refresh(); q.focus();
   };
   body.onclick = e => {
@@ -771,13 +792,19 @@ function listCard(el, cfg) {
   return refresh;
 }
 const sum = (rows, f) => rows.reduce((s, r) => s + (+f(r) || 0), 0);
-// Hàm so sánh cho sorts của listCard: số tăng / giảm dần, chữ A → Z (tiếng Việt), ngày (trống xếp cuối)
-const tang = f => (a, b) => (+f(a) || 0) - (+f(b) || 0);
-const giam = f => (a, b) => (+f(b) || 0) - (+f(a) || 0);
-const az = f => (a, b) => String(f(a) ?? '').localeCompare(String(f(b) ?? ''), 'vi');
-const ngaySom = f => (a, b) => String(f(a) || '9999').localeCompare(String(f(b) || '9999'));
-const cuTruoc = (a, b) => byDate(b, a);
-const SX_NGAY = [['moi', 'Mới nhất trước', byDate], ['cu', 'Cũ nhất trước', cuTruoc]];
+// Tiêu chí sắp xếp cho sorts của listCard: [id, nhãn, khoá(r), chiều khi mới chọn].
+// Khoá: số (bọc bằng soCua để ô trống thành 0), hoặc chữ / ngày (so theo tiếng Việt); khoá chữ trống luôn xếp cuối dù đảo chiều.
+// Chiều: 'giam' lớn trước (nhiều → ít, mới → cũ, Z → A), nút hiện ↓; 'tang' nhỏ trước, hiện ↑. Bằng nhau thì giữ thứ tự sẵn có (mới trước).
+const soCua = f => r => +f(r) || 0;
+const TC_NGAY = ['ngay', 'Ngày', r => String(r.Ngay ?? '') + String(r.NgayTao ?? ''), 'giam'];
+const SO_CHU = new Intl.Collator('vi');
+function sapXep(rows, khoa, chieu) {
+  const d = chieu === 'giam' ? -1 : 1, trong = v => v === '' || v == null;
+  return rows.map((r, i) => [khoa(r), i, r]).sort(([x, i], [y, j]) => {
+    if (trong(x) || trong(y)) return (trong(x) - trong(y)) || i - j;
+    return d * (typeof x === 'number' && typeof y === 'number' ? x - y : SO_CHU.compare(String(x), String(y))) || i - j;
+  }).map(o => o[2]);
+}
 // Lọc theo một cột có ít giá trị (người lập, hình thức…): các giá trị đang có trong dữ liệu
 const locGiaTri = (id, nhan, vals) => ({ id, t: nhan, options: [['', nhan]].concat([...new Set(vals.filter(Boolean).map(String))].sort((a, b) => a.localeCompare(b, 'vi')).map(x => [x, x])) });
 
@@ -1036,7 +1063,7 @@ function vBaoGia(el) {
     id: 'baogia', ph: 'Tìm số báo giá, khách hàng, SĐT…',
     filters: [{ id: 'tt', options: [['', 'Tất cả trạng thái'], ['chua', 'Chưa chốt đơn'], ['chot', 'Đã chốt đơn']] }, locGiaTri('nguoi', 'Mọi người lập', S.baoGia.map(r => r.NguoiTao)), { id: 'ngay', type: 'dates' }],
     filter: (r, f) => (!f.tt || (f.tt === 'chot') === !!D.dhBG[r.SoBG]) && (!f.nguoi || r.NguoiTao === f.nguoi) && inRange(r.Ngay, f, 'ngay'),
-    sorts: SX_NGAY.concat([['tienGiam', 'Giá trị cao → thấp', giam(r => r.TongCong)], ['tienTang', 'Giá trị thấp → cao', tang(r => r.TongCong)], ['kh', 'Khách hàng A → Z', az(r => r.TenKH)]]),
+    sorts: [TC_NGAY, ['tien', 'Giá trị', soCua(r => r.TongCong), 'giam'], ['kh', 'Khách hàng', r => r.TenKH, 'tang']],
     cols: [
       { t: 'Số báo giá', k: 'SoBG', cls: 'code' }, { t: 'Ngày', f: r => dmy(r.Ngay) },
       { t: 'Khách hàng', cls: 'wrap', f: r => `${esc(r.TenKH)}<span class="sub">${esc(r.SDT)}</span>` },
@@ -1069,8 +1096,8 @@ function vDonHang(el) {
         && (!f.thu || (f.thu === 'no' ? conNo(r) > 0 : f.thu === 'chuaThu' ? r.TrangThai !== 'Hủy' && daThu(r) <= 0 && +r.TongCong > 0 : r.TrangThai !== 'Hủy' && conNo(r) === 0))
         && (!f.nguoi || r.NguoiTao === f.nguoi) && inRange(r.Ngay, f, 'ngay');
     },
-    sorts: SX_NGAY.concat([['tienGiam', 'Giá trị cao → thấp', giam(r => r.TongCong)], ['tienTang', 'Giá trị thấp → cao', tang(r => r.TongCong)],
-      ['no', 'Còn nợ nhiều nhất', giam(conNo)], ['hen', 'Hẹn giao sớm nhất', ngaySom(r => r.NgayGiao)], ['kh', 'Khách hàng A → Z', az(r => r.TenKH)]]),
+    sorts: [TC_NGAY, ['tien', 'Giá trị', soCua(r => r.TongCong), 'giam'], ['no', 'Còn nợ', soCua(conNo), 'giam'], ['hen', 'Hẹn giao', r => r.NgayGiao, 'tang'],
+      ['kh', 'Khách hàng', r => r.TenKH, 'tang']],
     cols: [
       { t: 'Số đơn', k: 'SoDH', cls: 'code' }, { t: 'Ngày', f: r => dmy(r.Ngay) },
       { t: 'Khách hàng', cls: 'wrap', f: r => `${esc(r.TenKH)}<span class="sub">${esc(r.SDT)}</span>` },
@@ -1103,8 +1130,8 @@ function vCongNo(el) {
       id: 'congno', ph: 'Tìm khách hàng, SĐT…',
       filters: [{ id: 'loc', options: [['no', 'Khách còn nợ'], ['tra', 'Khách trả trước (dư tiền)'], ['het', 'Đã trả hết'], ['', 'Tất cả khách có giao dịch']], def: 'no' }],
       filter: (r, f) => { const n = D.noKH[r.MaKH] || 0; return !f.loc || (f.loc === 'no' ? n > 0 : f.loc === 'tra' ? n < 0 : n === 0); },
-      sorts: [['no', 'Còn nợ nhiều nhất', giam(r => D.noKH[r.MaKH])], ['noIt', 'Còn nợ ít nhất', tang(r => D.noKH[r.MaKH])], ['mua', 'Mua nhiều nhất', giam(r => D.muaKH[r.MaKH])],
-        ['don', 'Nhiều đơn nhất', giam(r => soDon[r.MaKH])], ['ten', 'Tên A → Z', az(r => r.TenKH)]],
+      sorts: [['no', 'Còn nợ', soCua(r => D.noKH[r.MaKH]), 'giam'], ['mua', 'Đã mua', soCua(r => D.muaKH[r.MaKH]), 'giam'], ['don', 'Số đơn', soCua(r => soDon[r.MaKH]), 'giam'],
+        ['ten', 'Tên', r => r.TenKH, 'tang']],
       cols: [
         { t: 'Khách hàng', cls: 'wrap', f: r => `<b>${esc(r.TenKH)}</b><span class="sub">${esc(r.MaKH)} · ${esc(r.SDT)}</span>` },
         { t: 'Số đơn', cls: 'num', f: r => soDon[r.MaKH] || 0 },
@@ -1124,7 +1151,7 @@ function vCongNo(el) {
         { id: 'don', t: 'Gắn đơn hàng', options: [['', 'Có hoặc không gắn đơn'], ['co', 'Thu theo đơn hàng'], ['khong', 'Không gắn đơn (trả trước, nợ cũ)']] },
         locGiaTri('nguoi', 'Mọi người thu', S.thuTien.map(r => r.NguoiTao)), { id: 'ngay', type: 'dates' }],
       filter: (r, f) => (!f.ht || r.HinhThuc === f.ht) && (!f.don || (f.don === 'co') === !!r.SoDH) && (!f.nguoi || r.NguoiTao === f.nguoi) && inRange(r.Ngay, f, 'ngay'),
-      sorts: SX_NGAY.concat([['tienGiam', 'Số tiền cao → thấp', giam(r => r.SoTien)], ['tienTang', 'Số tiền thấp → cao', tang(r => r.SoTien)], ['kh', 'Khách hàng A → Z', az(r => r.TenKH)]]),
+      sorts: [TC_NGAY, ['tien', 'Số tiền', soCua(r => r.SoTien), 'giam'], ['kh', 'Khách hàng', r => r.TenKH, 'tang']],
       cols: [
         { t: 'Số phiếu', k: 'SoPT', cls: 'code' }, { t: 'Ngày', f: r => dmy(r.Ngay) },
         { t: 'Khách hàng', cls: 'wrap', f: r => `${esc(r.TenKH)}<span class="sub">${esc(r.GhiChu)}</span>` },
@@ -1205,8 +1232,8 @@ function vKhach(el) {
     id: 'khach', ph: 'Tìm mã, tên, SĐT, địa chỉ…',
     filters: [{ id: 'loc', options: [['', 'Tất cả khách hàng'], ['no', 'Còn nợ'], ['mua', 'Đã có đơn hàng'], ['chua', 'Chưa mua lần nào'], ['dn', 'Doanh nghiệp (có MST)'], ['le', 'Cá nhân (không MST)']] }],
     filter: (r, f) => !f.loc || ({ no: () => (D.noKH[r.MaKH] || 0) > 0, mua: () => !!D.muaKH[r.MaKH], chua: () => !D.muaKH[r.MaKH], dn: () => !!String(r.MST || '').trim(), le: () => !String(r.MST || '').trim() })[f.loc](),
-    sorts: [['moi', 'Mới thêm nhất', (a, b) => az(r => r.MaKH)(b, a)], ['cu', 'Thêm lâu nhất', az(r => r.MaKH)], ['ten', 'Tên A → Z', az(r => r.TenKH)],
-      ['no', 'Còn nợ nhiều nhất', giam(r => D.noKH[r.MaKH])], ['mua', 'Mua nhiều nhất', giam(r => D.muaKH[r.MaKH])]],
+    sorts: [['moi', 'Ngày thêm', r => r.MaKH, 'giam'], ['ten', 'Tên', r => r.TenKH, 'tang'], ['no', 'Còn nợ', soCua(r => D.noKH[r.MaKH]), 'giam'],
+      ['mua', 'Đã mua', soCua(r => D.muaKH[r.MaKH]), 'giam']],
     cols: [
       { t: 'Mã KH', k: 'MaKH', cls: 'code' },
       { t: 'Khách hàng', cls: 'wrap', f: r => `<b>${esc(r.TenKH)}</b>${r.NguoiLienHe ? `<span class="sub">${esc(r.NguoiLienHe)}</span>` : ''}` },
@@ -1383,8 +1410,7 @@ function vHang(el) {
       chua: () => r.GiaSi === '' && r.GiaLe === '', con: () => tonOf(r.MaHH) > 0, it: () => isLow(r) || (S.ton[r.MaHH] && tonOf(r.MaHH) <= 0),
       baoHanh: () => r.BaoHanh === '' || r.BaoHanh == null ? +S.congTy.baoHanhThang > 0 : +r.BaoHanh > 0, khongBH: () => r.BaoHanh === '' || r.BaoHanh == null ? !(+S.congTy.baoHanhThang > 0) : !(+r.BaoHanh > 0),
     })[f.gia]()),
-    sorts: [['ma', 'Mã hàng', az(r => r.MaHH)], ['ten', 'Tên A → Z', az(r => r.TenHang)], ['giaGiam', 'Giá lẻ cao → thấp', giam(r => r.GiaLe)], ['giaTang', 'Giá lẻ thấp → cao', tang(r => r.GiaLe)],
-      ['tonGiam', 'Tồn nhiều → ít', giam(r => tonOf(r.MaHH))], ['tonTang', 'Tồn ít → nhiều', tang(r => tonOf(r.MaHH))]],
+    sorts: [['ma', 'Mã hàng', r => r.MaHH, 'tang'], ['ten', 'Tên', r => r.TenHang, 'tang'], ['gia', 'Giá lẻ', soCua(r => r.GiaLe), 'giam'], ['ton', 'Tồn', soCua(r => tonOf(r.MaHH)), 'giam']],
     cols: [
       { t: 'Mã', k: 'MaHH', cls: 'code' },
       { t: 'Tên hàng', cls: 'wrap', f: r => `<b>${esc(r.TenHang)}</b><span class="sub">${esc([r.Model, r.XuatXu].filter(Boolean).join(' · '))}</span>` },
@@ -1461,8 +1487,8 @@ function vTon(el) {
     filter: (r, f) => (!f.nhom || r.NhomHang === f.nhom) && (!f.loc || ({
       ps: () => !!S.ton[r.MaHH], con: () => tonOf(r.MaHH) > 0, it: () => isLow(r) || (S.ton[r.MaHH] && tonOf(r.MaHH) <= 0), het: () => !!S.ton[r.MaHH] && tonOf(r.MaHH) <= 0,
     })[f.loc]()),
-    sorts: [['ma', 'Mã hàng', az(r => r.MaHH)], ['tonTang', 'Tồn ít → nhiều', tang(r => tonOf(r.MaHH))], ['tonGiam', 'Tồn nhiều → ít', giam(r => tonOf(r.MaHH))],
-      ['xuat', 'Xuất nhiều nhất (bán chạy)', giam(r => S.ton[r.MaHH] && S.ton[r.MaHH].xuat)], ['nhap', 'Nhập nhiều nhất', giam(r => S.ton[r.MaHH] && S.ton[r.MaHH].nhap)], ['ten', 'Tên A → Z', az(r => r.TenHang)]],
+    sorts: [['ma', 'Mã hàng', r => r.MaHH, 'tang'], ['ton', 'Tồn', soCua(r => tonOf(r.MaHH)), 'tang'], ['xuat', 'Đã xuất (bán chạy)', soCua(r => S.ton[r.MaHH] && S.ton[r.MaHH].xuat), 'giam'],
+      ['nhap', 'Đã nhập', soCua(r => S.ton[r.MaHH] && S.ton[r.MaHH].nhap), 'giam'], ['ten', 'Tên', r => r.TenHang, 'tang']],
     cols: [
       { t: 'Mã', k: 'MaHH', cls: 'code' },
       { t: 'Tên hàng', cls: 'wrap', f: r => `<b>${esc(r.TenHang)}</b><span class="sub">${esc([r.Model, r.NhomHang].filter(Boolean).join(' · '))}</span>` },
@@ -1486,7 +1512,7 @@ function vKho(el) {
       locGiaTri('doiTac', 'Mọi đối tác', S.phieuKho.map(r => r.DoiTac)), locGiaTri('nguoi', 'Mọi người lập', S.phieuKho.map(r => r.NguoiTao)), { id: 'ngay', type: 'dates' }],
     filter: (r, f) => (!f.loai || (f.loai === 'giao' ? r.Loai === 'Xuất' && !!r.SoDH : f.loai === 'xuatLe' ? r.Loai === 'Xuất' && !r.SoDH : r.Loai === f.loai))
       && (!f.doiTac || r.DoiTac === f.doiTac) && (!f.nguoi || r.NguoiTao === f.nguoi) && inRange(r.Ngay, f, 'ngay'),
-    sorts: SX_NGAY.concat([['slTang', 'Số lượng thấp → cao', tang(r => r.SoLuong)], ['slGiam', 'Số lượng cao → thấp', giam(r => r.SoLuong)], ['doiTac', 'Đối tác A → Z', az(r => r.DoiTac)]]),
+    sorts: [TC_NGAY, ['sl', 'Số lượng', soCua(r => r.SoLuong), 'giam'], ['doiTac', 'Đối tác', r => r.DoiTac, 'tang']],
     cols: [
       { t: 'Số phiếu', k: 'SoPK', cls: 'code' }, { t: 'Ngày', f: r => dmy(r.Ngay) },
       { t: 'Loại', f: r => r.Loai === 'Nhập' ? badge('Nhập kho', 'b-green') : badge(r.SoDH ? 'Giao hàng' : 'Xuất kho', 'b-blue') },
@@ -2027,8 +2053,7 @@ function vHopDong(el) {
     filter: (r, f) => (!f.loai || r.LoaiHD === f.loai) && inRange(r.Ngay, f, 'ngay') && (!f.nguoi || r.NguoiPhuTrach === f.nguoi)
       && (!f.tt || (f.tt === 'sap' ? !!(hanHD(r) || {}).sap : f.tt === 'het' ? !!(hanHD(r) || {}).het : r.TrangThai === f.tt))
       && (!f.file || ({ co: () => !!r.FileId, chua: () => !r.FileId, cu: () => !!r.FileId && String(r.FileCu) === '1', ky: () => !!r.KyFileId })[f.file]()),
-    sorts: [['moi', 'Ký mới nhất trước', byDate], ['cu', 'Ký cũ nhất trước', cuTruoc], ['tienGiam', 'Giá trị cao → thấp', giam(r => r.TongCong)], ['tienTang', 'Giá trị thấp → cao', tang(r => r.TongCong)],
-      ['het', 'Hết hạn sớm nhất', ngaySom(r => r.NgayHetHan)], ['kh', 'Khách hàng A → Z', az(r => r.TenDN)]],
+    sorts: [['ngay', 'Ngày ký', TC_NGAY[2], 'giam'], ['tien', 'Giá trị', soCua(r => r.TongCong), 'giam'], ['het', 'Hết hạn', r => r.NgayHetHan, 'tang'], ['kh', 'Khách hàng', r => r.TenDN, 'tang']],
     cols: [
       { t: 'Số hợp đồng', f: r => `<span class="code">${esc(r.SoHD)}</span><span class="sub">Ký ${dmy(r.Ngay)}${r.FileId ? ' · có file' : ''}</span>` },
       { t: 'Khách hàng (bên A)', cls: 'wrap', f: r => `<b>${esc(r.TenDN)}</b><span class="sub">${esc([r.NguoiDaiDien, r.SDT].filter(Boolean).join(' · '))}</span>` },
@@ -2051,8 +2076,7 @@ function vHDHan(el) {
     filters: [{ id: 'loc', options: [['', 'Sắp hết hạn và đã hết hạn'], ['sap', `Sắp hết hạn (trong ${HD_SAP} ngày)`], ['het', 'Đã hết hạn']] },
       { id: 'gh', t: 'Gia hạn', options: [['', 'Có hoặc không tự gia hạn'], ['tu', 'Tự động gia hạn'], ['khong', 'Không tự gia hạn']] }],
     filter: (r, f) => { const x = hanHD(r); return !!x && (!f.loc || !!x[f.loc]) && (!f.gh || (f.gh === 'tu') === (r.TuGiaHan === '1')); },
-    sorts: [['het', 'Hết hạn sớm nhất', ngaySom(r => r.NgayHetHan)], ['muon', 'Hết hạn muộn nhất', (a, b) => ngaySom(r => r.NgayHetHan)(b, a)],
-      ['tienGiam', 'Giá trị cao → thấp', giam(r => r.TongCong)], ['kh', 'Khách hàng A → Z', az(r => r.TenDN)]],
+    sorts: [['het', 'Hết hạn', r => r.NgayHetHan, 'tang'], ['tien', 'Giá trị', soCua(r => r.TongCong), 'giam'], ['kh', 'Khách hàng', r => r.TenDN, 'tang']],
     cols: [
       { t: 'Số hợp đồng', k: 'SoHD', cls: 'code' },
       { t: 'Khách hàng (bên A)', cls: 'wrap', f: r => `<b>${esc(r.TenDN)}</b><span class="sub">${esc([r.NguoiDaiDien, r.SDT].filter(Boolean).join(' · '))}</span>` },
@@ -2287,8 +2311,7 @@ function vHDLich(el) {
     id: 'hdlich', ph: 'Tìm số hợp đồng, khách hàng, nội dung đợt…',
     filters: [{ id: 'loc', def: 'can', options: [['can', 'Quá hạn và đến hạn 7 ngày'], ['quahan', 'Quá hạn'], ['chua', 'Tất cả chưa thu'], ['thu', 'Đã thu'], ['', 'Tất cả']] }, { id: 'ngay', type: 'dates' }],
     filter: (r, f) => (!f.loc || (f.loc === 'can' ? ['quahan', 'sap'].includes(trangThaiDot(r)) : f.loc === 'chua' ? !r.SoPT : trangThaiDot(r) === f.loc)) && inRange(r.NgayDen, f, 'ngay'),
-    sorts: [['han', 'Hạn sớm nhất', ngaySom(r => r.NgayDen)], ['muon', 'Hạn muộn nhất', (a, b) => ngaySom(r => r.NgayDen)(b, a)],
-      ['tienGiam', 'Số tiền cao → thấp', giam(r => r.SoTien)], ['tienTang', 'Số tiền thấp → cao', tang(r => r.SoTien)], ['hd', 'Theo hợp đồng', az(r => r.SoHD)]],
+    sorts: [['han', 'Hạn', r => r.NgayDen, 'tang'], ['tien', 'Số tiền', soCua(r => r.SoTien), 'giam'], ['hd', 'Số hợp đồng', r => r.SoHD, 'tang']],
     cols: [
       { t: 'Hạn', f: r => dmy(r.NgayDen) },
       { t: 'Hợp đồng', cls: 'wrap', f: r => `<span class="code">${esc(r.SoHD)}</span><span class="sub">${esc((hd[r.SoHD] || {}).TenDN)}</span>` },
@@ -2726,8 +2749,8 @@ function vBaoHanh(el) {
       { id: 'imei', t: 'IMEI', options: [['', 'Có hoặc không ghi IMEI'], ['co', 'Có IMEI / serial'], ['khong', 'Không ghi mã']] }, { id: 'ngay', type: 'dates' }],
     filter: (r, f) => (!f.tt || (f.tt === 'sap' ? !!r.HetHan && r.HetHan >= now && conLai(r) <= 30 : (f.tt === 'con') === (!!r.HetHan && r.HetHan >= now)))
       && (!f.imei || (f.imei === 'co') === !!r.IMEI) && inRange(r.Ngay, f, 'ngay'),
-    sorts: [['moi', 'Giao mới nhất trước', byDate], ['cu', 'Giao cũ nhất trước', cuTruoc], ['het', 'Sắp hết bảo hành trước', ngaySom(r => r.HetHan && r.HetHan >= now ? r.HetHan : '')],
-      ['kh', 'Khách hàng A → Z', az(r => r.TenKH)], ['hang', 'Hàng hóa A → Z', az(r => r.TenHang)]],
+    sorts: [['ngay', 'Ngày giao', TC_NGAY[2], 'giam'], ['het', 'Hạn bảo hành (còn hạn)', r => r.HetHan && r.HetHan >= now ? r.HetHan : '', 'tang'],
+      ['kh', 'Khách hàng', r => r.TenKH, 'tang'], ['hang', 'Hàng hóa', r => r.TenHang, 'tang']],
     cols: [
       { t: 'Ngày giao', f: r => dmy(r.Ngay) },
       { t: 'Khách hàng', cls: 'wrap', f: r => `<b>${esc(r.TenKH)}</b><span class="sub">${esc(r.SDT)}</span>` },
@@ -2859,7 +2882,7 @@ function vNhatKy(el) {
       { id: 'loai', t: 'Thao tác', options: [['', 'Mọi thao tác'], ['Thêm', 'Thêm'], ['Sửa', 'Sửa'], ['Xóa', 'Xóa'], ['Hủy', 'Hủy'], ['khac', 'Khác (đăng nhập, tạo file…)']] }, { id: 'ngay', type: 'dates' }],
     filter: (r, f) => inRange(String(r.ThoiGian).slice(0, 10), f, 'ngay') && (!f.nguoi || r.NguoiDung === f.nguoi)
       && (!f.loai || (f.loai === 'khac' ? !/^(Thêm|Sửa|Xóa|Hủy)\b/.test(r.HanhDong) : String(r.HanhDong).indexOf(f.loai) === 0)),
-    sorts: [['moi', 'Mới nhất trước', (a, b) => String(b.ThoiGian).localeCompare(String(a.ThoiGian))], ['cu', 'Cũ nhất trước', (a, b) => String(a.ThoiGian).localeCompare(String(b.ThoiGian))]],
+    sorts: [['tg', 'Thời gian', r => r.ThoiGian, 'giam']],
     cols: [
       { t: 'Thời gian', f: r => `${dmy(r.ThoiGian)} ${esc(String(r.ThoiGian).slice(11, 16))}` }, { t: 'Người dùng', k: 'NguoiDung' },
       { t: 'Thao tác', f: r => `<b>${esc(r.HanhDong)}</b>` }, { t: 'Đối tượng', k: 'DoiTuong', cls: 'code' },
@@ -2883,7 +2906,7 @@ function vTaiKhoan(el) {
     id: 'taikhoan', ph: 'Tìm tài khoản…',
     filters: [{ id: 'vt', t: 'Vai trò', options: [['', 'Mọi vai trò'], ['admin', 'Quản trị'], ['nhanvien', 'Nhân viên']] }, { id: 'tt', t: 'Trạng thái', options: [['', 'Mọi trạng thái'], ['Hoạt động', 'Đang hoạt động'], ['Khóa', 'Đã khóa']] }],
     filter: (r, f) => (!f.vt || r.VaiTro === f.vt) && (!f.tt || (r.TrangThai === 'Khóa' ? 'Khóa' : 'Hoạt động') === f.tt),
-    sorts: [['ten', 'Tên đăng nhập A → Z', az(r => r.TenDangNhap)], ['moi', 'Tạo mới nhất', (a, b) => String(b.NgayTao).localeCompare(String(a.NgayTao))], ['hoTen', 'Họ tên A → Z', az(r => r.HoTen)]],
+    sorts: [['ten', 'Tên đăng nhập', r => r.TenDangNhap, 'tang'], ['moi', 'Ngày tạo', r => r.NgayTao, 'giam'], ['hoTen', 'Họ tên', r => r.HoTen, 'tang']],
     cols: [
       { t: 'Tên đăng nhập', k: 'TenDangNhap', cls: 'code' }, { t: 'Họ tên', k: 'HoTen' },
       { t: 'Vai trò', f: r => r.VaiTro === 'admin' ? badge('Quản trị', 'b-violet') : badge('Nhân viên', 'b-blue') },
@@ -2903,8 +2926,7 @@ function vThietBi(el) {
     id: 'thietbi', ph: 'Tìm tài khoản, tên máy…',
     filters: [{ id: 'tb', t: 'Thông báo', options: [['', 'Bật hoặc tắt thông báo'], ['bat', 'Đang bật thông báo'], ['tat', 'Tắt thông báo']] }],
     filter: (r, f) => !f.tb || (f.tb === 'bat') === !!r.thongBao,
-    sorts: [['gan', 'Dùng gần nhất', (a, b) => String(b.LanCuoi).localeCompare(String(a.LanCuoi))], ['lau', 'Lâu không dùng nhất', (a, b) => String(a.LanCuoi).localeCompare(String(b.LanCuoi))],
-      ['moi', 'Đăng nhập mới nhất', (a, b) => String(b.NgayTao).localeCompare(String(a.NgayTao))], ['tk', 'Tài khoản A → Z', az(r => r.TenDangNhap)]],
+    sorts: [['dung', 'Lần dùng', r => r.LanCuoi, 'giam'], ['moi', 'Ngày đăng nhập', r => r.NgayTao, 'giam'], ['tk', 'Tài khoản', r => r.TenDangNhap, 'tang']],
     cols: [
       { t: 'Tài khoản', k: 'TenDangNhap', cls: 'code' }, { t: 'Tên máy', f: r => `<b>${esc(r.TenMay)}</b>` },
       { t: 'Đăng nhập lúc', f: r => `${dmy(r.NgayTao)} ${esc(String(r.NgayTao).slice(11, 16))}` },

@@ -250,9 +250,26 @@ function noKhach_() {
 }
 
 /**
+ * Sắp ds theo tiêu chí bang[sx] = [khoá(r), chiều mặc định]; chieu: 'giam' lớn trước (mới trước, Z → A), 'tang' nhỏ trước, không gửi thì theo chiều mặc định.
+ * Khoá là số, hoặc chữ / ngày (so theo tiếng Việt). Khoá trống luôn xếp cuối dù đảo chiều. Bằng nhau thì theo phu(a, b) (không đảo chiều).
+ */
+function sapXep_(ds, bang, sx, chieu, phu) {
+  const tc = bang[sx];
+  if (!tc) return ds;
+  const khoa = tc[0], dau = (chieu === 'giam' || chieu === 'tang' ? chieu : tc[1]) === 'giam' ? -1 : 1;
+  const trong = v => v === '' || v == null;
+  return ds.sort((a, b) => {
+    const x = khoa(a), y = khoa(b);
+    if (trong(x) || trong(y)) return (trong(x) - trong(y)) || (phu ? phu(a, b) : 0);
+    const d = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'vi');
+    return dau * d || (phu ? phu(a, b) : 0);
+  });
+}
+
+/**
  * Tìm khách theo tên (không cần dấu), số điện thoại hoặc mã. Tối đa 50 khách.
- * o.loc: 'no' còn nợ, 'mua' đã mua, 'chua' chưa mua; o.sx: 'gan' mua gần đây, 'ten' tên A → Z, 'no' nợ nhiều nhất, 'moi' mới thêm.
- * Không gửi o.sx (bản app cũ): có chữ tìm thì theo tên, không có thì mua gần đây.
+ * o.loc: 'no' còn nợ, 'mua' đã mua, 'chua' chưa mua; o.sx: 'gan' lần mua cuối (mặc định gần nhất trước), 'ten' tên (A → Z), 'no' nợ (nhiều trước), 'moi' ngày thêm (mới trước);
+ * o.chieu: 'giam' / 'tang' để đảo chiều. Không gửi o.sx (bản app cũ): có chữ tìm thì theo tên, không có thì mua gần đây.
  */
 function dsKhachMay(token, q, o) {
   user_(token);
@@ -263,12 +280,10 @@ function dsKhachMay(token, q, o) {
   if (raw) ds = ds.filter(k => laSo ? so.length >= 3 && k.SDT.replace(/\D/g, '').indexOf(so) >= 0 : boDau_(k.TenKH).indexOf(chu) >= 0 || String(k.MaKH).toLowerCase() === chu);
   const loc = { no: k => k.no > 0, mua: k => !!k.muaCuoi, chua: k => !k.muaCuoi }[o.loc];
   if (loc) ds = ds.filter(loc);
-  const ten = (a, b) => String(a.TenKH).localeCompare(String(b.TenKH), 'vi');
-  const SX = {
-    gan: (a, b) => b.muaCuoi.localeCompare(a.muaCuoi) || b.NgayTao.localeCompare(a.NgayTao), ten: ten,
-    no: (a, b) => b.no - a.no || ten(a, b), moi: (a, b) => b.NgayTao.localeCompare(a.NgayTao) || String(b.MaKH).localeCompare(String(a.MaKH)),
-  };
-  ds.sort(SX[o.sx] || (raw ? SX.ten : SX.gan));
+  const ten = (a, b) => String(a.TenKH).localeCompare(String(b.TenKH), 'vi'), moiThem = (a, b) => b.NgayTao.localeCompare(a.NgayTao) || String(b.MaKH).localeCompare(String(a.MaKH));
+  const SX = { gan: [k => k.muaCuoi, 'giam'], ten: [k => String(k.TenKH), 'tang'], no: [k => k.no, 'giam'], moi: [k => k.NgayTao, 'giam'] };
+  const sx = SX[o.sx] ? o.sx : raw ? 'ten' : 'gan';
+  sapXep_(ds, SX, sx, o.chieu, sx === 'no' ? ten : sx === 'moi' ? (a, b) => String(b.MaKH).localeCompare(String(a.MaKH)) : moiThem);
   return { tong: ds.length, ds: ds.slice(0, 50) };
 }
 
@@ -372,7 +387,8 @@ function banNhanh(token, o) {
 // ===== Hợp đồng =====
 /**
  * Danh sách hợp đồng, tìm theo số hợp đồng / tên bên A / số điện thoại. File PDF tải bằng taiPdfHopDong.
- * o.loc: 'hieuLuc', 'sap' sắp hết hạn, 'het' đã hết hạn, 'nhap' soạn thảo, 'coFile'; o.sx: 'moi' (mặc định), 'cu', 'giaTri' cao trước, 'hetHan' hết hạn sớm trước.
+ * o.loc: 'hieuLuc', 'sap' sắp hết hạn, 'het' đã hết hạn, 'nhap' soạn thảo, 'coFile'; o.sx: 'ngay' (mặc định, mới trước), 'giaTri' (cao trước), 'hetHan' (sớm trước, không có ngày hết hạn xếp cuối);
+ * o.chieu: 'giam' / 'tang' để đảo chiều. Bản app cũ gửi 'moi' / 'cu' = ngày mới / cũ trước.
  */
 function dsHopDongMay(token, q, o) {
   user_(token);
@@ -386,10 +402,9 @@ function dsHopDongMay(token, q, o) {
   }[o.loc];
   if (loc) ds = ds.filter(loc);
   const moi = (a, b) => String(b.Ngay + b.SoHD).localeCompare(String(a.Ngay + a.SoHD));
-  ds.sort({
-    moi: moi, cu: (a, b) => moi(b, a), giaTri: (a, b) => (+b.TongCong || 0) - (+a.TongCong || 0) || moi(a, b),
-    hetHan: (a, b) => String(a.NgayHetHan || '9999').localeCompare(String(b.NgayHetHan || '9999')) || moi(a, b),
-  }[o.sx] || moi);
+  const SX = { ngay: [h => String(h.Ngay + h.SoHD), 'giam'], giaTri: [h => +h.TongCong || 0, 'giam'], hetHan: [h => String(h.NgayHetHan || ''), 'tang'] };
+  const cu = { moi: ['ngay', 'giam'], cu: ['ngay', 'tang'] }[o.sx];
+  sapXep_(ds, SX, cu ? cu[0] : SX[o.sx] ? o.sx : 'ngay', cu ? cu[1] : o.chieu, moi);
   return { tong: ds.length, ds: ds.slice(0, 50).map(h => ({ SoHD: h.SoHD, Ngay: h.Ngay, LoaiHD: h.LoaiHD, TenDN: h.TenDN, MaKH: h.MaKH || '', SDT: String(h.SDT || ''),
     TongCong: +h.TongCong || 0, NgayHetHan: h.NgayHetHan || '', TrangThai: h.TrangThai || '', coFile: !!h.FileId, fileCu: h.FileCu === '1' || h.FileCu === 1 })) };
 }

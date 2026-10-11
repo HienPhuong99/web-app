@@ -6,9 +6,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../lib/auth';
 import type { HangKho, MaKho } from '../lib/api';
 import { ngay, tien } from '../lib/dinhDang';
-import { LOC_KHO, SX_KHO, demKho, locKho, sapHet, type LocKho, type SxKho } from '../lib/locDs';
+import { LOC_KHO, SX_KHO, demKho, locKho, sapHet, sxMacDinh, type LocKho, type SxKho } from '../lib/locDs';
 import { chuanHoaMa } from '../lib/maQuet';
-import { BoLoc } from '../ui/BoLoc';
+import { BoLoc, BoSapXep } from '../ui/BoLoc';
 import { ChuLoi, ChuNhat, Dong, DongTT, KhungTrang, Nhan, OTim, Vach } from '../ui/DanhSach';
 import { DauTrang } from '../ui/DauTrang';
 import { HangLayMa } from '../ui/KhungQuet';
@@ -18,7 +18,7 @@ import { mau } from '../ui/theme';
 export default function KhoMan() {
   const { goi } = useAuth();
   const [hang, setHang] = useState<HangKho[] | null>(null), [loi, setLoi] = useState(''), [dangTai, setDangTai] = useState(false);
-  const [q, setQ] = useState(''), [loc, setLoc] = useState<LocKho>('tat'), [sx, setSx] = useState<SxKho>('ten');
+  const [q, setQ] = useState(''), [loc, setLoc] = useState<LocKho>('tat'), [sx, setSx] = useState<SxKho>(sxMacDinh(SX_KHO));
 
   const tai = useCallback(async () => {
     setDangTai(true);
@@ -35,7 +35,7 @@ export default function KhoMan() {
       <KiemTraIMEI />
       <OTim value={q} onChangeText={setQ} placeholder="Tìm hàng theo tên, mã, model" testID="o-tim-kho" />
       <BoLoc ds={LOC_KHO} chon={loc} onChon={setLoc} dem={v => demKho(hang ?? [], v)} testID="loc-kho" />
-      <BoLoc ds={SX_KHO} chon={sx} onChon={setSx} sapXep testID="sx-kho" />
+      <BoSapXep ds={SX_KHO} chon={sx} onChon={setSx} testID="sx-kho" />
       <View style={{ height: 12 }} />
       <ChuLoi chu={loi} />
       {!hang && !loi ? <ChuNhat chu="Đang tải…" /> : null}

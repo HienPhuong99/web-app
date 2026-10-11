@@ -275,6 +275,13 @@ const theoNo = khLoc('', { sx: 'no' }).map(k => k.no);
 assert.deepStrictEqual(theoNo, theoNo.slice().sort((a, b) => b - a));
 assert.deepStrictEqual(khLoc('chi', { sx: 'no' }).map(k => k.TenKH), ['Chị Mai', 'Chị Hoa']); // tìm + sắp xếp cùng lúc
 assert.strictEqual(khLoc('', { sx: 'moi' })[0].MaKH, tatCa.map(k => k.MaKH).sort().pop()); // khách mới thêm nhất
+// Đảo chiều (app mới gửi thêm o.chieu)
+assert.deepStrictEqual(khLoc('', { sx: 'ten', chieu: 'giam' }).map(k => k.TenKH), theoTen.slice().reverse());
+assert.deepStrictEqual(khLoc('', { sx: 'no', chieu: 'tang' }).map(k => k.no), theoNo.slice().sort((a, b) => a - b));
+assert.deepStrictEqual(khLoc('chi', { sx: 'no', chieu: 'tang' }).map(k => k.TenKH), ['Chị Hoa', 'Chị Mai']);
+assert.deepStrictEqual(khLoc('', { sx: 'ten', chieu: 'la' }).map(k => k.TenKH), theoTen); // chiều lạ: như không gửi
+const muaCu = khLoc('', { sx: 'gan', chieu: 'tang' });
+assert.ok(muaCu[0].muaCuoi && muaCu[0].muaCuoi <= tatCa[0].muaCuoi && !muaCu[muaCu.length - 1].muaCuoi); // mua lâu nhất trước, chưa mua vẫn xếp cuối
 assert.deepStrictEqual(khLoc('', { loc: 'la', sx: 'la' }).map(k => k.MaKH), tatCa.map(k => k.MaKH)); // giá trị lạ: như không lọc
 assert.strictEqual(goi(binh, 'dsKhachMay', 'chi', { loc: 'no' }).tong, 1); // tổng tính sau khi lọc
 
@@ -296,6 +303,11 @@ assert.deepStrictEqual(hdLoc({}), ['002', '001', '005', '004', '003']);
 assert.deepStrictEqual(hdLoc({ sx: 'cu' }), ['003', '004', '005', '001', '002']);
 assert.deepStrictEqual(hdLoc({ sx: 'giaTri' }), ['003', '001', '005', '004', '002']);
 assert.deepStrictEqual(hdLoc({ sx: 'hetHan' }), ['003', '004', '005', '002', '001']); // không có ngày hết hạn: xếp cuối
+// App mới: tiêu chí + chiều; 'moi' / 'cu' của bản app cũ vẫn chạy
+assert.deepStrictEqual(hdLoc({ sx: 'ngay' }), hdLoc({}));
+assert.deepStrictEqual(hdLoc({ sx: 'ngay', chieu: 'tang' }), hdLoc({ sx: 'cu' }));
+assert.deepStrictEqual(hdLoc({ sx: 'giaTri', chieu: 'tang' }), ['002', '004', '005', '001', '003']);
+assert.deepStrictEqual(hdLoc({ sx: 'hetHan', chieu: 'giam' }), ['005', '004', '003', '002', '001']); // đảo chiều: không có ngày hết hạn vẫn xếp cuối
 assert.deepStrictEqual([hdLoc({ loc: 'het' }), hdLoc({ loc: 'sap' }), hdLoc({ loc: 'hieuLuc' }), hdLoc({ loc: 'coFile' })], [['003'], ['004'], ['005', '004', '003'], ['002']]);
 assert.deepStrictEqual(hdLoc({ loc: 'nhap' }), []);
 assert.strictEqual(goi(binh, 'dsHopDongMay', 'cong ty', { loc: 'het' }).tong, 1);
