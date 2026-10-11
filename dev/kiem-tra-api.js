@@ -598,6 +598,36 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   assert.throws(() => goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0001', SoLuong: 1 }] }), /Đơn đã hủy/);
 }
 
+// Khách trả hàng của đơn mới giao một phần: phần chưa giao chỉ bớt khỏi đơn (không nhập kho), máy đã giao kèm IMEI phải ghi IMEI
+{
+  const t = G.dangNhap('admin', adminPass).token, kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Giao Dở', SDT: '0966000555' });
+  const op = G.luuHang(t, { TenHang: 'Ốp lưng thử trả hàng', DVT: 'Cái', GiaLe: 150000 });
+  G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'NCC', lines: [{ MaHH: op.MaHH, TenHang: op.TenHang, SoLuong: 10 },
+    { MaHH: 'HH0001', TenHang: 'iPhone 16 Pro Max 256GB - Titan Đen', SoLuong: 2, IMEI: '357000000000037, 357000000000045' }] });
+  const d = G.luuChungTu(t, 'DH', { Ngay: today, MaKH: kh.MaKH, TenKH: kh.TenKH, lines: [{ MaHH: op.MaHH, TenHang: op.TenHang, SoLuong: 3, DonGia: 150000 },
+    { MaHH: 'HH0001', TenHang: 'iPhone 16 Pro Max 256GB - Titan Đen', SoLuong: 2, DonGia: 28000000 }] }).doc;
+  G.luuChungTu(t, 'XK', { Ngay: today, SoDH: d.SoDH, DoiTac: kh.TenKH, lines: [{ MaHH: op.MaHH, TenHang: op.TenHang, SoLuong: 1 },
+    { MaHH: 'HH0001', TenHang: 'iPhone 16 Pro Max 256GB - Titan Đen', SoLuong: 1, IMEI: '357000000000037' }] });
+  const ton = ma => { const x = G.tonKho_()[ma]; return x.nhap - x.xuat; };
+  const tonOp = ton(op.MaHH), ton16 = ton('HH0001');
+  // 2 ốp chưa giao: chỉ bớt khỏi đơn, kho không đổi
+  let r = goi(binh4, 'traHang', { SoDH: d.SoDH, lines: [{ MaHH: op.MaHH, SoLuong: 2 }] });
+  assert.deepStrictEqual([r.SoPK, ton(op.MaHH), r.TrangThai], ['', tonOp, 'Giao một phần']);
+  // iPhone đã giao kèm IMEI: trả theo số lượng thì phải ghi IMEI (máy còn lại của dòng chưa giao nên trả 1 cái được, không nhập kho)
+  r = goi(binh4, 'traHang', { SoDH: d.SoDH, lines: [{ MaHH: 'HH0001', SoLuong: 1 }] });
+  assert.deepStrictEqual([r.SoPK, ton('HH0001')], ['', ton16]);
+  assert.throws(() => goi(binh4, 'traHang', { SoDH: d.SoDH, lines: [{ MaHH: 'HH0001', SoLuong: 1 }] }), /ghi IMEI\/serial của máy khách trả/);
+  assert.throws(() => goi(binh4, 'traHang', { SoDH: d.SoDH, lines: [{ MaHH: 'HH0001', IMEI: '357000000000045' }] }), /không có trong các lần giao/); // máy còn trong kho
+  assert.throws(() => goi(binh4, 'traHang', { SoDH: d.SoDH, lines: [{ MaHH: op.MaHH, IMEI: '357000000000037' }] }), /là máy iPhone/);
+  // Trả iPhone có IMEI: nhập lại kho (phiếu nhập ghi số đơn), đơn còn 1 ốp đã giao → "Đã giao"
+  r = goi(binh4, 'traHang', { SoDH: d.SoDH, lines: [{ MaHH: 'HH0001', IMEI: '357000000000037' }] });
+  assert.deepStrictEqual([!!r.SoPK, ton('HH0001'), r.TrangThai, G.findObj_('PhieuKho', r.SoPK).SoDH], [true, ton16 + 1, 'Đã giao', d.SoDH]);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(G.daGiao_(d.SoDH))), { [op.MaHH]: 1, HH0001: 0 });
+  // Ốp đã giao: nhập lại kho, đơn hết hàng thì hủy
+  r = goi(binh4, 'traHang', { SoDH: d.SoDH, lines: [{ MaHH: op.MaHH, SoLuong: 1 }] });
+  assert.deepStrictEqual([!!r.SoPK, ton(op.MaHH), r.huy], [true, tonOp + 1, true]);
+}
+
 // Phiếu bán hàng PDF để gửi khách; nhắc khách sắp hết bảo hành
 {
   const t = G.dangNhap('admin', adminPass).token, kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Phiếu', SDT: '0966000444' });

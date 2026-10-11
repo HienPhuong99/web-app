@@ -249,7 +249,7 @@ function kiemKho(token, ds, o) {
 // ===== Khách trả hàng =====
 /**
  * Khách trả lại hàng của một đơn. o = { SoDH, lines: [{ MaHH, TenHang, SoLuong, IMEI }], hoan: { SoTien, HinhThuc }, GhiChu, xemTruoc }.
- * Hàng có mã nhập lại kho (phiếu nhập, giá vốn bình quân không đổi); đơn giảm số lượng (trả hết thì hủy đơn) nên doanh thu, công nợ đúng;
+ * Hàng có mã khách đã nhận thì nhập lại kho (phiếu nhập ghi số đơn, giá vốn bình quân không đổi), phần đơn chưa giao chỉ bớt khỏi đơn; đơn giảm số lượng (trả hết thì hủy đơn) nên doanh thu, công nợ đúng;
  * tiền trả lại khách ghi thành phiếu thu âm (sổ quỹ giảm). xemTruoc: chỉ tính tổng mới và số tiền trả lại tối đa, chưa ghi gì.
  */
 function traHang(token, o) {
@@ -262,22 +262,34 @@ function traHang(token, o) {
   const moi = cu.map(l => Object.assign({}, l, { SoLuong: +l.SoLuong || 0 }));
   const tra = (Array.isArray(o.lines) ? o.lines : []).filter(l => l && (+l.SoLuong || imeiList_(l.IMEI).length));
   if (!tra.length) throw new Error('Chọn hàng khách trả.');
-  const xk = new Set(readTable_('PhieuKho').filter(p => p.Loai === 'Xuất' && String(p.SoDH) === String(dh.SoDH)).map(p => p.SoPK));
-  const daGiaoIMEI = [];
-  readTable_('PhieuKhoCT').forEach(l => { if (xk.has(l.SoPK)) imeiList_(l.IMEI).forEach(x => daGiaoIMEI.push(x)); });
-  let imeis = [];
+  // Hàng đang ở chỗ khách theo mặt hàng = đã giao − đã trả về kho; trong đó bao nhiêu máy có IMEI (lần cuối của IMEI là phiếu xuất của đơn này)
+  const pkDon = phieuTheoDon_(dh.SoDH), { kho, daXuat } = imeiTrongKho_(), giu = {};
+  const giuCua = ma => giu[ma] || (giu[ma] = { sl: 0, imei: 0 });
+  readTable_('PhieuKhoCT').forEach(l => { if (pkDon[l.SoPK] && l.MaHH) giuCua(l.MaHH).sl += pkDon[l.SoPK] * (+l.SoLuong || 0); });
+  Object.keys(daXuat).forEach(x => { if (pkDon[daXuat[x].SoPK] === 1 && daXuat[x].MaHH) giuCua(daXuat[x].MaHH).imei++; });
   const nhap = tra.map((t, i) => {
     const im = imeiList_(t.IMEI), sl = im.length || Math.round(+t.SoLuong || 0);
     const l = moi.find(x => (t.MaHH ? x.MaHH === t.MaHH : !x.MaHH && x.TenHang === t.TenHang) && x.SoLuong > 0);
     if (!l) throw new Error('Dòng trả ' + (i + 1) + ': đơn không có ' + (t.TenHang || t.MaHH) + '.');
     if (!(sl > 0) || sl > l.SoLuong) throw new Error('Dòng trả ' + (i + 1) + ': số lượng trả phải từ 1 đến ' + l.SoLuong + '.');
-    const sai = im.find(x => daGiaoIMEI.indexOf(x) < 0);
-    if (sai) throw new Error('IMEI/serial ' + sai + ' không có trong các lần giao của đơn ' + dh.SoDH + '.');
+    if (im.length && !l.MaHH) throw new Error('Dòng trả ' + (i + 1) + ': ' + l.TenHang + ' không phải hàng trong kho, không ghi IMEI/serial.');
+    im.forEach(x => {
+      const c = daXuat[x];
+      if (kho[x] && pkDon[kho[x].SoPK] === -1) throw new Error('IMEI/serial ' + x + ' khách đã trả, đã nhập ở phiếu ' + kho[x].SoPK + '.');
+      if (!c || pkDon[c.SoPK] !== 1) throw new Error('IMEI/serial ' + x + ' không có trong các lần giao của đơn ' + dh.SoDH + ' (hoặc máy đã về kho, đã bán cho khách khác).');
+      if (c.MaHH !== l.MaHH) throw new Error('IMEI/serial ' + x + ' là máy ' + c.TenHang + ', không phải ' + l.TenHang + '.');
+    });
+    // Số trả trước hết bớt phần đơn chưa giao (không nhập kho); phần còn lại là hàng khách đã nhận, nhập lại kho
+    let vaoKho = 0;
+    if (l.MaHH) {
+      const g = giuCua(l.MaHH), dat = moi.filter(x => x.MaHH === l.MaHH).reduce((s, x) => s + x.SoLuong, 0);
+      vaoKho = im.length || Math.max(0, sl - Math.max(0, dat - g.sl));
+      if (!im.length && vaoKho > g.sl - g.imei) throw new Error('Dòng trả ' + (i + 1) + ': ' + l.TenHang + ' đã giao kèm IMEI/serial – ghi IMEI/serial của máy khách trả.');
+      g.sl -= vaoKho; g.imei -= im.length;
+    }
     l.SoLuong -= sl;
-    imeis = imeis.concat(im);
-    return { MaHH: l.MaHH, TenHang: l.TenHang, Model: l.Model, DVT: l.DVT, SoLuong: sl, IMEI: im.join(', ') };
+    return { MaHH: l.MaHH, TenHang: l.TenHang, Model: l.Model, DVT: l.DVT, SoLuong: vaoKho, IMEI: im.join(', '), tra: sl };
   });
-  if (imeis.length) kiemIMEI_('Nhập', '', imeis);
   const conLai = moi.filter(l => l.SoLuong > 0), huy = !conLai.length;
   const cong = conLai.reduce((s, l) => s + Math.round(l.SoLuong * (+l.DonGia || 0)), 0), giam = Math.min(cong, +dh.GiamGia || 0);
   const tongMoi = huy ? 0 : (cong - giam) + Math.round((cong - giam) * (+dh.VAT || 0) / 100);
@@ -287,8 +299,8 @@ function traHang(token, o) {
   const hoan = Math.round(+(o.hoan && o.hoan.SoTien) || 0);
   if (hoan < 0 || hoan > hoanToiDa) throw new Error('Tiền trả lại khách tối đa ' + hoanToiDa + ' đ (đã thu ' + daThu + ' đ, đơn còn ' + tongMoi + ' đ).');
   const ngay = homNay_(), ghiChu = String(o.GhiChu || '').trim().slice(0, 300);
-  const coMa = nhap.filter(l => l.MaHH);
-  const pk = coMa.length ? luuChungTu(token, 'NK', { Ngay: ngay, DoiTac: dh.TenKH, GhiChu: 'Khách trả hàng · đơn ' + dh.SoDH + (ghiChu ? ' · ' + ghiChu : ''), lines: coMa }).doc : null;
+  const coMa = nhap.filter(l => l.MaHH && l.SoLuong > 0).map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, Model: l.Model, DVT: l.DVT, SoLuong: l.SoLuong, IMEI: l.IMEI }));
+  const pk = coMa.length ? luuChungTu(token, 'NK', { Ngay: ngay, SoDH: dh.SoDH, DoiTac: dh.TenKH, GhiChu: 'Khách trả hàng · đơn ' + dh.SoDH + (ghiChu ? ' · ' + ghiChu : ''), lines: coMa }).doc : null;
   const ghiDon = Object.assign({}, dh, huy ? { TrangThai: 'Hủy', GhiChu: [dh.GhiChu, 'Khách trả hết hàng ' + ngay].filter(Boolean).join(' · ') } : {});
   const don = luuChungTu(token, 'DH', Object.assign(ghiDon, { lines: huy ? cu : conLai.map(l => { const x = Object.assign({}, l); delete x.SoDH; return x; }) })).doc;
   let pt = null;
@@ -299,7 +311,7 @@ function traHang(token, o) {
       return p;
     });
   }
-  log_(user, 'Khách trả hàng', dh.SoDH, nhap.map(l => l.TenHang + ' ×' + l.SoLuong + (l.IMEI ? ' (' + l.IMEI + ')' : '')).join(', ') + (hoan ? ' · trả lại ' + hoan + ' đ' : '') + (huy ? ' · hủy đơn' : ''));
+  log_(user, 'Khách trả hàng', dh.SoDH, nhap.map(l => l.TenHang + ' ×' + l.tra + (l.IMEI ? ' (' + l.IMEI + ')' : '')).join(', ') + (hoan ? ' · trả lại ' + hoan + ' đ' : '') + (huy ? ' · hủy đơn' : ''));
   return { SoDH: dh.SoDH, TrangThai: don.TrangThai, TongCong: don.TongCong, SoPK: pk ? pk.SoPK : '', SoPT: pt ? pt.SoPT : '', hoan: hoan, huy: huy };
 }
 

@@ -696,15 +696,29 @@ function capNhatDH_(soDH) {
 }
 
 // Số lượng đã giao theo từng mặt hàng (MaHH, hoặc tên nếu là dòng dịch vụ) của một đơn
+// (trừ hàng khách đã trả về kho theo đơn)
 function daGiao_(soDH) {
-  const pk = new Set(readTable_('PhieuKho').filter(p => p.Loai === 'Xuất' && String(p.SoDH) === String(soDH)).map(p => String(p.SoPK)));
+  const pk = phieuTheoDon_(soDH);
   const da = {};
   readTable_('PhieuKhoCT').forEach(l => {
-    if (!pk.has(String(l.SoPK))) return;
+    if (!pk[l.SoPK]) return;
     const k = l.MaHH || l.TenHang;
-    da[k] = (da[k] || 0) + (+l.SoLuong || 0);
+    da[k] = (da[k] || 0) + pk[l.SoPK] * (+l.SoLuong || 0);
   });
   return da;
+}
+
+// Phiếu kho của một đơn: SoPK → 1 (phiếu xuất giao hàng) hoặc −1 (phiếu nhập khách trả hàng, DichVu.gs traHang).
+// Phiếu trả hàng lập trước khi có cột số đơn ở phiếu nhập thì nhận ra theo ghi chú "Khách trả hàng · đơn …".
+function phieuTheoDon_(soDH) {
+  const kq = {}, so = String(soDH == null ? '' : soDH), cu = 'Khách trả hàng · đơn ' + so;
+  if (!so) return kq;
+  readTable_('PhieuKho').forEach(p => {
+    const gc = String(p.GhiChu || '');
+    if (p.Loai === 'Xuất' && String(p.SoDH) === so) kq[p.SoPK] = 1;
+    else if (p.Loai === 'Nhập' && (String(p.SoDH) === so || (!p.SoDH && (gc === cu || gc.indexOf(cu + ' · ') === 0)))) kq[p.SoPK] = -1;
+  });
+  return kq;
 }
 
 // ===== Kho =====
