@@ -64,7 +64,7 @@ const NGAN_HANG = [['970436', 'Vietcombank'], ['970415', 'VietinBank'], ['970418
 const SHARED = ['TaiKhoan', 'CaiDat', 'ThietBi']; // trang dùng chung cho mọi cửa hàng, không có tiền tố
 const NUMBER_COLS = ['Dot', 'BaoTruocNgay', 'ThangGiaHan', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien'];
 const SESSION_TTL = 6 * 60 * 60; // giây; tối đa của CacheService, tự gia hạn khi còn dùng
-const SCHEMA = '8'; // tăng số này khi thêm bảng/cột ở TABLES: app tự thêm phần thiếu ở lần gọi đầu sau khi triển khai
+const SCHEMA = '9'; // tăng số này khi thêm bảng/cột ở TABLES (hoặc cần sửa dữ liệu một lần): app tự làm ở lần gọi đầu sau khi triển khai
 
 // Loại chứng từ có dòng hàng. Số chứng từ dạng 001-2026/DH, mỗi năm đánh lại từ 001 (riêng từng cửa hàng).
 const CT = {
@@ -87,6 +87,8 @@ function doGet() {
 function caiDat() {
   taoBang_(true);
   xoaCuaHangDaBo_();
+  const go = boNhanThu_();
+  if (go) Logger.log('Đã bỏ dấu [THỬ] ở ' + go + ' ô dữ liệu thử.');
   try { Logger.log('Đã tạo ' + taoMauMacDinh_().length + ' file mẫu hợp đồng trong Google Drive.'); } // cũng là bước xin quyền Google Docs/Drive lần đầu
   catch (e) { Logger.log('Chưa tạo được mẫu hợp đồng (cấp quyền Google Docs/Drive rồi chạy lại caiDat): ' + e); }
   PropertiesService.getScriptProperties().setProperty('schema', SCHEMA);
@@ -158,7 +160,14 @@ function nangCap_(cache) {
   const p = PropertiesService.getScriptProperties();
   let ok = p.getProperty('schema') === SCHEMA;
   if (!ok) {
-    try { withLock_(() => { taoBang_(false); p.setProperty('schema', SCHEMA); }); ok = true; }
+    try {
+      withLock_(() => {
+        taoBang_(false);
+        try { boNhanThu_(); } catch (e) { console.error('Không gỡ được dấu [THỬ] của dữ liệu thử: ' + e); } // DuLieuThu.gs, chỉ chạy một lần
+        p.setProperty('schema', SCHEMA);
+      });
+      ok = true;
+    }
     catch (e) { console.error('Không tự nâng cấp được Sheet: ' + e); }
   }
   cache.put('schema', SCHEMA, ok ? SESSION_TTL : 600);
@@ -302,7 +311,10 @@ function taiDuLieu(token) {
   const hang = readTable_('HangHoa');
   const donHang = readTable_('DonHang');
   const s = SHOPS[CUR_SHOP], cd = caiDatMap_(), ch = cuaHang_(CUR_SHOP, cd);
-  const mauHD = readTable_('MauHopDong'), phieuKho = readTable_('PhieuKho');
+  const mauHD = readTable_('MauHopDong'), phieuKho = readTable_('PhieuKho'), pkCT = readTable_('PhieuKhoCT');
+  const dongPK = {};
+  pkCT.forEach(l => { (dongPK[l.SoPK] || (dongPK[l.SoPK] = [])).push(l); });
+  phieuKho.forEach(p => Object.assign(p, tomTatPK_(dongPK[p.SoPK] || [])));
   // Tên các cửa hàng khác chỉ gửi cho tài khoản được vào (quản trị thấy hết để phân quyền)
   const ds = Object.keys(SHOPS).filter(id => user.vaiTro === 'admin' || user.shops.includes(id)).map(id => {
     const c = id === CUR_SHOP ? ch : cuaHang_(id, cd);
@@ -313,7 +325,7 @@ function taiDuLieu(token) {
     cuaHang: { id: CUR_SHOP, ten: ch.ten, moTa: ch.moTa, icon: s.icon, mau: s.mau }, dsCuaHang: ds,
     khach: readTable_('KhachHang'), hang: hang, baoGia: readTable_('BaoGia'), donHang: donHang,
     phieuKho: phieuKho, thuTien: readTable_('ThuTien'), hopDong: readTable_('HopDong').map(h => hdChoUser_(user, h)), mauHD: user.vaiTro === 'admin' ? mauHD : [], loaiHD: loaiHopDong_(mauHD), hopDongLich: readTable_('HopDongLich'), nganHang: NGAN_HANG, emailSang: user.vaiTro === 'admin' ? cauHinhEmailSang_(CUR_SHOP, cd) : null,
-    ton: tonKho_(phieuKho), thongKe: thongKe_(donHang, hang, Utilities.formatDate(new Date(Date.now() - 90 * 864e5), tz_(), 'yyyy-MM-dd'), '', 8),
+    ton: tonKho_(phieuKho, pkCT), thongKe: thongKe_(donHang, hang, Utilities.formatDate(new Date(Date.now() - 90 * 864e5), tz_(), 'yyyy-MM-dd'), '', 8),
   };
 }
 
@@ -524,6 +536,7 @@ function luuChungTu(token, loai, doc) {
     log_(user, (huy ? 'Hủy ' : old ? 'Sửa ' : 'Thêm ') + c.ten, head[key],
       c.loai ? [head.DoiTac, head.SoDH && 'đơn ' + head.SoDH].filter(Boolean).join(' · ') : head.TenKH + ' · ' + head.TongCong + ' đ');
     head.lines = lines;
+    if (c.loai) Object.assign(head, tomTatPK_(lines)); // cho danh sách phiếu kho (không phải cột trong Sheet)
     return { doc: head, ton: c.loai ? tonKho_() : null, donHang: donHang };
   });
 }
@@ -588,16 +601,22 @@ function daGiao_(soDH) {
 }
 
 // ===== Kho =====
-function tonKho_(phieuKho) { // phieuKho = bảng PhieuKho đã đọc sẵn (đỡ đọc Sheet lại)
+function tonKho_(phieuKho, pkCT) { // phieuKho, pkCT = bảng PhieuKho, PhieuKhoCT đã đọc sẵn (đỡ đọc Sheet lại)
   const loai = {};
   (phieuKho || readTable_('PhieuKho')).forEach(p => { loai[p.SoPK] = p.Loai; });
   const ton = {};
-  readTable_('PhieuKhoCT').forEach(l => {
+  (pkCT || readTable_('PhieuKhoCT')).forEach(l => {
     if (!l.MaHH || !loai[l.SoPK]) return;
     const t = ton[l.MaHH] || (ton[l.MaHH] = { nhap: 0, xuat: 0 });
     if (loai[l.SoPK] === 'Nhập') t.nhap += +l.SoLuong || 0; else t.xuat += +l.SoLuong || 0;
   });
   return ton;
+}
+
+// Tóm tắt dòng hàng của một phiếu kho cho danh sách: tổng số lượng và tên hàng (tối đa 3 mặt hàng)
+function tomTatPK_(lines) {
+  const ten = lines.slice().sort((a, b) => a.STT - b.STT).map(l => l.TenHang + (+l.SoLuong !== 1 ? ' ×' + (+l.SoLuong || 0) : ''));
+  return { SoLuong: lines.reduce((s, l) => s + (+l.SoLuong || 0), 0), Hang: ten.slice(0, 3).join(', ') + (ten.length > 3 ? ' và ' + (ten.length - 3) + ' mặt hàng khác' : '') };
 }
 
 // Thẻ kho: các lần nhập/xuất của một mặt hàng, cũ trước mới sau

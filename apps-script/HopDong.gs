@@ -540,6 +540,81 @@ const HD_MAU_TRA_GOP = hdMoDau('HỢP ĐỒNG MUA BÁN TRẢ GÓP', 'BÊN MUA', 
   ['li', 'Máy phát sinh lỗi do nhà sản xuất: Bên B đổi, sửa chữa hoặc hoàn tiền theo chính sách. Nếu Bên B không xử lý được trong ……… ngày kể từ khi tiếp nhận, hai bên thỏa thuận tạm dừng hoặc điều chỉnh các đợt chưa đến hạn.']],
   hdViPham(), hdBatKhaKhang(), hdTranhChap(), hdDuLieuCaNhan(), hdHieuLuc(), [['ky', 'ĐẠI DIỆN BÊN A (BÊN MUA)', 'ĐẠI DIỆN BÊN B (BÊN BÁN)']]));
 
+const HD_MAU_DAT_COC = hdMoDau('HỢP ĐỒNG ĐẶT CỌC MUA HÀNG', 'BÊN ĐẶT CỌC (BÊN MUA)', 'BÊN NHẬN ĐẶT CỌC (BÊN BÁN)', 'Căn cứ Điều 328 Bộ luật Dân sự năm 2015 về đặt cọc.').concat([
+  ['dieu', 'Hàng hóa đặt mua'], ['p', 'Bên A đặt mua của Bên B các hàng hóa sau (chưa có sẵn tại cửa hàng hoặc cần giữ hàng):'], ['bang'],
+  ['p', 'Tổng giá trị hàng hóa (gồm thuế GTGT {{VAT}}%): {{TONGTHANHTOAN}} đồng. Bằng chữ: {{BANGCHU}}'],
+  ['dieu', 'Tiền đặt cọc'],
+  ['li', 'Bên A đặt cọc cho Bên B số tiền: …………………… đồng (bằng chữ: ……………………………………) để bảo đảm việc giao kết và thực hiện việc mua bán nêu trên.'],
+  ['li', 'Tiền đặt cọc được trừ vào số tiền Bên A phải thanh toán khi nhận hàng. Số tiền còn lại Bên A thanh toán khi nhận hàng.']]
+  .concat(hdThanhToanTK, [
+  ['dieu', 'Thời hạn giao hàng'],
+  ['li', 'Bên B giao hàng cho Bên A trong thời hạn đến hết ngày {{NGAYHETHAN}} (hoặc ………… ngày kể từ ngày ký) tại cửa hàng của Bên B, trừ khi hai bên thỏa thuận khác.'],
+  ['li', 'Bên B báo cho Bên A ngay khi hàng về; Bên A đến nhận hàng trong vòng ………… ngày kể từ ngày được báo.'],
+  ['dieu', 'Xử lý tiền đặt cọc'],
+  ['li', 'Bên A từ chối mua hoặc không đến nhận hàng đúng hạn: khoản tiền đặt cọc thuộc về Bên B.'],
+  ['li', 'Bên B không giao được hàng đúng hạn hoặc từ chối bán: Bên B trả lại tiền đặt cọc và một khoản tiền tương đương tiền đặt cọc cho Bên A, trừ trường hợp hai bên thỏa thuận lùi thời hạn giao hàng.'],
+  ['li', 'Hàng về không đúng chủng loại, màu sắc, dung lượng đã đặt: Bên A có quyền nhận lại toàn bộ tiền đặt cọc hoặc đồng ý đổi sang hàng khác.'],
+  ['dieu', 'Bảo hành'],
+  ['p', 'Hàng hóa được bảo hành {{B_BAOHANH}} tháng kể từ ngày giao, theo chính sách của nhà sản xuất và của Bên B; số IMEI/serial ghi trong phiếu giao hàng kiêm phiếu bảo hành.']],
+  hdBatKhaKhang(), hdTranhChap(), hdDuLieuCaNhan(), hdHieuLuc(), [['ky', 'ĐẠI DIỆN BÊN A (BÊN ĐẶT CỌC)', 'ĐẠI DIỆN BÊN B (BÊN NHẬN ĐẶT CỌC)']]));
+
+const HD_MAU_CHO_THUE = hdMoDau('HỢP ĐỒNG CHO THUÊ THIẾT BỊ', 'BÊN THUÊ', 'BÊN CHO THUÊ', 'Căn cứ nhu cầu thuê thiết bị của Bên A và khả năng cung cấp của Bên B.').concat([
+  ['dieu', 'Thiết bị cho thuê'], ['p', 'Bên B cho Bên A thuê các thiết bị sau (số IMEI/serial ghi trong biên bản giao nhận):'], ['bang'],
+  ['p', 'Tổng tiền thuê (gồm thuế GTGT {{VAT}}%): {{TONGTHANHTOAN}} đồng. Bằng chữ: {{BANGCHU}}'],
+  ['dieu', 'Thời hạn thuê và mục đích sử dụng'],
+  ['li', 'Thời hạn thuê {{THOIHAN}}. Thuê thêm ngày nào thì tính thêm tiền thuê ngày đó theo đơn giá trong hợp đồng.'],
+  ['li', 'Mục đích sử dụng: ……………………………………. Bên A không cho người khác thuê lại, không cầm cố, thế chấp, không mang thiết bị ra nước ngoài nếu chưa được Bên B đồng ý bằng văn bản.'],
+  ['dieu', 'Tiền đặt cọc và thanh toán'],
+  ['li', 'Bên A đặt cọc …………………… đồng khi nhận thiết bị; Bên B hoàn trả tiền đặt cọc khi nhận lại đủ thiết bị đúng tình trạng ban đầu (trừ hao mòn tự nhiên), sau khi trừ các khoản Bên A còn phải trả.'],
+  ['li', 'Tiền thuê thanh toán: ……………………………………(ví dụ: trả trước 50%, phần còn lại khi trả máy).']]
+  .concat(hdThanhToanTK, [
+  ['dieu', 'Giao nhận và hoàn trả thiết bị'],
+  ['li', 'Hai bên kiểm tra ngoại quan, tình trạng hoạt động, IMEI/serial, phụ kiện và ký biên bản khi giao và khi trả thiết bị.'],
+  ['li', 'Khi trả, Bên A đăng xuất các tài khoản đã đăng nhập (iCloud/Google…) và xóa dữ liệu cá nhân; Bên B không chịu trách nhiệm về dữ liệu Bên A để lại trên máy.'],
+  ['dieu', 'Hư hỏng, mất mát'],
+  ['li', 'Bên A chịu chi phí sửa chữa nếu thiết bị hư hỏng do lỗi sử dụng (rơi vỡ, vào nước, cháy nổ…); mất thiết bị thì bồi thường theo giá trị còn lại do hai bên thống nhất: …………………… đồng/máy.'],
+  ['li', 'Thiết bị lỗi kỹ thuật không do Bên A: Bên B đổi thiết bị tương đương trong vòng ………… giờ hoặc giảm tiền thuê tương ứng thời gian không sử dụng được.']],
+  hdViPham(), hdBatKhaKhang(), hdTranhChap(), hdDuLieuCaNhan(), hdHieuLuc(), [['ky', 'ĐẠI DIỆN BÊN A (BÊN THUÊ)', 'ĐẠI DIỆN BÊN B (BÊN CHO THUÊ)']]));
+
+const HD_MAU_BAO_HANH_MO_RONG = hdMoDau('HỢP ĐỒNG DỊCH VỤ BẢO HÀNH MỞ RỘNG', 'KHÁCH HÀNG', 'ĐƠN VỊ CUNG CẤP DỊCH VỤ', 'Căn cứ nhu cầu bảo hành thêm của khách hàng sau thời hạn bảo hành tiêu chuẩn.').concat([
+  ['dieu', 'Thiết bị và gói bảo hành'],
+  ['p', 'Thiết bị được bảo hành: tên máy ……………………………………; số IMEI/serial ……………………………………; ngày mua ……………………'],
+  ['p', 'Gói dịch vụ đăng ký:'], ['bang'],
+  ['p', 'Phí dịch vụ (gồm thuế GTGT {{VAT}}%): {{TONGTHANHTOAN}} đồng. Bằng chữ: {{BANGCHU}}'],
+  ['dieu', 'Thời hạn bảo hành mở rộng'],
+  ['p', 'Gói bảo hành có hiệu lực {{THOIHAN}}, nối tiếp sau thời hạn bảo hành tiêu chuẩn của nhà sản xuất (nếu còn).'],
+  ['dieu', 'Phạm vi bảo hành'],
+  ['li', 'Lỗi phần cứng do nhà sản xuất phát sinh trong quá trình sử dụng bình thường: Bên B sửa chữa, thay linh kiện miễn phí; không sửa được thì đổi máy tương đương (gói 1 đổi 1) theo điều kiện của gói đã đăng ký.'],
+  ['li', 'Thời gian xử lý: ………… ngày làm việc kể từ ngày tiếp nhận; Bên B hỗ trợ máy dùng tạm (nếu có) trong thời gian xử lý.'],
+  ['dieu', 'Trường hợp không bảo hành'],
+  ['li', 'Máy rơi vỡ, cong vênh, vào nước, cháy nổ, hư hỏng do thiên tai, dùng sai điện áp, sạc không đạt chuẩn.'],
+  ['li', 'Máy đã bị tháo mở, sửa chữa bởi đơn vị khác, thay đổi linh kiện, can thiệp phần mềm trái phép; tem bảo hành hoặc IMEI/serial bị rách, sửa, không trùng khớp.'],
+  ['li', 'Hao mòn tự nhiên (trầy xước vỏ, pin chai theo thời gian sử dụng), phụ kiện kèm theo, phần mềm và dữ liệu của khách hàng.'],
+  ['dieu', 'Thanh toán'],
+  ['li', 'Bên A thanh toán phí dịch vụ một lần khi đăng ký gói. Phí đã thanh toán không hoàn lại sau khi gói có hiệu lực, trừ trường hợp Bên B không thực hiện được cam kết bảo hành.']]
+  .concat(hdThanhToanTK, [
+  ['dieu', 'Chuyển nhượng'],
+  ['p', 'Gói bảo hành gắn với số IMEI/serial nêu trên. Bên A bán hoặc tặng máy thì người nhận máy được tiếp tục hưởng phần thời hạn còn lại sau khi báo cho Bên B.']],
+  hdBatKhaKhang(), hdTranhChap(), hdDuLieuCaNhan(), hdHieuLuc(), [['ky', 'ĐẠI DIỆN BÊN A (KHÁCH HÀNG)', 'ĐẠI DIỆN BÊN B (ĐƠN VỊ DỊCH VỤ)']]));
+
+const HD_MAU_CONG_TAC_VIEN = hdMoDau('HỢP ĐỒNG CỘNG TÁC VIÊN BÁN HÀNG', 'CỘNG TÁC VIÊN', 'CỬA HÀNG', 'Căn cứ nhu cầu hợp tác giới thiệu khách hàng của hai bên.').concat([
+  ['dieu', 'Nội dung hợp tác'],
+  ['li', 'Bên A giới thiệu khách hàng mua sản phẩm, dịch vụ của Bên B (điện thoại, máy tính bảng, phụ kiện, trả góp, thu cũ đổi mới…) và được hưởng hoa hồng theo hợp đồng này.'],
+  ['li', 'Bên A làm việc độc lập, tự sắp xếp thời gian; hợp đồng này không phải hợp đồng lao động.'],
+  ['dieu', 'Hoa hồng'],
+  ['li', 'Mức hoa hồng: ………… % trên giá trị đơn hàng (chưa VAT) hoặc ………… đồng/máy, chỉ tính cho đơn hàng khách đã nhận hàng và thanh toán đủ.'],
+  ['li', 'Hoa hồng dự kiến và các khoản hỗ trợ khác (nếu có):'], ['bang'],
+  ['li', 'Hoa hồng được đối chiếu và thanh toán ………… lần/tháng bằng chuyển khoản vào tài khoản của Bên A: {{SOTAIKHOAN}} tại {{NGANHANG}}. Bên B khấu trừ thuế thu nhập cá nhân theo quy định (nếu có).'],
+  ['li', 'Đơn hàng bị hủy, trả lại hoặc khách không thanh toán thì không tính hoa hồng; hoa hồng đã trả cho đơn bị trả lại được trừ vào kỳ sau.'],
+  ['dieu', 'Trách nhiệm của cộng tác viên'],
+  ['li', 'Giới thiệu đúng giá, chính sách bảo hành, khuyến mãi do Bên B công bố; không tự ý hứa hẹn ưu đãi, không thu tiền của khách thay Bên B nếu chưa được Bên B đồng ý bằng văn bản.'],
+  ['li', 'Không dùng tên, thương hiệu, hình ảnh của Bên B sai mục đích; giữ bí mật chính sách giá và thông tin khách hàng.'],
+  ['dieu', 'Trách nhiệm của cửa hàng'],
+  ['li', 'Cung cấp bảng giá, chính sách bán hàng mới nhất; ghi nhận khách do Bên A giới thiệu (theo mã giới thiệu hoặc số điện thoại khách); thanh toán hoa hồng đúng hạn.'],
+  ['dieu', 'Chấm dứt hợp đồng'],
+  ['p', 'Mỗi bên có quyền chấm dứt hợp đồng bằng thông báo trước {{BAOTRUOC}} ngày. Bên B thanh toán đủ hoa hồng của các đơn hàng đã hoàn tất trước ngày chấm dứt.']],
+  hdTranhChap(), hdDuLieuCaNhan(), hdHieuLuc(), [['ky', 'ĐẠI DIỆN BÊN A (CỘNG TÁC VIÊN)', 'ĐẠI DIỆN BÊN B (CỬA HÀNG)']]);
+
 // Loại hợp đồng có sẵn (ngành điện thoại). caiDat tạo file Google Docs mẫu cho từng loại rồi ghi vào trang MauHopDong; quản trị thêm/xóa loại ở đó.
 const HD_LOAI_MAC_DINH = [
   { ten: 'Hợp đồng mua bán', moTa: 'Bán lẻ/bán sỉ điện thoại, phụ kiện: bảng hàng, giá, thanh toán, giao nhận, bảo hành.', mau: HD_MAU_MUA_BAN },
@@ -548,6 +623,10 @@ const HD_LOAI_MAC_DINH = [
   { ten: 'Hợp đồng đại lý – phân phối', moTa: 'Đại lý/cộng tác viên nhận hàng bán lại: chiết khấu, công nợ, bảo hành, đổi trả.', mau: HD_MAU_DAI_LY },
   { ten: 'Hợp đồng thu cũ đổi mới', moTa: 'Mua lại máy cũ của khách (định giá, IMEI, xác nhận quyền sở hữu, xóa dữ liệu) để đổi máy mới.', mau: HD_MAU_THU_CU },
   { ten: 'Hợp đồng dịch vụ sửa chữa – bảo hành', moTa: 'Nhận máy sửa chữa/bảo hành: tình trạng máy, chi phí, thời gian, bảo hành sau sửa.', mau: HD_MAU_SUA_CHUA },
+  { ten: 'Hợp đồng đặt cọc mua hàng', moTa: 'Khách đặt cọc giữ máy hoặc đặt hàng chưa có sẵn: tiền cọc, hạn giao, mất cọc/phạt cọc khi một bên không thực hiện.', mau: HD_MAU_DAT_COC },
+  { ten: 'Hợp đồng cho thuê thiết bị', moTa: 'Cho thuê điện thoại, máy tính bảng theo ngày/tháng (sự kiện, doanh nghiệp): giá thuê, đặt cọc, hư hỏng, mất mát, trả máy.', mau: HD_MAU_CHO_THUE },
+  { ten: 'Hợp đồng bảo hành mở rộng', moTa: 'Bán gói bảo hành thêm / 1 đổi 1 sau bảo hành hãng: phạm vi, thời hạn, trường hợp không bảo hành.', mau: HD_MAU_BAO_HANH_MO_RONG },
+  { ten: 'Hợp đồng cộng tác viên bán hàng', moTa: 'Cộng tác viên giới thiệu khách, hưởng hoa hồng theo đơn: mức hoa hồng, đối chiếu, thanh toán, trách nhiệm hai bên.', mau: HD_MAU_CONG_TAC_VIEN },
 ];
 
 // Dựng nội dung mẫu vào file Google Docs mới. Mỗi đoạn đặt tường minh toàn bộ định dạng (phông, cỡ, đậm, nghiêng, căn lề, thụt lề) trong một lần gọi,

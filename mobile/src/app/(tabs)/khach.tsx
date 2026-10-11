@@ -1,4 +1,4 @@
-// Khách hàng: tìm theo tên (không cần dấu) / số điện thoại, xem công nợ; bấm vào khách để xem hồ sơ; thêm khách mới.
+// Khách hàng: tìm theo tên (không cần dấu) / số điện thoại, lọc còn nợ / đã mua / chưa mua, sắp xếp; bấm vào khách để xem hồ sơ; thêm khách mới.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
@@ -6,6 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/auth';
 import type { DsKhach } from '../../lib/api';
 import { ngay, tien } from '../../lib/dinhDang';
+import { LOC_KHACH, SX_KHACH, nhanCua, type LocKhach, type SxKhach } from '../../lib/locDs';
+import { BoLoc } from '../../ui/BoLoc';
 import { ChuLoi, ChuNhat, Dong, KhungTrang, OTim, Vach } from '../../ui/DanhSach';
 import { Nut } from '../../ui/Nut';
 import { The } from '../../ui/The';
@@ -14,19 +16,22 @@ import { mau } from '../../ui/theme';
 export default function KhachMan() {
   const { goi } = useAuth();
   const [q, setQ] = useState(''), [kq, setKq] = useState<DsKhach | null>(null), [loi, setLoi] = useState(''), [dangTai, setDangTai] = useState(false);
-  const [moi, setMoi] = useState(false);
+  const [moi, setMoi] = useState(false), [loc, setLoc] = useState<LocKhach>('tat'), [sx, setSx] = useState<SxKhach>('gan');
   const lan = useRef(0); // chỉ nhận kết quả của lần tìm mới nhất
 
   const tai = useCallback(async (tu: string) => {
     const so = ++lan.current;
     setDangTai(true);
-    try { const r = await goi<DsKhach>('dsKhachMay', tu); if (so === lan.current) { setKq(r); setLoi(''); } }
+    try { const r = await goi<DsKhach>('dsKhachMay', tu, { loc, sx }); if (so === lan.current) { setKq(r); setLoi(''); } }
     catch (e) { if (so === lan.current) setLoi((e as Error).message); }
     finally { if (so === lan.current) setDangTai(false); }
-  }, [goi]);
+  }, [goi, loc, sx]);
 
   useEffect(() => { const t = setTimeout(() => tai(q.trim()), q ? 350 : 0); return () => clearTimeout(t); }, [q, tai]);
-  useFocusEffect(useCallback(() => { if (kq) tai(q.trim()); }, [tai])); // eslint-disable-line react-hooks/exhaustive-deps -- quay lại tab thì lấy công nợ mới
+  // Quay lại tab thì lấy công nợ mới (chỉ khi tab được mở lại; đổi lọc / sắp xếp đã có effect trên tải)
+  const taiLai = useRef(() => {});
+  useEffect(() => { taiLai.current = () => { if (kq) tai(q.trim()); }; });
+  useFocusEffect(useCallback(() => { taiLai.current(); }, []));
 
   return (
     <KhungTrang refreshControl={<RefreshControl refreshing={dangTai && !!kq} onRefresh={() => tai(q.trim())} tintColor={mau.cam} />}>
@@ -38,10 +43,13 @@ export default function KhachMan() {
       </View>
       {moi ? <KhachMoi onXong={ma => { setMoi(false); router.push({ pathname: '/khach/[ma]', params: { ma } }); }} /> : null}
       <OTim value={q} onChangeText={setQ} placeholder="Tên, số điện thoại hoặc mã khách" testID="o-tim-khach" />
+      <BoLoc ds={LOC_KHACH} chon={loc} onChon={setLoc} testID="loc-khach" />
+      <BoLoc ds={SX_KHACH} chon={sx} onChon={setSx} sapXep testID="sx-khach" />
       <ChuLoi chu={loi} testID="loi-khach" />
       {kq ? (
         <The style={{ marginTop: 14, paddingVertical: 6 }} testID="ds-khach">
-          {!kq.ds.length ? <ChuNhat chu={q ? `Không có khách nào khớp "${q.trim()}".` : 'Chưa có khách hàng.'} style={{ marginVertical: 12 }} /> : null}
+          {!kq.ds.length ? <ChuNhat chu={q ? `Không có khách nào khớp "${q.trim()}"${loc !== 'tat' ? ' trong mục ' + nhanCua(LOC_KHACH, loc).toLowerCase() : ''}.`
+            : loc !== 'tat' ? `Không có khách nào ${nhanCua(LOC_KHACH, loc).toLowerCase()}.` : 'Chưa có khách hàng.'} style={{ marginVertical: 12 }} /> : null}
           {kq.ds.map((k, i) => (
             <View key={k.MaKH}>
               {i ? <Vach /> : null}
@@ -52,7 +60,7 @@ export default function KhachMan() {
           ))}
         </The>
       ) : !loi ? <ChuNhat chu="Đang tải…" /> : null}
-      {kq && kq.tong > kq.ds.length ? <ChuNhat chu={`Hiện ${kq.ds.length} / ${kq.tong} khách. Gõ tên hoặc số điện thoại để tìm.`} /> : null}
+      {kq && kq.tong > kq.ds.length ? <ChuNhat chu={`Hiện ${kq.ds.length} / ${kq.tong} khách (${nhanCua(SX_KHACH, sx).toLowerCase()}). Gõ tên hoặc số điện thoại để tìm.`} /> : null}
     </KhungTrang>
   );
 }

@@ -1,4 +1,4 @@
-// Hồ sơ một khách: gọi / Zalo / nhắn tin, công nợ (thu tiền), bán tiếp, máy đã mua kèm bảo hành, đơn hàng, phiếu thu, hợp đồng (chia sẻ PDF).
+// Hồ sơ một khách: gọi / Zalo / nhắn tin, công nợ (thu tiền), bán tiếp, máy đã mua kèm bảo hành, đơn hàng (lọc còn nợ / chưa giao), phiếu thu, hợp đồng (chia sẻ PDF).
 import { useCallback, useState } from 'react';
 import { Linking, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -7,7 +7,9 @@ import { useAuth } from '../../lib/auth';
 import type { HoSoKhach } from '../../lib/api';
 import { ngay, tien } from '../../lib/dinhDang';
 import { linkGoi, linkZalo, soDienThoai } from '../../lib/lienHe';
+import { LOC_DON, locDon, type LocDon } from '../../lib/locDs';
 import { useTaiPdf } from '../../lib/pdf';
+import { BoLoc } from '../../ui/BoLoc';
 import { ChuLoi, ChuNhat, Dong, DongTT, KhungTrang, Nhan, TieuDeMuc, Vach } from '../../ui/DanhSach';
 import { DauTrang } from '../../ui/DauTrang';
 import { Nut } from '../../ui/Nut';
@@ -22,6 +24,7 @@ export default function HoSoKhachMan() {
   const { goi } = useAuth();
   const [hs, setHs] = useState<HoSoKhach | null>(null), [loi, setLoi] = useState(''), [dangTai, setDangTai] = useState(false);
   const pdf = useTaiPdf();
+  const [locD, setLocD] = useState<LocDon>('tat');
 
   const tai = useCallback(async () => {
     setDangTai(true);
@@ -67,9 +70,11 @@ export default function HoSoKhachMan() {
           {hs.may.map(x => <TheMay key={x.SoPK + x.MaHH + x.IMEI} x={x} />)}
 
           <TieuDeMuc chu={`Đơn hàng (${hs.don.length})`} />
+          {hs.don.length > 1 ? <View style={{ marginTop: -6, marginBottom: 10 }}><BoLoc ds={LOC_DON} chon={locD} onChon={setLocD} dem={v => locDon(hs.don, v).length} testID="loc-don" /></View> : null}
           <The style={[s.muc, { paddingVertical: 6 }]} testID="ds-don">
             {!hs.don.length ? <ChuNhat chu="Chưa có đơn hàng." style={{ marginVertical: 10 }} /> : null}
-            {hs.don.map((d, i) => (
+            {hs.don.length > 0 && !locDon(hs.don, locD).length ? <ChuNhat chu="Không có đơn nào phù hợp." style={{ marginVertical: 10 }} /> : null}
+            {locDon(hs.don, locD).map((d, i) => (
               <View key={d.SoDH}>
                 {i ? <Vach /> : null}
                 <View style={s.dongDon}>

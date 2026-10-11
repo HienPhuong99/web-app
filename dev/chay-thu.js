@@ -1,13 +1,15 @@
 // Chạy thử web app trên máy, không cần Google: giả lập Google Sheet + Apps Script trong bộ nhớ.
 //   node dev/chay-thu.js              -> dữ liệu mẫu
 //   node dev/chay-thu.js du-lieu.json -> nạp dữ liệu từ file JSON {TenTrang: [[tiêu đề...], [dòng...]]}
+//   node dev/chay-thu.js --du-lieu-thu -> thêm bộ dữ liệu thử đầy đủ (như chạy napDuLieuThu trên Google)
 // Mở http://localhost:5178. Mật khẩu admin in ra màn hình khi khởi động. Dữ liệu mất khi tắt.
 const fs = require('fs'), http = require('http'), vm = require('vm'), crypto = require('crypto'), path = require('path');
 const ROOT = path.join(__dirname, '..', 'apps-script');
 const PORT = +process.env.PORT || 5178;
 
 // ---- Giả lập SpreadsheetApp (chỉ những hàm Code.gs dùng)
-const strip = v => (typeof v === 'string' && v[0] === "'" ? v.slice(1) : v); // Sheets bỏ dấu ' đầu chuỗi
+// Sheets bỏ dấu ' đầu chuỗi; chuỗi bắt đầu bằng "=" mà không có dấu ' thì Sheets hiểu là công thức (ở đây ghi lại để test thấy)
+const strip = v => (typeof v === 'string' && v[0] === "'" ? v.slice(1) : typeof v === 'string' && v[0] === '=' ? '#CÔNG THỨC ' + v : v);
 class Range {
   constructor(sh, r, c, nr, nc) { Object.assign(this, { sh, r, c, nr, nc }); }
   getValues() {
@@ -162,7 +164,7 @@ const ctx = vm.createContext({
     newTrigger: ham => { const t = { ham, getHandlerFunction: () => ham }; const b = { timeBased: () => b, everyDays: n => { t.moiNgay = n; return b; }, atHour: h => { t.gio = h; return b; }, inTimezone: z => { t.mui = z; return b; },
       create: () => { if (thuMail.thieuQuyen) throw new Error('Bạn không có quyền gọi ScriptApp.newTrigger.'); thuMail.henGio.push(t); return t; } }; return b; },
   },
-  Session: { getEffectiveUser: () => ({ getEmail: () => thuMail.chu }) },
+  Session: { getEffectiveUser: () => ({ getEmail: () => thuMail.chu }), getActiveUser: () => ({ getEmail: () => thuMail.nguoiChay === undefined ? thuMail.chu : thuMail.nguoiChay }) },
   // Máy chủ thông báo Expo giả: ghi lại các lô đã gửi. push.loi[token] = mã lỗi trả về cho máy đó; push.http = mã HTTP khác 200.
   UrlFetchApp: { fetch: (url, o) => {
     if (push.thieuQuyen) throw new Error('Bạn không có quyền gọi UrlFetchApp.fetch. Quyền cần thiết: https://www.googleapis.com/auth/script.external_request');
@@ -219,6 +221,7 @@ if (MAU_APP) {
   console.log('Mẫu tra bảo hành trên app: IMEI 356789012345672 (còn hạn), 351234567890124 (hết hạn), SĐT 0911000001');
   console.log('Máy còn trong kho để thử bán nhanh: 356789012345680, 356789012345698 (iPhone 16 Pro Max), 351234567890132 (iPhone 15)');
 }
+if (process.argv.includes('--du-lieu-thu')) ctx.napDuLieuThu(); // thêm bộ dữ liệu thử đầy đủ (DuLieuThu.gs): 27 đơn, 9 hợp đồng…
 
 // ---- google.script.run giả: gọi hàm trong Code.gs qua /rpc (hàm kết thúc bằng _ là hàm riêng, không gọi được)
 const SHIM = `window.google = { script: { get run() {

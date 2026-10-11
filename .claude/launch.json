@@ -3,6 +3,7 @@
   "configurations": [
     { "name": "chay-thu", "runtimeExecutable": "node", "runtimeArgs": ["dev/chay-thu.js"], "port": 5178 },
     { "name": "may-chu-app", "runtimeExecutable": "node", "runtimeArgs": ["dev/chay-thu.js", "--mau-app"], "port": 5178 },
+    { "name": "du-lieu-thu", "runtimeExecutable": "node", "runtimeArgs": ["dev/chay-thu.js", "--mau-app", "--du-lieu-thu"], "port": 5178 },
     { "name": "app-web", "runtimeExecutable": "node", "runtimeArgs": ["mobile/node_modules/expo/bin/cli", "start", "mobile", "--web", "--port", "8081"], "port": 8081,
       "env": { "EXPO_PUBLIC_API_URL": "http://localhost:5178/api", "CI": "1" } }
   ]

@@ -64,6 +64,43 @@ BUOC.push(['Nhập khách hàng và hàng hóa từ file CSV / dán từ Excel',
     assert.match(await page.locator('#view tbody tr:has-text("Ốp nhập thử")').first().innerText(), /120\.000/);
   } finally { page.off('dialog', ghi); }
 }]);
+BUOC.push(['Danh sách: sắp xếp, lọc mới, Bỏ lọc, nhớ lựa chọn khi quay lại; phiếu kho có hàng hóa và số lượng', async page => {
+  const chon = async (f, v) => { await page.selectOption(`#view .toolbar [data-f="${f}"]`, v); };
+  const dau = () => page.locator('#view tbody tr[data-i]').first().innerText();
+  await page.click('#nav a[data-go="hang"]');
+  await chon('sx', 'giaTang');
+  assert.match(await dau(), /Ốp nhập thử/);
+  await chon('sx', 'giaGiam');
+  assert.match(await dau(), /iPhone 16 Pro Max/);
+  assert.ok(await page.locator('#view .bo-loc').isVisible(), 'Đổi sắp xếp thì hiện nút Bỏ lọc');
+  await page.click('#nav a[data-go="khach"]');
+  await page.click('#nav a[data-go="hang"]');
+  assert.strictEqual(await page.inputValue('#view [data-f="sx"]'), 'giaGiam'); // nhớ lựa chọn
+  await page.locator('#view .bo-loc').click();
+  assert.deepStrictEqual([await page.inputValue('#view [data-f="sx"]'), await page.locator('#view .bo-loc').isVisible()], ['ma', false]);
+  // Phiếu kho: tạo 1 phiếu nhập 5 máy, 1 phiếu nhập 1 cái, 1 phiếu xuất 2 máy
+  await page.evaluate(async () => {
+    const h = S.hang.find(x => /iPhone 16/.test(x.TenHang)), op = S.hang.find(x => x.TenHang === 'Ốp nhập thử');
+    const dong = (x, sl) => ({ MaHH: x.MaHH, TenHang: x.TenHang, DVT: x.DVT, SoLuong: sl });
+    await api('luuChungTu', 'NK', { Ngay: '2026-01-05', DoiTac: 'Nhà cung cấp A', lines: [dong(h, 5)] });
+    await api('luuChungTu', 'NK', { Ngay: '2026-01-06', DoiTac: 'Nhà cung cấp B', lines: [dong(op, 1)] });
+    await api('luuChungTu', 'XK', { Ngay: '2026-01-07', DoiTac: 'Khách lẻ', lines: [dong(h, 2)] });
+    await loadAll();
+  });
+  await page.click('#nav a[data-go="kho"]');
+  await page.waitForSelector('#view tbody tr:has-text("iPhone 16 Pro Max 256GB - Titan Đen ×5")');
+  await chon('sx', 'slGiam');
+  assert.match(await dau(), /Nhà cung cấp A[\s\S]*\+5/);
+  await chon('sx', 'slTang');
+  assert.match(await dau(), /Nhà cung cấp B[\s\S]*\+1/);
+  await chon('loai', 'Xuất');
+  assert.deepStrictEqual(await page.locator('#view tbody tr[data-i]').allInnerTexts().then(t => t.map(x => /Khách lẻ/.test(x))), [true]);
+  assert.match(await page.locator('#view .foot').innerText(), /1 phiếu[\s\S]*Nhập\s*0[\s\S]*Xuất\s*2/);
+  await page.fill('#view .search input', 'op nhap'); // tìm theo tên hàng trong phiếu
+  await chon('loai', '');
+  await page.waitForFunction(() => document.querySelector('#view .count').textContent === '1 dòng');
+  await page.locator('#view .bo-loc').click();
+}]);
 try { require('./kiem-trinh-duyet-hopdong')(BUOC); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
 
 (async () => {

@@ -1,4 +1,4 @@
-// Kho: kiểm tra một IMEI đang ở đâu (còn trong kho / đã bán / chưa nhập), tồn kho từng mặt hàng, lọc hàng sắp hết; bấm mặt hàng xem thẻ kho.
+// Kho: kiểm tra một IMEI đang ở đâu (còn trong kho / đã bán / chưa nhập), tồn kho từng mặt hàng (lọc còn / sắp hết / hết, sắp theo tồn, bán chạy, giá); bấm mặt hàng xem thẻ kho.
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, TextInput, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
@@ -6,22 +6,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../lib/auth';
 import type { HangKho, MaKho } from '../lib/api';
 import { ngay, tien } from '../lib/dinhDang';
-import { boDau } from '../lib/lienHe';
+import { LOC_KHO, SX_KHO, demKho, locKho, sapHet, type LocKho, type SxKho } from '../lib/locDs';
 import { chuanHoaMa } from '../lib/maQuet';
-import { Chip } from '../ui/Chip';
+import { BoLoc } from '../ui/BoLoc';
 import { ChuLoi, ChuNhat, Dong, DongTT, KhungTrang, Nhan, OTim, Vach } from '../ui/DanhSach';
 import { DauTrang } from '../ui/DauTrang';
 import { HangLayMa } from '../ui/KhungQuet';
 import { The } from '../ui/The';
 import { mau } from '../ui/theme';
 
-type Loc = 'tat' | 'sap' | 'het';
-const sapHet = (h: HangKho) => h.ton > 0 && h.ton <= h.TonToiThieu;
-
 export default function KhoMan() {
   const { goi } = useAuth();
   const [hang, setHang] = useState<HangKho[] | null>(null), [loi, setLoi] = useState(''), [dangTai, setDangTai] = useState(false);
-  const [q, setQ] = useState(''), [loc, setLoc] = useState<Loc>('tat');
+  const [q, setQ] = useState(''), [loc, setLoc] = useState<LocKho>('tat'), [sx, setSx] = useState<SxKho>('ten');
 
   const tai = useCallback(async () => {
     setDangTai(true);
@@ -29,10 +26,7 @@ export default function KhoMan() {
   }, [goi]);
   useFocusEffect(useCallback(() => { tai(); }, [tai]));
 
-  const ds = useMemo(() => {
-    const w = boDau(q).split(/\s+/).filter(Boolean);
-    return (hang ?? []).filter(h => (loc === 'tat' || (loc === 'sap' ? sapHet(h) : h.ton <= 0)) && w.every(x => boDau(`${h.TenHang} ${h.MaHH} ${h.Model} ${h.NhomHang}`).includes(x)));
-  }, [hang, q, loc]);
+  const ds = useMemo(() => locKho(hang ?? [], q, loc, sx), [hang, q, loc, sx]);
   const tongTon = (hang ?? []).reduce((s, h) => s + Math.max(0, h.ton), 0);
 
   return (
@@ -40,11 +34,9 @@ export default function KhoMan() {
       <DauTrang tieuDe="Kho hàng" phu={hang ? `${hang.length} mặt hàng · ${tongTon} sản phẩm còn trong kho` : undefined} />
       <KiemTraIMEI />
       <OTim value={q} onChangeText={setQ} placeholder="Tìm hàng theo tên, mã, model" testID="o-tim-kho" />
-      <View style={s.chips}>
-        <Chip chu="Tất cả" chon={loc === 'tat'} onPress={() => setLoc('tat')} />
-        <Chip chu={`Sắp hết (${(hang ?? []).filter(sapHet).length})`} chon={loc === 'sap'} onPress={() => setLoc('sap')} testID="loc-sap-het" />
-        <Chip chu={`Hết hàng (${(hang ?? []).filter(h => h.ton <= 0).length})`} chon={loc === 'het'} onPress={() => setLoc('het')} testID="loc-het" />
-      </View>
+      <BoLoc ds={LOC_KHO} chon={loc} onChon={setLoc} dem={v => demKho(hang ?? [], v)} testID="loc-kho" />
+      <BoLoc ds={SX_KHO} chon={sx} onChon={setSx} sapXep testID="sx-kho" />
+      <View style={{ height: 12 }} />
       <ChuLoi chu={loi} />
       {!hang && !loi ? <ChuNhat chu="Đang tải…" /> : null}
       {hang ? (
@@ -109,7 +101,6 @@ function KiemTraIMEI() {
 }
 
 const s = StyleSheet.create({
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 12 },
   hang: { flexDirection: 'row', gap: 8 },
   o: { flex: 1, minWidth: 0, backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 14, borderWidth: 1, borderColor: mau.vach, paddingHorizontal: 14, paddingVertical: 12, fontSize: 17, color: mau.chu },
   nut: { width: 50, borderRadius: 14, backgroundColor: mau.cam, alignItems: 'center', justifyContent: 'center' },

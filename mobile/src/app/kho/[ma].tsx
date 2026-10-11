@@ -1,10 +1,12 @@
-// Thẻ kho một mặt hàng: tồn hiện tại và từng lần nhập / xuất (mới trước), kèm IMEI/serial.
-import { useCallback, useState } from 'react';
+// Thẻ kho một mặt hàng: tồn hiện tại và từng lần nhập / xuất kèm IMEI/serial; lọc chỉ nhập / chỉ xuất, sắp theo ngày hoặc số lượng.
+import { useCallback, useMemo, useState } from 'react';
 import { RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../../lib/auth';
 import type { DongTheKho } from '../../lib/api';
 import { ngay } from '../../lib/dinhDang';
+import { LOC_PHIEU, SX_PHIEU, locTheKho, type LocPhieu, type SxPhieu } from '../../lib/locDs';
+import { BoLoc } from '../../ui/BoLoc';
 import { ChuLoi, ChuNhat, KhungTrang, Nhan, Vach } from '../../ui/DanhSach';
 import { DauTrang } from '../../ui/DauTrang';
 import { The } from '../../ui/The';
@@ -13,22 +15,30 @@ import { mau } from '../../ui/theme';
 export default function TheKhoMan() {
   const { ma, ten } = useLocalSearchParams<{ ma: string; ten?: string }>();
   const { goi } = useAuth();
-  const [ds, setDs] = useState<DongTheKho[] | null>(null), [loi, setLoi] = useState(''), [dangTai, setDangTai] = useState(false);
+  const [goc, setGoc] = useState<DongTheKho[] | null>(null), [loi, setLoi] = useState(''), [dangTai, setDangTai] = useState(false);
+  const [loc, setLoc] = useState<LocPhieu>('tat'), [sx, setSx] = useState<SxPhieu>('moi');
   const tai = useCallback(async () => {
     setDangTai(true);
-    try { setDs((await goi<DongTheKho[]>('theKho', ma)).slice().reverse()); setLoi(''); } catch (e) { setLoi((e as Error).message); } finally { setDangTai(false); }
+    try { setGoc(await goi<DongTheKho[]>('theKho', ma)); setLoi(''); } catch (e) { setLoi((e as Error).message); } finally { setDangTai(false); }
   }, [goi, ma]);
   useFocusEffect(useCallback(() => { tai(); }, [tai]));
 
-  const nhap = (ds ?? []).filter(d => d.Loai === 'Nhập').reduce((s, d) => s + d.SoLuong, 0), xuat = (ds ?? []).reduce((s, d) => s + (d.Loai === 'Nhập' ? 0 : d.SoLuong), 0);
+  const ds = useMemo(() => (goc ? locTheKho(goc, loc, sx) : null), [goc, loc, sx]);
+  const nhap = (goc ?? []).filter(d => d.Loai === 'Nhập').reduce((s, d) => s + d.SoLuong, 0), xuat = (goc ?? []).reduce((s, d) => s + (d.Loai === 'Nhập' ? 0 : d.SoLuong), 0);
   return (
-    <KhungTrang coTab={false} refreshControl={<RefreshControl refreshing={dangTai && !!ds} onRefresh={tai} tintColor={mau.cam} />}>
-      <DauTrang tieuDe={ten || ma} phu={ds ? `Tồn ${nhap - xuat} · đã nhập ${nhap} · đã xuất ${xuat}` : ma} />
+    <KhungTrang coTab={false} refreshControl={<RefreshControl refreshing={dangTai && !!goc} onRefresh={tai} tintColor={mau.cam} />}>
+      <DauTrang tieuDe={ten || ma} phu={goc ? `Tồn ${nhap - xuat} · đã nhập ${nhap} · đã xuất ${xuat}` : ma} />
       <ChuLoi chu={loi} />
       {!ds && !loi ? <ChuNhat chu="Đang tải…" /> : null}
+      {goc && goc.length > 1 ? (
+        <View style={{ marginBottom: 12, marginTop: -4 }}>
+          <BoLoc ds={LOC_PHIEU} chon={loc} onChon={setLoc} testID="loc-phieu" />
+          <BoLoc ds={SX_PHIEU} chon={sx} onChon={setSx} sapXep testID="sx-phieu" />
+        </View>
+      ) : null}
       {ds ? (
         <The style={{ paddingVertical: 6 }} testID="the-kho">
-          {!ds.length ? <ChuNhat chu="Mặt hàng này chưa có phiếu nhập / xuất nào." style={{ marginVertical: 10 }} /> : null}
+          {!ds.length ? <ChuNhat chu={goc?.length ? `Không có phiếu ${loc === 'nhap' ? 'nhập' : 'xuất'} nào.` : 'Mặt hàng này chưa có phiếu nhập / xuất nào.'} style={{ marginVertical: 10 }} /> : null}
           {ds.map((d, i) => (
             <View key={d.SoPK + i}>
               {i ? <Vach /> : null}

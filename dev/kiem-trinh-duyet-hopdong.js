@@ -151,7 +151,7 @@ module.exports = BUOC => {
   BUOC.push(['Cài đặt: mẫu hợp đồng, danh sách biến, ngân hàng lấy từ máy chủ', async page => {
     await page.click('#nav a[data-go="caidat"]');
     await page.waitForSelector('text=Mẫu hợp đồng (Google Docs)');
-    assert.strictEqual(await page.locator('.card:has-text("Mẫu hợp đồng (Google Docs)") table.mini tr').count(), 6);
+    assert.strictEqual(await page.locator('.card:has-text("Mẫu hợp đồng (Google Docs)") table.mini tr').count(), 10);
     await shot(page, 'hd-6-cai-dat-mau');
     await page.click('[data-act="mau-bien"]');
     await page.waitForSelector('code:has-text("{{TENDOANHNGHIEP}}")');

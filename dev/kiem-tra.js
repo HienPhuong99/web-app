@@ -267,7 +267,7 @@ assert.throws(() => G.xoaHopDong(lan, '002-2026/HD'), /quản trị/);
 G.xoaHopDong(admin, '002-2026/HD');
 assert.deepStrictEqual([rowsOf('PS_HopDong', '002-2026/HD').length, rowsOf('PS_HopDongCT', '002-2026/HD').length], [0, 0]);
 assert.throws(() => G.xoaHopDong(admin, '002-2026/HD'), /Không tìm thấy/);
-assert.deepStrictEqual([G.taiDuLieu(admin).hopDong.length, G.taiDuLieu(admin).mauHD.length], [sheets.PS_HopDong.rows.length - 1, 6]); // caiDat đã tạo 6 file mẫu hợp đồng
+assert.deepStrictEqual([G.taiDuLieu(admin).hopDong.length, G.taiDuLieu(admin).mauHD.length], [sheets.PS_HopDong.rows.length - 1, 10]); // caiDat đã tạo 10 file mẫu hợp đồng
 G.chonCuaHang(admin, 'demo');
 assert.deepStrictEqual([G.taiDuLieu(admin).hopDong.length, G.luuHopDong(admin, hdMau).doc.SoHD], [0, '001-2026/HD']);
 G.chonCuaHang(admin, 'phone');
@@ -281,7 +281,7 @@ const bangTrong = id => docs.get(id).body.children.filter(c => c.getType() === '
 const tenThuMuc = id => (drive.folders.get(drive.files.get(id).folder) || {}).name;
 // Bộ mẫu mặc định cho ngành điện thoại: 5 loại, tự tạo trong thư mục Drive của cửa hàng, chỉ dùng biến app biết
 const mauPS = G.readTable_('MauHopDong');
-assert.deepStrictEqual(mauPS.map(m => m.LoaiHD), ['Hợp đồng mua bán', 'Hợp đồng mua bán trả góp', 'Hợp đồng nguyên tắc', 'Hợp đồng đại lý – phân phối', 'Hợp đồng thu cũ đổi mới', 'Hợp đồng dịch vụ sửa chữa – bảo hành']);
+assert.deepStrictEqual(mauPS.map(m => m.LoaiHD), ['Hợp đồng mua bán', 'Hợp đồng mua bán trả góp', 'Hợp đồng nguyên tắc', 'Hợp đồng đại lý – phân phối', 'Hợp đồng thu cũ đổi mới', 'Hợp đồng dịch vụ sửa chữa – bảo hành', 'Hợp đồng đặt cọc mua hàng', 'Hợp đồng cho thuê thiết bị', 'Hợp đồng bảo hành mở rộng', 'Hợp đồng cộng tác viên bán hàng']);
 const bienBiet = new Set(plain(G.bienHopDongMau(admin)).map(b => b[0]));
 mauPS.forEach(m => {
   const id = G.idTuLink_(m.LinkMau), vb = vanBan(id), dung = vb.match(/\{\{[A-Z0-9_]+\}\}/g) || [];
@@ -351,7 +351,7 @@ assert.throws(() => G.luuMauHopDong(admin, { LoaiHD: 'X', LinkMau: 'https://docs
 drive.files.set('P'.repeat(30), { id: 'P'.repeat(30), name: 'a.pdf', mime: 'application/pdf', folder: 'root' });
 assert.throws(() => G.luuMauHopDong(admin, { LoaiHD: 'X', LinkMau: 'P'.repeat(30) }), /không phải Google Docs/);
 const dsMau = plain(G.luuMauHopDong(admin, { LoaiHD: 'Hợp đồng thử', LinkMau: mauTuy.getUrl(), MoTa: 'thử' }));
-assert.ok(dsMau.loaiHD.includes('Hợp đồng thử') && dsMau.mauHD.length === 7 && G.taiDuLieu(lan).loaiHD.includes('Hợp đồng thử'));
+assert.ok(dsMau.loaiHD.includes('Hợp đồng thử') && dsMau.mauHD.length === 11 && G.taiDuLieu(lan).loaiHD.includes('Hợp đồng thử'));
 const hdThu = G.luuHopDong(lan, { LoaiHD: 'Hợp đồng thử', TenDN: 'Khách Thử', lines: hdLines }).doc;
 const rThu = plain(G.taoFileHopDong(lan, hdThu.SoHD));
 assert.deepStrictEqual(rThu.conSot, ['{{BIEN_LA}}']);
@@ -369,7 +369,7 @@ assert.throws(() => G.taoFileHopDong(lan, hdDL.SoHD), /chưa có file mẫu/);
 assert.throws(() => G.luuHopDong(lan, { LoaiHD: 'Hợp đồng đại lý – phân phối', TenDN: 'Đại lý Ba', lines: [] }), /chưa có mẫu/); // loại đã xóa không lập mới được
 assert.strictEqual(G.luuHopDong(lan, Object.assign({}, hdDL, { GhiChu: 'sửa' })).doc.TrangThai, 'Soạn thảo'); // hợp đồng cũ vẫn sửa được khi giữ nguyên loại
 assert.deepStrictEqual(plain(G.taoMauMacDinh(admin).moi), ['Hợp đồng đại lý – phân phối']);
-assert.ok(vanBan(idDe(G.taoFileHopDong(lan, hdDL.SoHD))).includes('HỢP ĐỒNG ĐẠI LÝ – PHÂN PHỐI') && G.readTable_('MauHopDong').length === 6);
+assert.ok(vanBan(idDe(G.taoFileHopDong(lan, hdDL.SoHD))).includes('HỢP ĐỒNG ĐẠI LÝ – PHÂN PHỐI') && G.readTable_('MauHopDong').length === 10);
 G.xoaMauHopDong(admin, 'Hợp đồng thu cũ đổi mới');
 assert.throws(() => G.taoMauMacDinh(lan), /quản trị/);
 assert.deepStrictEqual([plain(G.taoMauMacDinh(admin).moi), plain(G.taoMauMacDinh(admin).moi)], [['Hợp đồng thu cũ đổi mới'], []]);
@@ -390,7 +390,7 @@ assert.strictEqual(G.luuHopDong(admin, Object.assign({}, hdTamDung, { TrangThai:
 // Nhân viên chỉ thấy cờ đã có file; link mẫu chỉ gửi cho quản trị
 const soCoFile = G.taiDuLieu(lan).hopDong.find(h => h.SoHD === hdKhong.SoHD), soCoFileQT = G.taiDuLieu(admin).hopDong.find(h => h.SoHD === hdKhong.SoHD);
 assert.deepStrictEqual([soCoFile.FileId, soCoFile.LinkFile, soCoFileQT.FileId.length > 5, /^https:/.test(soCoFileQT.LinkFile)], ['1', '', true, true]);
-assert.deepStrictEqual([G.taiDuLieu(lan).mauHD.length, G.taiDuLieu(admin).mauHD.length, G.taiDuLieu(lan).loaiHD.length], [0, 6, 6]);
+assert.deepStrictEqual([G.taiDuLieu(lan).mauHD.length, G.taiDuLieu(admin).mauHD.length, G.taiDuLieu(lan).loaiHD.length], [0, 10, 10]);
 // Đổi người phụ trách (có trong file) làm file cũ; người khác sửa trong lúc đang tạo file thì file cũng được coi là cũ
 const hdPT = G.luuHopDong(lan, { LoaiHD: 'Hợp đồng mua bán', TenDN: 'Khách PT', NguoiPhuTrach: 'Linh', lines: [] }).doc;
 G.taoFileHopDong(lan, hdPT.SoHD);
@@ -405,7 +405,7 @@ assert.strictEqual(G.findObj_('HopDong', hdPT.SoHD).FileCu, '1');
 assert.strictEqual(plain(G.taoFileHopDong(lan, hdPT.SoHD)).doc.FileCu, '');
 
 // Chưa cấp quyền Google Docs/Drive: báo rõ cách xử lý, app vẫn mở và lưu hợp đồng bình thường
-assert.deepStrictEqual(plain(G.taoMauMacDinh(admin).moi), []); // đủ 5 mẫu: không cần gọi Google nên không đòi quyền
+assert.deepStrictEqual(plain(G.taoMauMacDinh(admin).moi), []); // đủ mẫu: không cần gọi Google nên không đòi quyền
 G.xoaMauHopDong(admin, 'Hợp đồng nguyên tắc');
 drive.thieuQuyen = true;
 assert.throws(() => G.taoFileHopDong(lan, hdKho.SoHD), /chưa được cấp quyền.*caiDat/);
@@ -425,7 +425,7 @@ G.chonCuaHang(admin, 'demo');
 const hdDemo = G.luuHopDong(admin, Object.assign({}, hdMau, { TenDN: 'Khách demo' })).doc;
 assert.strictEqual(G.readTable_('MauHopDong').length, 0);
 const fDemo = G.taoFileHopDong(admin, hdDemo.SoHD).doc.FileId;
-assert.deepStrictEqual([G.readTable_('MauHopDong').length, tenThuMuc(fDemo), vanBan(fDemo).includes('CÔNG TY THỬ')], [6, 'Hợp đồng - Cửa hàng thử', true]); // chưa có mẫu nào: tạo đủ bộ mặc định lần đầu dùng
+assert.deepStrictEqual([G.readTable_('MauHopDong').length, tenThuMuc(fDemo), vanBan(fDemo).includes('CÔNG TY THỬ')], [10, 'Hợp đồng - Cửa hàng thử', true]); // chưa có mẫu nào: tạo đủ bộ mặc định lần đầu dùng
 G.chonCuaHang(admin, 'phone');
 assert.ok(plain(G.dsNhatKy(admin)).some(x => x.HanhDong === 'Tạo file hợp đồng') && plain(G.dsNhatKy(admin)).some(x => x.HanhDong === 'Tạo lại file hợp đồng'));
 
@@ -915,6 +915,6 @@ assert.deepStrictEqual(plain(G.xoaCuaHangDaBo_()), []); // chạy lại không l
 
 require('./kiem-tra-html'); // giao diện: cú pháp, và các chỗ Apps Script sẽ cắt nhầm khi xóa chú thích
 // API app điện thoại: tiến trình riêng để có dữ liệu sạch
-require('child_process').execFileSync(process.execPath, [require('path').join(__dirname, 'kiem-tra-api.js')], { stdio: ['ignore', 'pipe', 'inherit'] })
-  .toString().split('\n').filter(l => /^OK/.test(l)).forEach(l => console.log(l));
+['kiem-tra-api.js', 'kiem-tra-du-lieu-thu.js'].forEach(f => require('child_process').execFileSync(process.execPath, [require('path').join(__dirname, f)], { stdio: ['ignore', 'pipe', 'inherit'] })
+  .toString().split('\n').filter(l => /^OK/.test(l)).forEach(l => console.log(l)));
 console.log('OK - tất cả kiểm tra đều đạt');
