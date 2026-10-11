@@ -825,8 +825,15 @@ function dsBaoHanh_() {
 // ===== Thu tiền =====
 function luuThuTien(token, pt) {
   const user = user_(token);
-  return withLock_(() => ghiPhieuThu_(user, pt));
+  return withLock_(() => {
+    const dot = pt.SoPT && dotCuaPhieu_(pt.SoPT), cu = dot && findObj_('ThuTien', pt.SoPT);
+    if (cu && (Math.round(+pt.SoTien || 0) !== +cu.SoTien || String(pt.SoDH || '') !== String(cu.SoDH || ''))) throw new Error(phieuCuaDot_(pt.SoPT, dot, 'sửa số tiền / đơn hàng'));
+    return ghiPhieuThu_(user, pt);
+  });
 }
+// Phiếu thu ghi nhận một đợt trong lịch thanh toán hợp đồng: chỉ hủy / đổi qua màn hợp đồng để lịch và phiếu luôn khớp
+function dotCuaPhieu_(soPT) { return readTable_('HopDongLich').find(r => String(r.SoPT) === String(soPT)) || null; }
+const phieuCuaDot_ = (soPT, dot, viec) => 'Phiếu ' + soPT + ' ghi nhận ' + dot.Nhan + ' của hợp đồng ' + dot.SoHD + ': không ' + viec + ' ở đây. Mở hợp đồng → Lịch thanh toán → Hủy ghi nhận thu.';
 // Kiểm tra và ghi một phiếu thu. Gọi bên trong withLock_ (khóa không lồng nhau được, nên các hàm đã giữ khóa dùng thẳng hàm này).
 function ghiPhieuThu_(user, pt) {
   pt.SoTien = Math.round(+pt.SoTien || 0);
@@ -847,7 +854,8 @@ function ghiPhieuThu_(user, pt) {
 function xoaThuTien(token, soPT) {
   const user = user_(token, true);
   withLock_(() => {
-    const pt = findObj_('ThuTien', soPT);
+    const pt = findObj_('ThuTien', soPT), dot = dotCuaPhieu_(soPT);
+    if (dot) throw new Error(phieuCuaDot_(soPT, dot, 'xóa'));
     deleteWhere_('ThuTien', soPT);
     log_(user, 'Xóa phiếu thu', soPT, pt ? pt.TenKH + ' · ' + pt.SoTien + ' đ' : '');
   });

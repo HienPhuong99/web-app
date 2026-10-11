@@ -557,7 +557,12 @@ G.luuLichHopDong(admin, hdTG.SoHD, lichSua);
 // Máy đang mở bản lịch cũ (đợt 2 khi đó là ngày khác / số tiền khác): không thu nhầm đợt
 assert.throws(() => G.thuDotHopDong(lan, hdTG.SoHD, 2, { kiemNgay: '2026-11-05', kiemTien: 10000000 }), /vừa thay đổi ở máy khác/);
 assert.throws(() => G.thuDotHopDong(lan, hdTG.SoHD, 2, { kiemNgay: '2026-11-20', kiemTien: 1 }), /vừa thay đổi ở máy khác/);
-assert.strictEqual(plain(G.thuDotHopDong(lan, hdTG.SoHD, 2, { kiemNgay: '2026-11-20', kiemTien: 12000000 })).phieu.SoTien, 12000000);
+const thuD2 = plain(G.thuDotHopDong(lan, hdTG.SoHD, 2, { kiemNgay: '2026-11-20', kiemTien: 12000000 }));
+assert.strictEqual(thuD2.phieu.SoTien, 12000000);
+// Phiếu của đợt không xóa / đổi tiền được ở màn Thu tiền (lịch sẽ chỉ vào phiếu không còn); sửa ghi chú vẫn được
+assert.throws(() => G.xoaThuTien(admin, thuD2.phieu.SoPT), /ghi nhận Kỳ 1\/2 của hợp đồng .*Hủy ghi nhận thu/);
+assert.throws(() => G.luuThuTien(admin, Object.assign({}, thuD2.phieu, { SoTien: 1 })), /không sửa số tiền/);
+assert.strictEqual(G.luuThuTien(admin, Object.assign({}, thuD2.phieu, { GhiChu: 'sửa ghi chú' })).GhiChu, 'sửa ghi chú');
 // Hủy thu (quản trị): xóa phiếu, đưa đợt về chưa thu; hợp đồng đã thu thì không xóa được
 assert.throws(() => G.huyThuDotHopDong(lan, hdTG.SoHD, 2), /quản trị/);
 assert.throws(() => G.xoaHopDong(admin, hdTG.SoHD), /đã ghi nhận thu tiền/);
