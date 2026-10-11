@@ -54,3 +54,28 @@ export type TongQuan = {
   hang: { MaHH: string; TenHang: string; ton: number; toiThieu: number }[];
   soMuc: number; no: { soKhach: number; tong: number; top: { MaKH: string; TenKH: string; SDT: string; tien: number }[] };
 };
+
+export type CauHinh = { hinhThuc: string[]; vat: number; quanTri: boolean; qr: { bin: string; nganHang: string; soTK: string; chuTK: string } | null };
+
+export type HangKho = { MaHH: string; TenHang: string; Model: string; NhomHang: string; DVT: string; GiaLe: number; GiaSi: number; TonToiThieu: number; nhap: number; xuat: number; ton: number };
+export type DongTheKho = { SoPK: string; Ngay: string; Loai: 'Nhập' | 'Xuất' | string; SoDH: string; DoiTac: string; GhiChu: string; SoLuong: number; IMEI: string };
+export type MaKho = { ma: string; trangThai: 'trongKho' | 'daBan' | 'chuaCo'; MaHH?: string; TenHang?: string; DVT?: string; GiaLe?: number; SoPK?: string; Ngay?: string; SoDH?: string; DoiTac?: string };
+
+export type KhachTom = { MaKH: string; TenKH: string; SDT: string; DiaChi: string; no: number; muaCuoi: string };
+export type DsKhach = { tong: number; ds: KhachTom[] };
+export type HoSoKhach = {
+  kh: { MaKH: string; TenKH: string; SDT: string; DiaChi: string; Email: string; NguoiLienHe: string; GhiChu: string };
+  mua: number; da: number; no: number;
+  don: { SoDH: string; Ngay: string; TongCong: number; TrangThai: string; daThu: number }[];
+  thu: { SoPT: string; Ngay: string; SoTien: number; HinhThuc: string; SoDH: string }[];
+  may: MayBaoHanh[]; hopDong: { SoHD: string; Ngay: string; LoaiHD: string; TongCong: number; NgayHetHan: string; TrangThai: string; coFile: boolean }[];
+};
+
+export type BanNhanhKQ = {
+  SoDH: string; SoPK: string; SoPT: string; TongCong: number; daThu: number; MaKH: string; TenKH: string; loiThu: string;
+  lines: { TenHang: string; SoLuong: number; IMEI: string; HetHan: string }[];
+};
+export type PhieuThu = { SoPT: string; Ngay: string; MaKH: string; TenKH: string; SoDH: string; SoTien: number; HinhThuc: string };
+
+export type HopDongTom = { SoHD: string; Ngay: string; LoaiHD: string; TenDN: string; MaKH: string; SDT: string; TongCong: number; NgayHetHan: string; TrangThai: string; coFile: boolean; fileCu: boolean };
+export type ThietBi = { MaMay: string; TenDangNhap: string; TenMay: string; NgayTao: string; LanCuoi: string; thongBao: boolean; mayNay: boolean };

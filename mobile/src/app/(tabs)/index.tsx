@@ -2,7 +2,7 @@
 import { useCallback, useState } from 'react';
 import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/auth';
 import type { TongQuan } from '../../lib/api';
@@ -39,6 +39,13 @@ export default function TongQuanMan() {
               <Text style={s.cuaHang}>{du?.cuaHang.ten ?? tenCuaHang}{du ? ' · ' + ngay(du.homNay) : ''}</Text>
             </View>
             <View style={s.anh}><Text style={s.anhChu}>{(ten || '?').trim().charAt(0).toUpperCase()}</Text></View>
+          </View>
+
+          <View style={s.phimTat}>
+            <PhimTat bieuTuong="bag-add" chu="Bán nhanh" mauBT={mau.camDam} onPress={() => router.navigate('/ban')} testID="pt-ban" />
+            <PhimTat bieuTuong="people" chu="Khách" mauBT={mau.brand} onPress={() => router.navigate('/khach')} />
+            <PhimTat bieuTuong="cube" chu="Kho" mauBT={mau.xanh} onPress={() => router.push('/kho')} testID="pt-kho" />
+            <PhimTat bieuTuong="document-text" chu="Hợp đồng" mauBT={mau.vang} onPress={() => router.push('/hop-dong')} />
           </View>
 
           {loi ? (
@@ -92,10 +99,11 @@ export default function TongQuanMan() {
                 <The nhan="Công nợ" mauNhan={mau.vang} tieuDe={`${du.no.soKhach} khách còn nợ ${tien(du.no.tong)}`} style={s.muc}>
                   {du.no.top.slice(0, TOI_DA).map(k => (
                     <View key={k.MaKH || k.TenKH} style={s.dong}>
-                      <View style={{ flex: 1 }}>
+                      <Pressable style={{ flex: 1 }} disabled={!k.MaKH} onPress={() => router.push({ pathname: '/khach/[ma]', params: { ma: k.MaKH } })}
+                        accessibilityRole="button" accessibilityLabel={'Hồ sơ ' + k.TenKH} testID={'no-' + k.MaKH}>
                         <Text style={s.dongChinh} numberOfLines={1}>{k.TenKH}</Text>
                         <Text style={s.dongPhu}>{tien(k.tien)}</Text>
-                      </View>
+                      </Pressable>
                       {k.SDT ? (
                         <Pressable onPress={() => Linking.openURL('tel:' + k.SDT.replace(/[^\d+]/g, ''))} style={s.goi} accessibilityLabel={'Gọi ' + k.TenKH}>
                           <Ionicons name="call" size={18} color={mau.brand} />
@@ -110,6 +118,15 @@ export default function TongQuanMan() {
         </ScrollView>
       </SafeAreaView>
     </View>
+  );
+}
+
+function PhimTat({ bieuTuong, chu, mauBT, onPress, testID }: { bieuTuong: keyof typeof Ionicons.glyphMap; chu: string; mauBT: string; onPress: () => void; testID?: string }) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [s.pt, pressed && { opacity: 0.7 }]} accessibilityRole="button" accessibilityLabel={chu} testID={testID}>
+      <View style={[s.ptTron, { backgroundColor: mauBT + '1F' }]}><Ionicons name={bieuTuong} size={22} color={mauBT} /></View>
+      <Text style={s.ptChu} numberOfLines={1}>{chu}</Text>
+    </Pressable>
   );
 }
 
@@ -152,6 +169,10 @@ const s = StyleSheet.create({
   anh: { width: 52, height: 52, borderRadius: 26, backgroundColor: mau.brand, alignItems: 'center', justifyContent: 'center' },
   anhChu: { color: '#fff', fontSize: 22, fontWeight: '800' },
   muc: { marginBottom: 14 },
+  phimTat: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  pt: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.74)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.95)', minWidth: 0 },
+  ptTron: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  ptChu: { fontSize: 13, fontWeight: '700', color: mau.chu, marginTop: 6 },
   nhanGiua: { fontSize: 12, fontWeight: '700', letterSpacing: 1.2, color: mau.camDam },
   bo3: { flexDirection: 'row', alignSelf: 'stretch', marginTop: 4 },
   o3: { flex: 1, alignItems: 'center', paddingHorizontal: 4 },

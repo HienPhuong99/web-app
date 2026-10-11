@@ -36,7 +36,29 @@
           "recordAudioAndroid": false
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-sharing",
+      "expo-image",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Ứng dụng mở ảnh bạn chọn để đọc mã vạch / mã QR IMEI trong ảnh.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Ứng dụng dùng Face ID để khóa app bán hàng, tránh người khác mở khi cầm máy."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#FF6B4A"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

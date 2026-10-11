@@ -1,7 +1,7 @@
 // Hàm thuần của app: node --test test/   (Node 22.18+ tự bỏ kiểu TypeScript)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { tien, tienGon, ngay, tinhTrangBaoHanh, loiChao, thu } from '../src/lib/dinhDang.ts';
+import { tien, tienGon, ngay, tinhTrangBaoHanh, loiChao, thu, homNay } from '../src/lib/dinhDang.ts';
 import { dungLuhn, chuanHoaMa, loaiMa, goiYMa } from '../src/lib/maQuet.ts';
 
 test('tiền', () => {
@@ -79,4 +79,10 @@ test('chuẩn hóa mã quét', () => {
   assert.equal(chuanHoaMa('SF2LXK0ABC9'), 'SF2LXK0ABC9'); // chữ S đầu mã vạch serial: máy chủ tự thử bỏ
   assert.equal(chuanHoaMa('0911 000 001'), '0911000001');
   assert.equal(chuanHoaMa(''), '');
+});
+
+test('hôm nay theo giờ máy', () => {
+  assert.equal(homNay(new Date(2026, 0, 5, 23, 59)), '2026-01-05');
+  assert.equal(homNay(new Date(2026, 11, 31, 0, 1)), '2026-12-31');
+  assert.match(homNay(), /^\d{4}-\d{2}-\d{2}$/);
 });

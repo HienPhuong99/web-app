@@ -1,7 +1,7 @@
 // Kiểm tra API JSON của app điện thoại (Api.gs → doPost) trên dữ liệu mẫu:  node dev/kiem-tra-api.js
 // Chạy trong tiến trình riêng (kiem-tra.js gọi ở cuối) để có dữ liệu sạch, không lẫn với các bài test khác.
 const assert = require('assert');
-const { ctx: G, sheets, logs, cache, props } = require('./chay-thu');
+const { ctx: G, sheets, logs, cache, props, thuMail, push } = require('./chay-thu');
 const adminPass = logs.join('\n').match(/mật khẩu: (\S+)/)[1];
 const today = G.now_().slice(0, 10);
 
@@ -40,7 +40,7 @@ assert.match(dn.may, /^[0-9a-f]{64}$/);
 assert.deepStrictEqual([dn.user.u, dn.user.vaiTro, dn.cuaHang.ten], ['admin', 'admin', 'phuonghihi']);
 const ad = dn.may;
 assert.strictEqual(thietBi().length, 1);
-assert.deepStrictEqual(sheets.ThietBi.rows[0], ['MaMay', 'TenDangNhap', 'TenMay', 'CapLuc', 'NgayTao', 'LanCuoi']);
+assert.deepStrictEqual(sheets.ThietBi.rows[0], ['MaMay', 'TenDangNhap', 'TenMay', 'CapLuc', 'NgayTao', 'LanCuoi', 'PushToken']);
 const [ma0, tk0, ten0, cap0] = thietBi()[0];
 assert.ok(/^[0-9a-f]{64}$/.test(ma0) && ma0 !== ad && !JSON.stringify(sheets).includes(ad), 'Không được lưu mã máy gốc');
 assert.deepStrictEqual([tk0, ten0, cap0], ['admin', 'iPhone của chủ', String(dn.user.t)]);
@@ -150,6 +150,183 @@ goi(ad3, 'luuChungTu', 'XK', { Ngay: today, DoiTac: 'Đại lý 2345671', lines:
 const dl = goi(ad3, 'traBaoHanh', '2345671');
 assert.deepStrictEqual([dl.tong, dl.ds[0].IMEIKhop], [1, '356789012345671']);
 assert.strictEqual(goi(ad3, 'traBaoHanh', 'dai ly').tong, 1);
+
+// ===== App bản 2: cài đặt thu tiền, kho, bán nhanh, khách, hợp đồng, điện thoại đăng nhập, thông báo =====
+const at = G.dangNhap('admin', adminPass).token;
+G.luuTaiKhoan(at, { TenDangNhap: 'binh', HoTen: 'Bình', VaiTro: 'nhanvien', MatKhau: 'binh-123', CuaHang: 'phone', moi: true });
+const binh = may('binh', 'binh-123', 'iPhone Bình');
+
+// Cài đặt: chưa khai tài khoản nhận tiền thì không có mã QR; quản trị khai xong thì app đủ thông tin tạo VietQR
+let ch = goi(binh, 'cauHinhMay');
+assert.deepStrictEqual([ch.qr, ch.quanTri, ch.hinhThuc[0], ch.vat], [null, false, 'Tiền mặt', 0]);
+G.luuCuaHang(at, Object.assign({}, G.taiDuLieu(at).congTy, { tenNgan: 'phuonghihi', qrNganHang: '970436', qrSoTK: '0123456789', qrChuTK: 'NGUYEN VAN A' }));
+ch = goi(binh, 'cauHinhMay');
+assert.deepStrictEqual(ch.qr, { bin: '970436', nganHang: 'Vietcombank', soTK: '0123456789', chuTK: 'NGUYEN VAN A' });
+assert.strictEqual(goi(ad3, 'cauHinhMay').quanTri, true);
+
+// Kho: tồn = nhập − xuất; tra một IMEI xem còn trong kho, đã bán hay chưa từng nhập
+goi(ad3, 'luuChungTu', 'NK', { Ngay: today, DoiTac: 'NCC', lines: [{ MaHH: 'HH0002', TenHang: 'iPhone 15', SoLuong: 2, IMEI: '351234567890132 351234567890140' }] });
+let kho = goi(binh, 'khoMay'), k15 = kho.find(h => h.MaHH === 'HH0002');
+assert.deepStrictEqual([k15.nhap, k15.xuat, k15.ton, k15.GiaLe, k15.TenHang], [2, 2, 0, 11300000, 'iPhone 15 128GB - Đen']);
+assert.ok(kho.every((h, i) => !i || String(kho[i - 1].TenHang).localeCompare(h.TenHang, 'vi') <= 0));
+let mk = goi(binh, 'traMaKho', ' 351 234 567 890 132 ');
+assert.deepStrictEqual([mk.trangThai, mk.ma, mk.MaHH, mk.GiaLe, mk.DoiTac], ['trongKho', '351234567890132', 'HH0002', 11300000, 'NCC']);
+mk = goi(binh, 'traMaKho', '356789012345671');
+assert.deepStrictEqual([mk.trangThai, mk.SoDH, mk.TenHang], ['daBan', dh.SoDH, 'iPhone 16 Pro Max 256GB - Titan Đen']);
+assert.deepStrictEqual([goi(binh, 'traMaKho', 'SF2LXK0ABC9').ma, goi(binh, 'traMaKho', 'SF2LXK0ABC9').trangThai], ['F2LXK0ABC9', 'daBan']);
+assert.deepStrictEqual(goi(binh, 'traMaKho', '999999999999994'), { ma: '999999999999994', trangThai: 'chuaCo' });
+assert.strictEqual(goi(binh, 'traMaKho', 'SABCDEFGHIJ').ma, 'ABCDEFGHIJ'); // serial chưa có, bỏ chữ S của mã vạch
+assert.throws(() => goi(binh, 'traMaKho', ' ab '), /ít nhất 4/);
+
+// Bán nhanh: lỗi thì báo trước, không ghi gì
+const soDong = n => sheets['PS_' + n].rows.length, truoc = ['DonHang', 'DonHangCT', 'PhieuKho', 'ThuTien', 'KhachHang'].map(soDong);
+const ban = o => goi(binh, 'banNhanh', o), mot = { MaHH: 'HH0002', SoLuong: 1, DonGia: 11300000, IMEI: '351234567890132' };
+assert.throws(() => ban({ MaKH: 'KH00001', lines: [] }), /Chưa có hàng/);
+assert.throws(() => ban({ MaKH: 'KH00001', lines: [{ MaHH: 'HH0002', SoLuong: 1, DonGia: 1, IMEI: '356789012345671' }] }), /đã xuất ở phiếu/);
+assert.throws(() => ban({ khachMoi: { TenKH: 'Khách thử', SDT: '0900000099' }, lines: [{ MaHH: 'HH0002', SoLuong: 1, DonGia: 1, IMEI: '356789012345671' }] }), /đã xuất ở phiếu/); // không tạo khách thừa
+assert.throws(() => ban({ MaKH: 'KH00001', lines: [{ MaHH: 'HH0002', SoLuong: 0, DonGia: 1 }] }), /số nguyên lớn hơn 0/);
+assert.throws(() => ban({ MaKH: 'KH00001', lines: [{ MaHH: 'HH0002', SoLuong: 1.5, DonGia: 1 }] }), /số nguyên lớn hơn 0/);
+assert.throws(() => ban({ MaKH: 'KH00001', lines: [{ MaHH: 'HH0002', SoLuong: 2, DonGia: 1, IMEI: '351234567890132' }] }), /có 1 IMEI\/serial nhưng số lượng là 2/);
+assert.throws(() => ban({ MaKH: 'KH00001', lines: [mot, mot] }), /bị lặp/);
+assert.throws(() => ban({ MaKH: 'KH00001', lines: [{ MaHH: 'HH9999', SoLuong: 1, DonGia: 1 }] }), /không tìm thấy mặt hàng HH9999/);
+assert.throws(() => ban({ MaKH: 'KH00001', lines: [{ SoLuong: 1, DonGia: 1 }] }), /nhập tên hàng/);
+assert.throws(() => ban({ MaKH: 'KH00001', lines: [{ TenHang: 'x', SoLuong: 1, DonGia: -5 }] }), /đơn giá không hợp lệ/);
+assert.throws(() => ban({ MaKH: 'KH00001', lines: [mot], thu: { SoTien: 11300001 } }), /từ 0 đến 11300000/);
+assert.throws(() => ban({ MaKH: 'KH99999', lines: [mot] }), /Không tìm thấy khách hàng KH99999/);
+assert.throws(() => ban({ khachMoi: { TenKH: '  ' }, lines: [mot] }), /nhập tên khách mới/);
+assert.deepStrictEqual(['DonHang', 'DonHangCT', 'PhieuKho', 'ThuTien', 'KhachHang'].map(soDong), truoc);
+// Phiếu xuất vẫn lỗi sau khi đã lập đơn (vd. người khác vừa bán máy đó): đơn vừa lập bị xóa
+const gocLuu = G.luuChungTu;
+G.luuChungTu = (t, loai, d) => { if (loai === 'XK') throw new Error('giả lập lỗi phiếu xuất'); return gocLuu(t, loai, d); };
+assert.throws(() => ban({ MaKH: 'KH00001', lines: [mot] }), /giả lập lỗi phiếu xuất/);
+G.luuChungTu = gocLuu;
+assert.deepStrictEqual(['DonHang', 'DonHangCT', 'PhieuKho', 'ThuTien', 'KhachHang'].map(soDong), truoc);
+
+// Bán cho khách mới: đơn đã giao, máy ra khỏi kho, có hạn bảo hành, phiếu thu theo đơn
+const bn = ban({ khachMoi: { TenKH: ' Chị Mai ', SDT: '0977 123 456' }, GhiChu: 'Khách quen',
+  lines: [mot, { TenHang: 'Ốp lưng', SoLuong: 2, DonGia: 150000 }], thu: { SoTien: 5000000, HinhThuc: 'Chuyển khoản' } });
+assert.match(bn.SoDH, /DH$/); assert.match(bn.SoPK, /XK$/); assert.match(bn.SoPT, /PT$/);
+assert.deepStrictEqual([bn.TongCong, bn.daThu, bn.TenKH, bn.loiThu, bn.lines[0].HetHan, bn.lines[0].IMEI, bn.lines[1].HetHan],
+  [11600000, 5000000, 'Chị Mai', '', G.congThang_(today, 12), '351234567890132', '']);
+const dhBan = G.findObj_('DonHang', bn.SoDH), ptBan = G.findObj_('ThuTien', bn.SoPT);
+assert.deepStrictEqual([dhBan.TrangThai, dhBan.NguoiTao, dhBan.MaKH, dhBan.GhiChu, dhBan.NgayGiao], ['Đã giao', 'Bình', bn.MaKH, 'Khách quen', today]);
+assert.deepStrictEqual([ptBan.SoDH, ptBan.SoTien, ptBan.HinhThuc, ptBan.MaKH], [bn.SoDH, 5000000, 'Chuyển khoản', bn.MaKH]);
+assert.deepStrictEqual(G.layChungTu(at, 'DH', bn.SoDH).lines.map(l => [l.LoaiGia, l.ThanhTien]), [['Giá lẻ', 11300000], ['Giá tùy chọn', 300000]]);
+assert.strictEqual(goi(binh, 'traMaKho', '351234567890132').trangThai, 'daBan');
+assert.strictEqual(goi(binh, 'khoMay').find(h => h.MaHH === 'HH0002').xuat, 3);
+// Khách mới trùng số điện thoại với khách đã có: dùng khách cũ, không tạo trùng. Khách chưa trả: không có phiếu thu
+const bn2 = ban({ khachMoi: { TenKH: 'Mai', SDT: '0977123456' }, lines: [{ TenHang: 'Dán màn hình', SoLuong: 1, DonGia: 100000 }] });
+assert.deepStrictEqual([bn2.MaKH, bn2.SoPT, bn2.daThu], [bn.MaKH, '', 0]);
+assert.strictEqual(sheets.PS_KhachHang.rows.filter(r => r[3] && String(r[3]).replace(/\D/g, '') === '0977123456').length, 1);
+// "Khách lẻ" không số điện thoại: mọi lần bán lẻ dùng chung một khách; khách mới khác tên không số thì tạo mới
+const le1 = ban({ khachMoi: { TenKH: 'Khách lẻ' }, lines: [{ TenHang: 'Cáp sạc', SoLuong: 1, DonGia: 90000 }], thu: { SoTien: 90000 } });
+const le2 = ban({ khachMoi: { TenKH: 'khach le', SDT: '' }, lines: [{ TenHang: 'Cáp sạc', SoLuong: 1, DonGia: 90000 }], thu: { SoTien: 90000 } });
+assert.strictEqual(le1.MaKH, le2.MaKH);
+assert.notStrictEqual(ban({ khachMoi: { TenKH: 'Anh Tú' }, lines: [{ TenHang: 'Cáp sạc', SoLuong: 1, DonGia: 90000 }] }).MaKH, le1.MaKH);
+// VAT tính ở máy chủ; không chọn hình thức thì là tiền mặt
+const bn3 = ban({ MaKH: bn.MaKH, VAT: 10, lines: [{ TenHang: 'Sạc 20W', SoLuong: 1, DonGia: 500000 }], thu: { SoTien: 550000 } });
+assert.deepStrictEqual([bn3.TongCong, G.findObj_('ThuTien', bn3.SoPT).HinhThuc], [550000, 'Tiền mặt']);
+// Phiếu thu lỗi: đơn và phiếu xuất vẫn giữ, báo lại để thu sau
+const gocThu = G.luuThuTien;
+G.luuThuTien = () => { throw new Error('giả lập lỗi thu tiền'); };
+const bn4 = ban({ MaKH: bn.MaKH, lines: [{ TenHang: 'Cáp', SoLuong: 1, DonGia: 200000 }], thu: { SoTien: 200000 } });
+G.luuThuTien = gocThu;
+assert.deepStrictEqual([bn4.loiThu, bn4.SoPT, bn4.daThu, !!G.findObj_('DonHang', bn4.SoDH)], ['giả lập lỗi thu tiền', '', 0, true]);
+
+// Hồ sơ khách: công nợ, đơn (mới trước), phiếu thu, máy đã mua kèm bảo hành
+const hs = goi(binh, 'chiTietKhach', bn.MaKH);
+assert.deepStrictEqual([hs.kh.TenKH, hs.kh.SDT, hs.mua, hs.da, hs.no], ['Chị Mai', '0977 123 456', 12450000, 5550000, 6900000]);
+assert.deepStrictEqual(hs.don.map(d => d.SoDH), [bn4.SoDH, bn3.SoDH, bn2.SoDH, bn.SoDH]);
+assert.deepStrictEqual([hs.don[3].daThu, hs.thu.length, hs.may.length, hs.may[0].IMEI, hs.may[0].ConHan, hs.hopDong.length], [5000000, 2, 1, '351234567890132', true, 0]);
+assert.ok(!('SoTK' in hs.kh) && !('MST' in hs.kh));
+assert.throws(() => goi(binh, 'chiTietKhach', 'KH99999'), /Không tìm thấy khách/);
+
+// Tìm khách: không dấu, theo số điện thoại, theo mã; kèm công nợ
+const tim = q => goi(binh, 'dsKhachMay', q);
+assert.deepStrictEqual(tim('chi mai').ds.map(k => [k.TenKH, k.no]), [['Chị Mai', 6900000]]);
+assert.deepStrictEqual(tim('0977 12').ds.map(k => k.MaKH), [bn.MaKH]);
+assert.deepStrictEqual(tim('KH00001').ds.map(k => k.TenKH), ['Anh Minh']);
+assert.deepStrictEqual(tim('chi').ds.map(k => k.TenKH), ['Chị Hoa', 'Chị Mai']);
+assert.strictEqual(tim('12').tong, 0); // số quá ngắn
+assert.strictEqual(tim('').tong, sheets.PS_KhachHang.rows.length - 1);
+assert.strictEqual(tim('').ds[0].muaCuoi, today);
+
+// Hợp đồng: tìm theo số / tên / SĐT; biết hợp đồng nào đã có file để tải PDF
+const shHD = G.sheet_('HopDong');
+shHD.appendRow(G.toRow_(shHD, { SoHD: '001-2026/HĐMB', Ngay: today, LoaiHD: 'Mua bán', MaKH: bn.MaKH, TenDN: 'Chị Mai', SDT: '0977123456', TongCong: 11300000 }));
+shHD.appendRow(G.toRow_(shHD, { SoHD: '002-2026/HĐMB', Ngay: today, LoaiHD: 'Mua bán', MaKH: 'KH00001', TenDN: 'Anh Minh', FileId: 'file-x', FileCu: '1' }));
+assert.deepStrictEqual(goi(binh, 'dsHopDongMay', '').ds.map(h => [h.SoHD, h.coFile, h.fileCu]), [['002-2026/HĐMB', true, true], ['001-2026/HĐMB', false, false]]);
+assert.deepStrictEqual(goi(binh, 'dsHopDongMay', 'chi mai').ds.map(h => h.SoHD), ['001-2026/HĐMB']);
+assert.deepStrictEqual(goi(binh, 'dsHopDongMay', '0977 123').ds.map(h => h.SoHD), ['001-2026/HĐMB']);
+assert.strictEqual(goi(binh, 'chiTietKhach', bn.MaKH).hopDong[0].SoHD, '001-2026/HĐMB');
+assert.throws(() => goi(binh, 'taiPdfHopDong', '001-2026/HĐMB'), /chưa có file/);
+
+// Điện thoại đã đăng nhập: nhân viên thấy máy mình, quản trị thấy hết; "máy này" là máy đang gọi
+let tb = goi(binh, 'dsThietBi');
+assert.deepStrictEqual(tb.map(x => [x.TenDangNhap, x.TenMay, x.mayNay, x.thongBao]), [['binh', 'iPhone Bình', true, false]]);
+tb = goi(ad3, 'dsThietBi');
+assert.ok(tb.some(x => x.TenDangNhap === 'binh') && tb.filter(x => x.mayNay).length === 1 && tb.find(x => x.mayNay).TenMay === 'Máy test');
+assert.ok(G.dsThietBi(at).every(x => !x.mayNay)); // gọi từ web: không có "máy này"
+const maBinh = G.dsThietBi(at).find(x => x.TenDangNhap === 'binh').MaMay;
+assert.throws(() => goi(binh, 'xoaThietBi', G.dsThietBi(at).find(x => x.TenDangNhap === 'admin').MaMay), /Chỉ quản trị/);
+assert.throws(() => goi(binh, 'xoaThietBi', 'khong-co'), /Không tìm thấy điện thoại/);
+const binh2 = may('binh', 'binh-123', 'iPad Bình');
+goi(binh2, 'xoaThietBi', maBinh); // nhân viên tự đăng xuất máy cũ của mình
+assert.strictEqual(api({ may: binh, fn: 'tongQuanMay' }).error, 'HET_PHIEN');
+G.xoaThietBi(at, G.dsThietBi(at).find(x => x.TenMay === 'iPad Bình').MaMay); // quản trị đăng xuất từ web
+assert.strictEqual(api({ may: binh2, fn: 'tongQuanMay' }).error, 'HET_PHIEN');
+assert.ok(sheets.PS_NhatKy.rows.some(r => r[2] === 'Đăng xuất điện thoại từ xa' && r[4] === 'iPad Bình'));
+
+// Thông báo đẩy: bật trên máy → lưu mã, đặt hẹn giờ sáng; thử gửi; mỗi sáng gửi tóm tắt việc cần làm
+const binh3 = may('binh', 'binh-123', 'iPhone Bình'), MA_TB = 'ExponentPushToken[abcdefghij1234567890]';
+assert.strictEqual(api({ fn: 'datThongBao', args: [MA_TB] }).error, 'HET_PHIEN');
+assert.match(api({ may: binh3, fn: 'datThongBao', args: ['khong-hop-le'] }).error, /không hợp lệ/);
+assert.throws(() => goi(binh3, 'thuThongBao'), /chưa bật thông báo/);
+thuMail.henGio = [];
+assert.deepStrictEqual(goi(binh3, 'datThongBao', MA_TB), { bat: true });
+assert.deepStrictEqual(thuMail.henGio.map(t => [t.ham, t.gio]), [['guiEmailSang', 7]]);
+assert.strictEqual(goi(binh3, 'dsThietBi')[0].thongBao, true);
+goi(binh3, 'thuThongBao');
+assert.deepStrictEqual(push.da.at(-1).msgs.map(m => [m.to, m.title]), [[MA_TB, 'Thông báo thử']]);
+assert.strictEqual(push.da.at(-1).url, 'https://exp.host/--/api/v2/push/send');
+push.http = 500;
+assert.throws(() => goi(binh3, 'thuThongBao'), /Chưa gửi được thông báo/);
+push.http = 0;
+// Nội dung thông báo sáng
+assert.strictEqual(G.noiDungThongBao_('X', { dot: [], hopDong: [], donTre: [], hang: [], soMuc: 0 }), null);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(G.noiDungThongBao_('X', { dot: [1], hopDong: [], donTre: [1, 2], hang: [], soMuc: 3 }))),
+  { title: 'X: 3 việc cần làm hôm nay', body: '1 đợt trả góp cần thu · 2 đơn trễ giao' });
+// Bộ hẹn giờ sáng gửi một lần mỗi ngày (có hàng sắp hết nên có việc)
+let soLo = push.da.length;
+G.guiEmailSang({ triggerUid: 'x' });
+assert.strictEqual(push.da.length, soLo + 1);
+assert.deepStrictEqual(push.da.at(-1).msgs.map(m => m.to), [MA_TB]);
+assert.match(push.da.at(-1).msgs[0].body, /mặt hàng sắp hết/);
+G.guiEmailSang({ triggerUid: 'x' });
+assert.strictEqual(push.da.length, soLo + 1);
+G.guiEmailSang(); // người lạ gọi thẳng: bỏ qua
+assert.strictEqual(push.da.length, soLo + 1);
+// Máy bị thu hồi (đặt lại mật khẩu) mà chưa mở lại app: không gửi
+props.delete('thongBao.phone');
+G.luuTaiKhoan(at, { TenDangNhap: 'binh', HoTen: 'Bình', VaiTro: 'nhanvien', MatKhau: 'binh-456', CuaHang: 'phone' });
+G.guiEmailSang({ triggerUid: 'x' });
+assert.strictEqual(push.da.length, soLo + 1);
+// Máy đã gỡ app: máy chủ Expo báo DeviceNotRegistered → xóa mã, lần sau không gửi
+const binh4 = may('binh', 'binh-456', 'iPhone Bình');
+goi(binh4, 'datThongBao', MA_TB);
+push.loi[MA_TB] = 'DeviceNotRegistered';
+props.delete('thongBao.phone');
+G.guiEmailSang({ triggerUid: 'x' });
+assert.strictEqual(push.da.length, soLo + 2);
+assert.strictEqual(goi(binh4, 'dsThietBi')[0].thongBao, false);
+delete push.loi[MA_TB];
+// Tắt thông báo; không còn máy nào bật và email sáng tắt: bỏ hẹn giờ
+goi(binh4, 'datThongBao', MA_TB);
+assert.deepStrictEqual(goi(binh4, 'datThongBao', ''), { bat: false });
+assert.strictEqual(goi(binh4, 'dsThietBi')[0].thongBao, false);
+G.datHenGioEmailSang_();
+assert.strictEqual(thuMail.henGio.length, 0);
+assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có chức năng/);
 
 // Sai mật khẩu 5 lần: chặn 10 phút như web
 for (let i = 0; i < 5; i++) api({ fn: 'dangNhapMay', args: ['admin', 'sai'] });

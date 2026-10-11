@@ -39,21 +39,22 @@ Web hiện xem trước, bấm **Nhập** để ghi xuống Sheet. Mã (`KH00001
 
 ## App điện thoại (Android / iOS)
 
-Thư mục `mobile/` là app cho nhân viên đứng quầy: đăng nhập bằng tài khoản web, **Tổng quan** (doanh số hôm nay, đã thu, còn nợ, 7 ngày, việc cần làm), **Quét IMEI** tra bảo hành bằng camera, **Tài khoản**. Cách chạy thử, cài APK, kiểm tra: xem `mobile/README.md`.
+Thư mục `mobile/` là app cho nhân viên đứng quầy: **Tổng quan**, **Khách** (hồ sơ, công nợ, gọi / Zalo), **Bán nhanh** (quét IMEI → một nút lập đơn + xuất kho + thu tiền, mã VietQR), **Thu tiền**, **Quét** tra bảo hành (camera, chọn ảnh có mã, dán IMEI), **Kho**, **Hợp đồng** (chia sẻ PDF), **Điện thoại đăng nhập**, khóa **Face ID**, **thông báo việc cần làm mỗi sáng**. Cách chạy thử, cài APK, kiểm tra: xem `mobile/README.md`.
 
-1. **Đưa `Api.gs` lên Google trước** (`node dev/trien-khai.js`, hoặc dán tay rồi triển khai lại như mục *Lên bản mới*). Bản trên Google chưa có `Api.gs` thì app báo lỗi khi đăng nhập. Lần mở đầu tiên app tự thêm trang `ThietBi` vào Sheet.
-2. **Thử miễn phí trên điện thoại**: cài Expo Go, trong `mobile/` chạy `npm install` rồi `npx expo start`, quét mã QR.
-3. **Bảo mật**:
-   - Đăng nhập trên điện thoại cấp một mã máy dùng lâu dài, lưu trong Keychain/Keystore của máy. Trang `ThietBi` chỉ giữ mã đã băm, tên máy, lần dùng cuối.
+1. **Đưa code lên Google** (`node dev/trien-khai.js`, hoặc dán tay rồi triển khai lại như mục *Lên bản mới*). Lần gọi đầu tiên tự thêm trang `ThietBi` (và cột `PushToken`) vào Sheet.
+2. **Cấp quyền mới cho thông báo đẩy** (một lần): mở Apps Script (`clasp open` hoặc Tiện ích mở rộng → Apps Script), chọn hàm `caiDat` → **Chạy** → **Cho phép** quyền *kết nối tới dịch vụ bên ngoài* (gửi thông báo qua máy chủ Expo). Chưa cấp thì riêng việc gửi thông báo báo lỗi, các phần khác vẫn chạy.
+3. **Thử miễn phí trên điện thoại**: cài Expo Go, trong `mobile/` chạy `npm install` rồi `npx expo start`, quét mã QR.
+4. **Bảo mật**:
+   - Đăng nhập trên điện thoại cấp một mã máy dùng lâu dài, lưu trong Keychain/Keystore của máy. Trang `ThietBi` chỉ giữ mã đã băm, tên máy, lần dùng cuối, mã nhận thông báo.
    - Mã máy hết hiệu lực khi đăng xuất trên máy đó, khi tài khoản bị khóa (kể cả khóa thẳng trong Sheet), đổi quyền, hoặc đặt lại / đổi mật khẩu.
-   - **Mất điện thoại**: quản trị vào menu Tài khoản trên web, đặt lại mật khẩu hoặc khóa tài khoản đó.
+   - **Mất điện thoại**: trên web vào **Hệ thống → Điện thoại đăng nhập** (hoặc trong app: Thêm → Điện thoại đăng nhập) → **Đăng xuất máy này**. Không cần đổi mật khẩu. Nhân viên chỉ thấy và đăng xuất được máy của mình; quản trị thấy mọi máy.
    - Mỗi tài khoản tối đa 10 máy; đăng nhập máy thứ 11 thì máy lâu không dùng nhất bị đăng xuất.
-4. **Chưa thử trên Google thật và trên điện thoại thật**:
-   - API mới chỉ được kiểm tra trên bản giả lập; app mới chạy ở bản web (trình duyệt cỡ điện thoại).
-   - Lần đầu: triển khai, đăng nhập app bằng một tài khoản nhân viên thử, tra một IMEI đã bán.
+   - Có thể bật **khóa app bằng Face ID / vân tay** (Thêm → Bảo mật): hỏi khi mở app và khi quay lại sau hơn 1 phút.
+5. **Thông báo mỗi sáng**: mỗi máy tự bật trong Thêm → Thông báo (bấm *Gửi thử thông báo* để kiểm tra). Gửi cùng giờ với email sáng (mặc định 7 giờ, đổi trong *Cài đặt → Email tổng hợp mỗi sáng*), chỉ khi có việc: đợt trả góp cần thu, hợp đồng sắp/quá hạn, đơn trễ giao, hàng sắp hết. App cần `projectId` của Expo (xem `mobile/README.md`).
+6. **Lưu ý**:
    - App báo "Máy chủ trả dữ liệu không đọc được" nghĩa là web app chưa để *Bất kỳ ai* truy cập, hoặc link sai (trong app: *Máy chủ*).
    - Link `/dev` không dùng được cho app, vì link này đòi đăng nhập Google.
-   - Camera quét mã chỉ thử được trên máy thật.
+   - Camera, Face ID, thông báo, chia sẻ PDF chỉ thử được trên máy thật.
 
 ## Cài đặt (làm 1 lần, khoảng 10 phút)
 

@@ -1,0 +1,33 @@
+// Thẻ một máy đã bán: tên máy, tình trạng bảo hành, IMEI, khách (bấm mở hồ sơ), SĐT (bấm gọi), ngày giao, hạn bảo hành, chứng từ.
+import { Linking, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import type { MayBaoHanh } from '../lib/api';
+import { ngay, tinhTrangBaoHanh, type TinhTrangBH } from '../lib/dinhDang';
+import { linkGoi } from '../lib/lienHe';
+import { DongTT, Nhan, type MAU_NHAN } from './DanhSach';
+import { The } from './The';
+import { mau } from './theme';
+
+export const LOAI_TT: Record<TinhTrangBH['loai'], keyof typeof MAU_NHAN> = { con: 'xanh', sap: 'vang', het: 'do', khong: 'xam' };
+
+export function TheMay({ x }: { x: MayBaoHanh }) {
+  const tt = tinhTrangBaoHanh(x);
+  return (
+    <The style={{ marginBottom: 12 }} testID="the-may">
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+        <Text style={[s.tenMay, { flex: 1 }]}>{x.TenHang}</Text>
+        <Nhan chu={tt.nhan} loai={LOAI_TT[tt.loai]} testID="tinh-trang" />
+      </View>
+      <DongTT nhan="IMEI/serial" giaTri={x.IMEIKhop || x.IMEI || '—'} dam />
+      <DongTT nhan="Khách" giaTri={x.TenKH || 'Khách lẻ'} onPress={x.MaKH ? () => router.push({ pathname: '/khach/[ma]', params: { ma: x.MaKH } }) : undefined} />
+      {x.SDT ? <DongTT nhan="Điện thoại" giaTri={x.SDT} onPress={() => { Linking.openURL(linkGoi(x.SDT)); }} /> : null}
+      <DongTT nhan="Ngày giao" giaTri={ngay(x.Ngay)} />
+      <DongTT nhan="Hết bảo hành" giaTri={x.HetHan ? ngay(x.HetHan) : 'Không bảo hành'} />
+      <DongTT nhan="Chứng từ" giaTri={[x.SoDH && 'Đơn ' + x.SoDH, 'Phiếu ' + x.SoPK].filter(Boolean).join(' · ')} />
+    </The>
+  );
+}
+
+const s = StyleSheet.create({
+  tenMay: { fontSize: 18, fontWeight: '800', color: mau.chu },
+});

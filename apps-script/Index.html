@@ -601,7 +601,7 @@ const NAV = [
   ['Hợp đồng', [['hopdong', 'Hợp đồng', 'clipboard'], ['hdhan', 'Sắp hết hạn', 'alert'], ['hdlich', 'Lịch thanh toán', 'card']]],
   ['Kho hàng', [['hang', 'Hàng hóa & bảng giá', 'box'], ['kho', 'Nhập – xuất kho', 'truck'], ['ton', 'Tồn kho', 'layers']]],
   ['Danh mục', [['khach', 'Khách hàng', 'users']]],
-  ['Hệ thống', [['caidat', 'Cài đặt', 'settings'], ['taikhoan', 'Tài khoản', 'shield', true], ['nhatky', 'Nhật ký', 'clock', true]]],
+  ['Hệ thống', [['caidat', 'Cài đặt', 'settings'], ['taikhoan', 'Tài khoản', 'shield', true], ['thietbi', 'Điện thoại đăng nhập', 'phone'], ['nhatky', 'Nhật ký', 'clock', true]]],
 ];
 const DOC = {
   BG: { ten: 'Báo giá', list: 'baogia', key: 'SoBG', arr: 'baoGia', crumb: 'Bán hàng', price: true },
@@ -2651,6 +2651,31 @@ function vTaiKhoan(el) {
   if (!S.taiKhoan) api('dsTaiKhoan').then(r => { S.taiKhoan = r; if (S.view === 'taikhoan') refresh(); }).catch(e => toast(errMsg(e), 'err'));
 }
 
+// ===================== Điện thoại đăng nhập app (quản trị thấy mọi máy, nhân viên thấy máy của mình) =====================
+function vThietBi(el) {
+  setTop('Hệ thống', 'Điện thoại đăng nhập', [{ t: 'Tải lại', ic: 'refresh', fn: () => taiThietBi(true) }]);
+  const refresh = listCard(el, {
+    id: 'thietbi', ph: 'Tìm tài khoản, tên máy…',
+    cols: [
+      { t: 'Tài khoản', k: 'TenDangNhap', cls: 'code' }, { t: 'Tên máy', f: r => `<b>${esc(r.TenMay)}</b>` },
+      { t: 'Đăng nhập lúc', f: r => `${dmy(r.NgayTao)} ${esc(String(r.NgayTao).slice(11, 16))}` },
+      { t: 'Dùng gần nhất', f: r => `${dmy(r.LanCuoi)} ${esc(String(r.LanCuoi).slice(11, 16))}` },
+      { t: 'Thông báo', f: r => r.thongBao ? badge('Đang bật', 'b-green') : badge('Tắt', 'b-gray') },
+      { t: '', f: () => `<button class="btn sm" data-act="xoa">${icon('logout')}Đăng xuất máy này</button>` },
+    ],
+    data: () => S.thietBi || [], text: r => [r.TenDangNhap, r.TenMay].join(' '), open: () => {},
+    act: run(async r => {
+      if (!confirm(`Đăng xuất điện thoại "${r.TenMay}" của ${r.TenDangNhap}? Lần sau mở app trên máy đó phải nhập lại mật khẩu.`)) return;
+      await api('xoaThietBi', r.MaMay);
+      S.thietBi = S.thietBi.filter(x => x.MaMay !== r.MaMay);
+      refresh(); toast(`Đã đăng xuất ${r.TenMay}.`);
+    }),
+  });
+  el.insertAdjacentHTML('beforeend', '<p class="muted" style="margin-top:14px">Các điện thoại đang đăng nhập app phuonghihi. Mất máy hoặc nhân viên nghỉ: bấm Đăng xuất máy đó, không cần đổi mật khẩu. Mỗi tài khoản đăng nhập tối đa 10 máy.</p>');
+  const taiThietBi = force => { if (force || !S.thietBi) api('dsThietBi').then(r => { S.thietBi = r; if (S.view === 'thietbi') refresh(); }).catch(e => toast(errMsg(e), 'err')); };
+  taiThietBi(false);
+}
+
 function openTaiKhoan(tk) {
   const isNew = !tk; tk = tk || { VaiTro: 'nhanvien', TrangThai: 'Hoạt động', CuaHang: S.cuaHang.id };
   const cur = String(tk.CuaHang || '').split(',');
@@ -2803,7 +2828,7 @@ function openCuaHang() {
 }
 
 // ===================== Phím tắt: F2 mới, F3 tìm, F8 lưu, Esc đóng =====================
-const VIEWS = { home: vHome, baogia: vBaoGia, donhang: vDonHang, congno: vCongNo, hang: vHang, kho: vKho, ton: vTon, khach: vKhach, taikhoan: vTaiKhoan, caidat: vCaiDat, baohanh: vBaoHanh, hopdong: vHopDong, hd: vHD, hdhan: vHDHan, hdlich: vHDLich, baocao: vBaoCao, nhatky: vNhatKy, doc: vDoc };
+const VIEWS = { home: vHome, baogia: vBaoGia, donhang: vDonHang, congno: vCongNo, hang: vHang, kho: vKho, ton: vTon, khach: vKhach, taikhoan: vTaiKhoan, thietbi: vThietBi, caidat: vCaiDat, baohanh: vBaoHanh, hopdong: vHopDong, hd: vHD, hdhan: vHDHan, hdlich: vHDLich, baocao: vBaoCao, nhatky: vNhatKy, doc: vDoc };
 document.addEventListener('keydown', e => {
   if ($('#app').classList.contains('hidden')) return;
   const modalOpen = !$('#modal').classList.contains('hidden');

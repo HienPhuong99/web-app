@@ -46,3 +46,8 @@ export function thu(s: string): string {
   const d = new Date(s + 'T00:00:00Z').getUTCDay();
   return Number.isNaN(d) ? '' : d === 0 ? 'CN' : 'T' + (d + 1);
 }
+
+/** Ngày hôm nay theo giờ của máy, dạng "2026-10-11" (dùng làm ngày phiếu thu) */
+export function homNay(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
