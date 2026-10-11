@@ -100,8 +100,9 @@ export function useDuLieu<T>(fn: string, args: unknown[], o: TuyChon = {}): DuLi
     setDangTai(true);
     try {
       const du = await (moi ? goiMoi : goi)<T>(fn, ...(JSON.parse(thamSo) as unknown[]));
+      if (so !== lan.current) return; // lần gọi cũ về sau lần mới (vd. kéo làm mới xong trước): không ghi đè số mới vào bộ nhớ
       luu(khoa, du, luuMay);
-      if (so === lan.current) { setMuc(layNgay<T>(khoa)); setLoi(''); }
+      setMuc(layNgay<T>(khoa)); setLoi('');
     } catch (e) {
       if (so === lan.current) setLoi((e as Error).message);
     } finally {

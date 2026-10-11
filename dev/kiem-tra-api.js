@@ -521,7 +521,14 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   assert.strictEqual(anh.Anh.length, 1);
   // Trả máy: lập đơn dịch vụ 300.000, khách trả ngay → không còn nợ
   const no0 = goi(binh4, 'chiTietKhach', p.MaKH).no;
+  // Máy khác đang trả phiếu này (bấm hai lần, mạng chậm): lần sau bị từ chối, không lập thêm đơn
+  const soDon0 = sheets.PS_DonHang.rows.length;
+  cache.set('traSua_phone_' + p.SoPN, '1');
+  assert.throws(() => goi(binh4, 'traMaySua', p.SoPN, { thu: { SoTien: 300000, HinhThuc: 'Tiền mặt' } }), /đang được trả ở máy khác/);
+  assert.strictEqual(sheets.PS_DonHang.rows.length, soDon0);
+  cache.delete('traSua_phone_' + p.SoPN);
   const tra = goi(binh4, 'traMaySua', p.SoPN, { thu: { SoTien: 300000, HinhThuc: 'Tiền mặt' } });
+  assert.ok(![...cache.keys()].some(k => k.startsWith('traSua_')), 'Trả xong phải bỏ giữ phiếu');
   assert.deepStrictEqual([tra.TrangThai, tra.ChiPhi, !!tra.SoDH, tra.don.TongCong, tra.don.daThu], ['Đã trả khách', 300000, true, 300000, 300000]);
   assert.strictEqual(G.findObj_('DonHang', tra.SoDH).TrangThai, 'Đã giao');
   assert.strictEqual(goi(binh4, 'chiTietKhach', p.MaKH).no, no0);

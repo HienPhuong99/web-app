@@ -144,9 +144,19 @@ function luuSuaChua(token, p) {
 function traMaySua(token, soPN, o) {
   const user = user_(token);
   o = o || {};
-  const r = findObj_('SuaChua', soPN);
-  if (!r) throw new Error('Không tìm thấy phiếu ' + soPN + '.');
-  if (r.TrangThai === 'Đã trả khách') throw new Error('Phiếu ' + soPN + ' đã trả khách.');
+  // Giữ phiếu trong khóa trước khi lập đơn: bấm hai lần / hai máy cùng trả không tạo hai đơn, hai phiếu thu
+  const cache = CacheService.getScriptCache(), giu = 'traSua_' + CUR_SHOP + '_' + soPN;
+  const r = withLock_(() => {
+    const p = findObj_('SuaChua', soPN);
+    if (!p) throw new Error('Không tìm thấy phiếu ' + soPN + '.');
+    if (p.TrangThai === 'Đã trả khách') throw new Error('Phiếu ' + soPN + ' đã trả khách.');
+    if (cache.get(giu)) throw new Error('Phiếu ' + soPN + ' đang được trả ở máy khác, đợi vài giây rồi tải lại.');
+    cache.put(giu, '1', 120);
+    return p;
+  });
+  try { return traMaySuaDaGiu_(token, user, soPN, o, r); } finally { cache.remove(giu); }
+}
+function traMaySuaDaGiu_(token, user, soPN, o, r) {
   const chiPhi = Math.max(0, Math.round(+(o.ChiPhi == null ? r.ChiPhi : o.ChiPhi) || 0));
   let don = null;
   if (chiPhi > 0) {
