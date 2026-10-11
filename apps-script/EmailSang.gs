@@ -137,6 +137,7 @@ function tongHopSang_(homNay) {
     homNayBan: ban(homNay), homNayThu: daThu(homNay), // màn hình Tổng quan của app điện thoại (Api.gs)
     ban7: [6, 5, 4, 3, 2, 1, 0].map(i => { const n = new Date(Date.parse(homNay) - i * 864e5).toISOString().slice(0, 10); return { ngay: n, tien: ban(n).tien }; }),
     hopDong: hopDong, dot: dot, donTre: donTre, hang: hang, suaChua: suaCanLam_(homNay), // máy sửa đến hẹn / đã xong chờ trả (DichVu.gs)
+    sapHetBH: sapHetBaoHanh_(homNay), // khách có máy còn 0–15 ngày bảo hành: mời quay lại (không tính vào việc cần làm)
     no: { soKhach: noDs.length, tong: noDs.reduce((s, x) => s + x.tien, 0), top: noDs.slice(0, 5), ds: noDs },
   };
   du.soMuc = hopDong.length + dot.length + donTre.length + hang.length + du.suaChua.length;

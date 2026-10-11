@@ -12,6 +12,7 @@ import { homNay, ngay, tien } from '../../lib/dinhDang';
 import { docTien, doiSoLuong, dongGui, soTienNhap, suaGia, themHang, themMay, tongGio, xoaDong, type DongGio } from '../../lib/gioHang';
 import { boDau } from '../../lib/lienHe';
 import { chuanHoaMa, goiYMa } from '../../lib/maQuet';
+import { useGuiPhieu } from '../../lib/pdf';
 import { dsKhachDoiNo, hoSoSauBan, khoSauBan, tongQuanSauBan } from '../../lib/sauGhi';
 import { useDuLieu, useSuaBoNho } from '../../lib/useDuLieu';
 import { ChuLoi, ChuNhat, Dong, DongTT, KhungTrang, Nhan, OTim, TieuDeMuc, Vach } from '../../ui/DanhSach';
@@ -40,7 +41,7 @@ export default function BanMan() {
   const [maChuaCo, setMaChuaCo] = useState(''); // IMEI chưa từng nhập kho: chờ chọn mặt hàng
   const [chonHang, setChonHang] = useState(false);
   const [loi, setLoi] = useState(''), [dangLuu, setDangLuu] = useState(false), [kq, setKq] = useState<BanNhanhKQ | null>(null);
-  const [mayCu, setMayCu] = useState<MayCu[]>([]); // thu cũ đổi mới: máy cũ của khách trừ vào đơn
+  const [mayCu, setMayCu] = useState<MayCu[]>([]), [giamGia, setGiamGia] = useState(0); // thu cũ đổi mới: máy cũ của khách trừ vào đơn
   const daQuet = useRef<{ ma: string; luc: number }>({ ma: '', luc: 0 });
 
   useFocusEffect(useCallback(() => { setFocus(true); return () => setFocus(false); }, []));
@@ -56,7 +57,7 @@ export default function BanMan() {
   const khoaTS = p.ma && p.ten ? p.ma + '|' + p.ten : '';
   if (khoaTS && khoaTS !== thamSo) { setThamSo(khoaTS); setKhach({ MaKH: p.ma!, TenKH: p.ten! }); setKq(null); }
 
-  const tong = useMemo(() => tongGio(gio, vat), [gio, vat]);
+  const tong = useMemo(() => tongGio(gio, vat, giamGia), [gio, vat, giamGia]);
   const tongCu = mayCu.reduce((s, m) => s + m.GiaThu, 0), phaiTra = Math.max(0, tong.tong - tongCu);
   const thu = soThu ?? phaiTra; // chưa sửa thì khách trả đủ (sau khi trừ máy cũ)
 
@@ -106,7 +107,7 @@ export default function BanMan() {
       const lines = dongGui(gio);
       const r = await goi<BanNhanhKQ>('banNhanh', {
         ...('moi' in khach ? { khachMoi: { TenKH: khach.TenKH, SDT: khach.SDT } } : { MaKH: khach.MaKH }),
-        lines, VAT: vat, GhiChu: ghiChu.trim(), thu: { SoTien: thu, HinhThuc: hinhThuc },
+        lines, VAT: vat, GiamGia: tong.giam, GhiChu: ghiChu.trim(), thu: { SoTien: thu, HinhThuc: hinhThuc },
         thuCu: mayCu.map(m => ({ TenHang: m.TenHang, IMEI: m.IMEI, GiaThu: m.GiaThu })),
       });
       setKq(r);
@@ -121,7 +122,7 @@ export default function BanMan() {
   };
 
   const donMoi = () => {
-    setGio([]); setKhach(null); setSoThu(null); setMayCu([]); setGhiChu(''); setKq(null); setLoi(''); setLoiMa(''); setMaGo(''); setMaChuaCo('');
+    setGio([]); setKhach(null); setSoThu(null); setMayCu([]); setGiamGia(0); setGhiChu(''); setKq(null); setLoi(''); setLoiMa(''); setMaGo(''); setMaChuaCo('');
     setVat(ch?.vat ?? 0); router.setParams({ ma: undefined, ten: undefined });
   };
 
@@ -167,7 +168,11 @@ export default function BanMan() {
 
       {/* 3. Thanh toán */}
       <The nhan="3 · Thanh toán" style={s.muc} testID="the-thanh-toan">
-        <View style={s.dongTien}><Text style={s.nhanTien}>Tiền hàng</Text><Text style={s.giaTri}>{tien(tong.tienHang)}</Text></View>
+        <View style={s.dongTien}><Text style={s.nhanTien}>Tiền hàng</Text><Text style={s.giaTri}>{tien(tong.cong)}</Text></View>
+        <View style={s.dongTien}>
+          <Text style={s.nhanTien}>Giảm giá</Text>
+          <TextInput style={[s.o, s.oGiam]} value={giamGia ? soTienNhap(giamGia) : ''} onChangeText={t => setGiamGia(docTien(t))} keyboardType="number-pad" placeholder="0" placeholderTextColor={mau.xam} testID="o-giam-gia" />
+        </View>
         <View style={s.dongTien}>
           <Text style={s.nhanTien}>VAT</Text>
           <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -347,6 +352,7 @@ function ChonKhach({ khach, setKhach }: { khach: Khach | null; setKhach: (k: Kha
 }
 
 function KetQua({ kq, qr, hinhThuc, onMoi }: { kq: BanNhanhKQ; qr: CauHinh['qr']; hinhThuc: string; onMoi: () => void }) {
+  const phieu = useGuiPhieu();
   const cu = kq.thuCu ?? [], tienCu = cu.reduce((s, m) => s + m.GiaThu, 0), tienMat = kq.daThu - tienCu; // daThu gồm cả giá máy cũ
   const no = kq.TongCong - kq.daThu;
   return (
@@ -374,6 +380,8 @@ function KetQua({ kq, qr, hinhThuc, onMoi }: { kq: BanNhanhKQ; qr: CauHinh['qr']
         ))}
       </The>
       {no > 0 ? <Nut chu={`Thu tiền · còn ${tien(no)}`} bieuTuong="wallet" onPress={() => router.push({ pathname: '/thu-tien', params: { ma: kq.MaKH, don: kq.SoDH } })} style={{ marginBottom: 10 }} testID="nut-thu-sau-ban" /> : null}
+      <Nut chu="Gửi phiếu cho khách (Zalo…)" phu bieuTuong="share-outline" onPress={() => phieu.gui(kq.SoDH)} dangChay={!!phieu.dang} style={{ marginBottom: 10 }} testID="nut-gui-phieu" />
+      <ChuLoi chu={phieu.loi} />
       <Nut chu="Bán đơn mới" bieuTuong="bag-add" phu={no > 0} onPress={onMoi} testID="nut-ban-moi" />
       <Nut chu="Xem khách" phu bieuTuong="person-outline" onPress={() => router.push({ pathname: '/khach/[ma]', params: { ma: kq.MaKH } })} style={{ marginTop: 10 }} testID="nut-xem-khach" />
       <View style={{ alignItems: 'center', marginTop: 14 }}><Nhan chu="Đã lưu lên Google Sheet" loai="xanh" /></View>
@@ -392,6 +400,7 @@ const s = StyleSheet.create({
   dongHang: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: mau.vach },
   tenHang: { fontSize: 16, fontWeight: '700', color: mau.chu },
   imei: { fontSize: 13, color: mau.chuNhat, marginTop: 2, fontVariant: ['tabular-nums'] },
+  oGiam: { flex: 0, width: 150, textAlign: 'right', paddingVertical: 8 },
   oGia: { paddingVertical: 9, fontSize: 16, fontWeight: '700' },
   sl: { fontSize: 16, fontWeight: '800', color: mau.chu, minWidth: 28, textAlign: 'center' },
   buoc: { flexDirection: 'row', alignItems: 'center', gap: 6 },

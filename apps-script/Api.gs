@@ -16,7 +16,7 @@ function apiHam_() {
     cauHinhMay: cauHinhMay, khoMay: khoMay, traMaKho: traMaKho, dsKhachMay: dsKhachMay, chiTietKhach: chiTietKhach, banNhanh: banNhanh,
     dsHopDongMay: dsHopDongMay, taiPdfHopDong: taiPdfHopDong, dsThietBi: dsThietBi, xoaThietBi: xoaThietBi, thuThongBao: thuThongBao, chiTietTongQuan: chiTietTongQuan,
     soQuyMay: soQuyMay, luuPhieuChi: luuPhieuChi, loiNhuan: loiNhuan,
-    dsSuaChua: dsSuaChua, chiTietSuaChua: chiTietSuaChua, luuSuaChua: luuSuaChua, traMaySua: traMaySua, luuAnhSuaChua: luuAnhSuaChua,
+    kiemKho: kiemKho, traHang: traHang, phieuBanHangPdf: phieuBanHangPdf, dsSuaChua: dsSuaChua, chiTietSuaChua: chiTietSuaChua, luuSuaChua: luuSuaChua, traMaySua: traMaySua, luuAnhSuaChua: luuAnhSuaChua,
   };
 }
 
@@ -146,7 +146,7 @@ function tongQuanMay(token) {
   return {
     user: { u: user.u, ten: user.ten, vaiTro: user.vaiTro }, cuaHang: { ten: ch.ten, moTa: ch.moTa },
     homNay: du.homNay, ban: du.homNayBan, thu: du.homNayThu, homQua: du.homQuaBan, ban7: du.ban7,
-    hopDong: du.hopDong.slice(0, 20), dot: du.dot.slice(0, 20), donTre: du.donTre.slice(0, 20), hang: du.hang.slice(0, 20), suaChua: du.suaChua.slice(0, 20),
+    hopDong: du.hopDong.slice(0, 20), dot: du.dot.slice(0, 20), donTre: du.donTre.slice(0, 20), hang: du.hang.slice(0, 20), suaChua: du.suaChua.slice(0, 20), sapHetBH: du.sapHetBH.slice(0, 20),
     soMuc: du.soMuc, no: { soKhach: du.no.soKhach, tong: du.no.tong, top: du.no.top },
     lai: user.vaiTro === 'admin' ? loiNhuanKy_(du.homNay, du.homNay).tong : null, // lãi gộp hôm nay: chỉ quản trị
   };
@@ -362,7 +362,8 @@ function banNhanh(token, o) {
   const lap = imeis.find((x, i) => imeis.indexOf(x) !== i);
   if (lap) throw new Error('IMEI/serial ' + lap + ' bị lặp trong đơn.');
   if (imeis.length) kiemIMEI_('Xuất', '', imeis); // máy đã bán thì báo ngay, chưa ghi gì
-  const vat = Math.min(100, Math.max(0, +o.VAT || 0)), tienHang = lines.reduce((s, l) => s + Math.round(l.SoLuong * l.DonGia), 0);
+  const vat = Math.min(100, Math.max(0, +o.VAT || 0)), cong = lines.reduce((s, l) => s + Math.round(l.SoLuong * l.DonGia), 0);
+  const giam = Math.min(Math.max(0, cong), Math.max(0, Math.round(+o.GiamGia || 0))), tienHang = cong - giam; // giảm giá cả đơn, trước VAT
   const tong = tienHang + Math.round(tienHang * vat / 100), thu = o.thu || {}, soThu = Math.round(+thu.SoTien || 0);
   const mayCu = chuanMayCu_(o.thuCu), tongCu = mayCu.reduce((s, m) => s + m.GiaThu, 0); // thu cũ đổi mới: trừ vào đơn (DichVu.gs)
   if (soThu < 0 || soThu + tongCu > tong) throw new Error(tongCu ? 'Tiền khách trả cộng giá máy cũ (' + (soThu + tongCu) + ' đ) lớn hơn tổng đơn (' + tong + ' đ).' : 'Số tiền khách trả phải từ 0 đến ' + tong + ' đ.');
@@ -380,7 +381,7 @@ function banNhanh(token, o) {
     if (!kh) kh = luuKhach(token, { TenKH: ten, SDT: sdt });
   }
   const ghiChu = String(o.GhiChu || '').trim().slice(0, 500);
-  const dh = luuChungTu(token, 'DH', { Ngay: ngay, MaKH: kh.MaKH, TenKH: kh.TenKH, SDT: kh.SDT || '', DiaChi: kh.DiaChi || '', NgayGiao: ngay, VAT: vat, GhiChu: ghiChu,
+  const dh = luuChungTu(token, 'DH', { Ngay: ngay, MaKH: kh.MaKH, TenKH: kh.TenKH, SDT: kh.SDT || '', DiaChi: kh.DiaChi || '', NgayGiao: ngay, VAT: vat, GiamGia: giam, GhiChu: ghiChu,
     lines: lines.map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, Model: l.Model, DVT: l.DVT, XuatXu: l.XuatXu, SoLuong: l.SoLuong, LoaiGia: l.LoaiGia, DonGia: l.DonGia })) }).doc;
   let pk;
   try {

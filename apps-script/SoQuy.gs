@@ -95,8 +95,8 @@ function soQuyMay(token, ngay) {
     if ((dau.ngay && d < dau.ngay) || d > n || p.HinhThuc === HT_MAY_CU) return; // máy cũ thu về không phải tiền
     cong(p.HinhThuc, tien);
     if (d !== n) return;
-    trong.thu += tien;
-    ds.push({ loai: 'thu', so: p.SoPT, noiDung: p.TenKH + (p.SoDH ? ' · đơn ' + p.SoDH : ''), SoTien: tien, HinhThuc: p.HinhThuc || '', MaKH: p.MaKH || '', luc: String(p.NgayTao || '') });
+    if (tien < 0) trong.chi -= tien; else trong.thu += tien; // phiếu thu âm: trả lại tiền khách trả hàng
+    ds.push({ loai: tien < 0 ? 'chi' : 'thu', so: p.SoPT, noiDung: (tien < 0 ? 'Trả lại tiền · ' : '') + p.TenKH + (p.SoDH ? ' · đơn ' + p.SoDH : ''), SoTien: Math.abs(tien), HinhThuc: p.HinhThuc || '', MaKH: p.MaKH || '', luc: String(p.NgayTao || '') });
   });
   readTable_('PhieuChi').forEach(c => {
     const d = ngay10(c.Ngay), tien = +c.SoTien || 0;
@@ -133,6 +133,16 @@ function loiNhuanKy_(from, to) {
     them(theoHang, ma || l.TenHang, { MaHH: ma || '', TenHang: l.TenHang, soLuong: 0, coGiaVon: !ma || gv[ma] !== undefined }, dt, von);
     theoHang[ma || l.TenHang].soLuong += sl;
     them(theoDon, d.SoDH, { SoDH: d.SoDH, Ngay: d.Ngay, MaKH: d.MaKH, TenKH: d.TenKH }, dt, von);
+  });
+  // Giảm giá cả đơn: trừ vào doanh thu của đơn, tháng, tổng; theo nhóm / mặt hàng thì thành một dòng riêng
+  Object.keys(don).forEach(so => {
+    const d = don[so], g = +d.GiamGia || 0;
+    if (!g) return;
+    tong.doanhThu -= g;
+    them(theoThang, String(d.Ngay).slice(0, 7), { thang: String(d.Ngay).slice(0, 7) }, -g, 0);
+    them(theoNhom, 'Giảm giá đơn hàng', { nhom: 'Giảm giá đơn hàng' }, -g, 0);
+    them(theoHang, '~giam', { MaHH: '', TenHang: 'Giảm giá đơn hàng', soLuong: 0, coGiaVon: true }, -g, 0);
+    them(theoDon, d.SoDH, { SoDH: d.SoDH, Ngay: d.Ngay, MaKH: d.MaKH, TenKH: d.TenKH }, -g, 0);
   });
   const lai = x => Object.assign(x, { lai: x.doanhThu - x.giaVon });
   const theo = (m, sx) => Object.keys(m).map(k => lai(m[k])).sort(sx);

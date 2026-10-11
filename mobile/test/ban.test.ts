@@ -37,12 +37,15 @@ test('giỏ: đổi số lượng, giá, xóa; tổng tiền như máy chủ', (
   g = doiSoLuong(g, kMay, 5); // dòng có IMEI giữ 1 máy
   g = doiSoLuong(g, kOp, 4.7);
   assert.deepEqual(g.map(l => l.SoLuong), [4, 1]);
-  assert.deepEqual(tongGio(g), { tienHang: 11900000, tienVAT: 0, tong: 11900000, soMay: 5 });
+  assert.deepEqual(tongGio(g), { cong: 11900000, giam: 0, tienHang: 11900000, tienVAT: 0, tong: 11900000, soMay: 5 });
   g = suaGia(g, kMay, 10999999.6);
   assert.equal(g[1].DonGia, 11000000);
   assert.equal(suaGia(g, kOp, -5)[0].DonGia, 0);
-  assert.deepEqual(tongGio(g, 10), { tienHang: 11600000, tienVAT: 1160000, tong: 12760000, soMay: 5 });
-  assert.deepEqual(tongGio([{ k: 'a', MaHH: '', TenHang: 'x', DVT: '', SoLuong: 3, DonGia: 333333, IMEI: '' }], 8), { tienHang: 999999, tienVAT: 80000, tong: 1079999, soMay: 3 });
+  assert.deepEqual(tongGio(g, 10), { cong: 11600000, giam: 0, tienHang: 11600000, tienVAT: 1160000, tong: 12760000, soMay: 5 });
+  // Giảm giá cả đơn: trừ trước VAT, không quá tiền hàng, không âm
+  assert.deepEqual(tongGio(g, 10, 600000), { cong: 11600000, giam: 600000, tienHang: 11000000, tienVAT: 1100000, tong: 12100000, soMay: 5 });
+  assert.deepEqual([tongGio(g, 0, 99e9).tong, tongGio(g, 0, -5).giam], [0, 0]);
+  assert.deepEqual(tongGio([{ k: 'a', MaHH: '', TenHang: 'x', DVT: '', SoLuong: 3, DonGia: 333333, IMEI: '' }], 8), { cong: 999999, giam: 0, tienHang: 999999, tienVAT: 80000, tong: 1079999, soMay: 3 });
   assert.deepEqual(doiSoLuong(g, kOp, 0).map(l => l.k), [kMay]);
   assert.deepEqual(xoaDong(g, kMay).map(l => l.k), [kOp]);
   assert.deepEqual(dongGui(g)[1], { MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', DVT: 'Máy', SoLuong: 1, DonGia: 11000000, IMEI: '351234567890132' });

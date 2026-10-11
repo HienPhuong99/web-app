@@ -112,6 +112,9 @@ export default function TongQuanMan() {
                 mo: () => router.push({ pathname: '/kho/[ma]', params: { ma: x.MaHH, ten: x.TenHang } }),
               }))} />
 
+              <NhomViec nhan="Sắp hết bảo hành · mời khách" mauNhan={mau.brand} bieuTuong="shield-checkmark-outline" ds={(du.sapHetBH ?? []).map(x => ({
+                k: x.IMEI + x.MaKH, chinh: x.TenKH, phu: `${x.TenHang}${x.SDT ? ' · ' + x.SDT : ''}`, ben: x.n === 0 ? 'Hết hôm nay' : `Còn ${x.n} ngày`, gap: false, mo: () => moKhach(x.MaKH),
+              }))} />
               {du.no.top.length ? (
                 <The nhan="Công nợ" mauNhan={mau.vang} tieuDe={`${du.no.soKhach} khách còn nợ ${tien(du.no.tong)}`} style={s.muc} testID="the-cong-no-tq">
                   {du.no.top.slice(0, TOI_DA).map(k => (

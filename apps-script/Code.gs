@@ -37,9 +37,9 @@ const TABLES = {
   CaiDat: ['Khoa', 'GiaTri'],
   KhachHang: ['MaKH', 'TenKH', 'NguoiLienHe', 'SDT', 'DiaChi', 'MST', 'Email', 'GhiChu', 'NgayTao', 'NguoiTao', 'NguoiDaiDien', 'ChucVu', 'SoTK', 'NganHang', 'VanPhongGD'], // 5 cột cuối: thông tin bên A khi lập hợp đồng
   HangHoa: ['MaHH', 'TenHang', 'Model', 'NhomHang', 'PhanLoai', 'DVT', 'XuatXu', 'GiaSi', 'GiaLe', 'TonToiThieu', 'GhiChu', 'BaoHanh'],
-  BaoGia: ['SoBG', 'Ngay', 'MaKH', 'TenKH', 'NguoiNhan', 'SDT', 'DiaChi', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'GhiChu', 'NguoiTao', 'NgayTao', 'NgaySua'],
+  BaoGia: ['SoBG', 'Ngay', 'MaKH', 'TenKH', 'NguoiNhan', 'SDT', 'DiaChi', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'GhiChu', 'NguoiTao', 'NgayTao', 'NgaySua', 'GiamGia'], // GiamGia: giảm giá cả đơn (trừ trước VAT); TienHang = cộng các dòng − GiamGia
   BaoGiaCT: ['SoBG', 'STT', 'MaHH', 'TenHang', 'Model', 'DVT', 'XuatXu', 'SoLuong', 'LoaiGia', 'DonGia', 'ThanhTien'],
-  DonHang: ['SoDH', 'Ngay', 'SoBG', 'MaKH', 'TenKH', 'NguoiNhan', 'SDT', 'DiaChi', 'NgayGiao', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'TrangThai', 'GhiChu', 'NguoiTao', 'NgayTao', 'NgaySua'],
+  DonHang: ['SoDH', 'Ngay', 'SoBG', 'MaKH', 'TenKH', 'NguoiNhan', 'SDT', 'DiaChi', 'NgayGiao', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'TrangThai', 'GhiChu', 'NguoiTao', 'NgayTao', 'NgaySua', 'GiamGia'],
   DonHangCT: ['SoDH', 'STT', 'MaHH', 'TenHang', 'Model', 'DVT', 'XuatXu', 'SoLuong', 'LoaiGia', 'DonGia', 'ThanhTien'],
   PhieuKho: ['SoPK', 'Ngay', 'Loai', 'SoDH', 'DoiTac', 'GhiChu', 'NguoiTao', 'NgayTao', 'NgaySua'],
   PhieuKhoCT: ['SoPK', 'STT', 'MaHH', 'TenHang', 'Model', 'DVT', 'SoLuong', 'IMEI', 'GiaVon'], // GiaVon: giá nhập một đơn vị (dòng của phiếu nhập) để tính lợi nhuận
@@ -64,9 +64,9 @@ const NGAN_HANG = [['970436', 'Vietcombank'], ['970415', 'VietinBank'], ['970418
   ['970438', 'BaoViet Bank'], ['970433', 'VietBank'], ['970430', 'PGBank'], ['970454', 'Viet Capital Bank'], ['970414', 'MBV'], ['970446', 'Co-opBank'],
   ['970424', 'Shinhan Bank'], ['970457', 'Woori Bank'], ['422589', 'CIMB'], ['668888', 'KBank'], ['546034', 'CAKE'], ['546035', 'Ubank'], ['963388', 'Timo']];
 const SHARED = ['TaiKhoan', 'CaiDat', 'ThietBi']; // trang dùng chung cho mọi cửa hàng, không có tiền tố
-const NUMBER_COLS = ['Dot', 'BaoTruocNgay', 'ThangGiaHan', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien', 'GiaVon', 'ChiPhi'];
+const NUMBER_COLS = ['Dot', 'BaoTruocNgay', 'ThangGiaHan', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien', 'GiaVon', 'ChiPhi', 'GiamGia'];
 const SESSION_TTL = 6 * 60 * 60; // giây; tối đa của CacheService, tự gia hạn khi còn dùng
-const SCHEMA = '13'; // tăng số này khi thêm bảng/cột ở TABLES (hoặc cần sửa dữ liệu một lần): app tự làm ở lần gọi đầu sau khi triển khai
+const SCHEMA = '14'; // tăng số này khi thêm bảng/cột ở TABLES (hoặc cần sửa dữ liệu một lần): app tự làm ở lần gọi đầu sau khi triển khai
 
 // Loại chứng từ có dòng hàng. Số chứng từ dạng 001-2026/DH, mỗi năm đánh lại từ 001 (riêng từng cửa hàng).
 const CT = {
@@ -619,7 +619,9 @@ function luuChungTu(token, loai, doc) {
       l.STT = i + 1; l.SoLuong = +l.SoLuong || 0; l.DonGia = Math.round(+l.DonGia || 0);
       l.ThanhTien = Math.round(l.SoLuong * l.DonGia);
     });
-    head.TienHang = lines.reduce((s, l) => s + l.ThanhTien, 0);
+    const cong = lines.reduce((s, l) => s + l.ThanhTien, 0);
+    head.GiamGia = Math.min(Math.max(0, cong), Math.max(0, Math.round(+head.GiamGia || 0))) || ''; // giảm giá cả đơn, không quá tiền hàng
+    head.TienHang = cong - (+head.GiamGia || 0);
     head.VAT = +head.VAT || 0;
     head.TienVAT = Math.round(head.TienHang * head.VAT / 100);
     head.TongCong = head.TienHang + head.TienVAT;
@@ -786,14 +788,23 @@ function hanBaoHanh_() {
 // ponytail: trả về mọi dòng xuất kho; tới vài chục nghìn dòng thì lọc theo năm.
 function dsBaoHanh(token) {
   user_(token);
-  const pk = {}, dh = {}, han = hanBaoHanh_();
+  return dsBaoHanh_();
+}
+// Máy khách trả lại / thu cũ về (sau phiếu xuất này còn phiếu nhập cùng IMEI) thì bảo hành không còn thuộc khách cũ: bỏ IMEI đó khỏi dòng
+function dsBaoHanh_() {
+  const pk = {}, dh = {}, han = hanBaoHanh_(), cuoi = {}, tatCa = {};
+  readTable_('PhieuKho').forEach(p => { tatCa[p.SoPK] = p; });
+  readTable_('PhieuKhoCT').forEach(l => { const p = tatCa[l.SoPK]; if (p && l.IMEI) imeiList_(l.IMEI).forEach(x => { const k = String(p.Ngay) + p.NgayTao; if (!cuoi[x] || k >= cuoi[x].k) cuoi[x] = { k: k, p: p }; }); });
   readTable_('PhieuKho').forEach(p => { if (p.Loai === 'Xuất') pk[p.SoPK] = p; });
   readTable_('DonHang').forEach(d => { dh[d.SoDH] = d; });
   return readTable_('PhieuKhoCT').filter(l => pk[l.SoPK] && l.MaHH).map(l => {
+    const im = imeiList_(l.IMEI), con = im.filter(x => !cuoi[x] || cuoi[x].p.Loai !== 'Nhập');
+    if (im.length && !con.length) return null;
+    if (con.length < im.length) l = Object.assign({}, l, { IMEI: con.join(', '), SoLuong: con.length });
     const p = pk[l.SoPK], d = dh[p.SoDH] || {};
     return { SoPK: p.SoPK, Ngay: p.Ngay, SoDH: p.SoDH, MaKH: d.MaKH || '', TenKH: d.TenKH || p.DoiTac, SDT: d.SDT || '',
       MaHH: l.MaHH, TenHang: l.TenHang, Model: l.Model, DVT: l.DVT, SoLuong: +l.SoLuong || 0, IMEI: l.IMEI || '', HetHan: han(p.Ngay, l.MaHH) };
-  });
+  }).filter(Boolean);
 }
 
 // ===== Thu tiền =====

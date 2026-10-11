@@ -195,3 +195,150 @@ function suaCanLam_(homNay) {
     .sort((a, b) => String(a.NgayHen || '9').localeCompare(String(b.NgayHen || '9')))
     .map(r => ({ SoPN: r.SoPN, MaKH: r.MaKH, TenKH: r.TenKH, SDT: r.SDT, TenMay: r.TenMay, TrangThai: r.TrangThai, NgayHen: String(r.NgayHen || '').slice(0, 10), n: r.conNgay }));
 }
+
+// ===== Kiểm kho theo IMEI =====
+/** Máy còn trong kho: IMEI → { MaHH, TenHang, SoPK, Ngay } (lần cuối có mã này là phiếu nhập) */
+function imeiTrongKho_() {
+  const pk = {}, cuoi = {};
+  readTable_('PhieuKho').forEach(p => { pk[p.SoPK] = p; });
+  readTable_('PhieuKhoCT').forEach(l => {
+    const p = pk[l.SoPK];
+    if (!p || !l.IMEI) return;
+    const k = String(p.Ngay) + p.NgayTao;
+    imeiList_(l.IMEI).forEach(x => { if (!cuoi[x] || k >= cuoi[x].k) cuoi[x] = { k: k, p: p, l: l }; });
+  });
+  const kho = {}, daXuat = {};
+  Object.keys(cuoi).forEach(x => {
+    const c = cuoi[x];
+    if (c.p.Loai === 'Nhập') kho[x] = { MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay };
+    else daXuat[x] = { MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay, DoiTac: c.p.DoiTac || '' };
+  });
+  return { kho: kho, daXuat: daXuat };
+}
+
+/**
+ * So các IMEI/serial quét được trên kệ với tồn kho: khop (đúng, còn trong kho), thieu (trong kho mà chưa quét thấy), la (quét thấy mà kho
+ * không có: đã bán / chưa nhập). o.MaHH: chỉ kiểm một mặt hàng. o.luu: ghi kết quả vào nhật ký.
+ */
+function kiemKho(token, ds, o) {
+  const user = user_(token);
+  o = o || {};
+  const quet = [];
+  (Array.isArray(ds) ? ds : []).forEach(x => { const m = String(x == null ? '' : x).toUpperCase().replace(/[\s.\-]/g, ''); if (m.length >= 4 && quet.indexOf(m) < 0) quet.push(m); });
+  if (quet.length > 3000) throw new Error('Mỗi lần kiểm tối đa 3000 mã.');
+  const { kho, daXuat } = imeiTrongKho_(), daThay = {};
+  const khop = [], la = [];
+  quet.forEach(x => {
+    const m = kho[x] ? x : /^S[A-Z0-9]{10,12}$/.test(x) && kho[x.slice(1)] ? x.slice(1) : ''; // mã vạch serial Apple có chữ S đầu
+    if (m && (!o.MaHH || kho[m].MaHH === o.MaHH)) { daThay[m] = 1; khop.push(Object.assign({ IMEI: m }, kho[m])); return; }
+    const xu = daXuat[x] || daXuat[x.slice(1)];
+    la.push(m ? Object.assign({ IMEI: m, lyDo: 'Khác mặt hàng đang kiểm' }, kho[m]) : xu ? Object.assign({ IMEI: x, lyDo: 'Đã xuất ở phiếu ' + xu.SoPK + (xu.DoiTac ? ' (' + xu.DoiTac + ')' : '') }, xu) : { IMEI: x, MaHH: '', TenHang: '', lyDo: 'Chưa nhập kho' });
+  });
+  const thieu = Object.keys(kho).filter(x => !daThay[x] && (!o.MaHH || kho[x].MaHH === o.MaHH)).map(x => Object.assign({ IMEI: x }, kho[x]))
+    .sort((a, b) => String(a.TenHang).localeCompare(String(b.TenHang), 'vi') || a.IMEI.localeCompare(b.IMEI));
+  const hang = {};
+  const dong = (r, k) => { const h = hang[r.MaHH] || (hang[r.MaHH] = { MaHH: r.MaHH, TenHang: r.TenHang, trongKho: 0, thay: 0 }); h[k]++; };
+  khop.forEach(r => { dong(r, 'thay'); dong(r, 'trongKho'); });
+  thieu.forEach(r => dong(r, 'trongKho'));
+  const kq = { soQuet: quet.length, khop: khop.length, thieu: thieu, la: la, theoHang: Object.values(hang).sort((a, b) => (a.thay - a.trongKho) - (b.thay - b.trongKho)) };
+  if (o.luu) log_(user, 'Kiểm kho theo IMEI', o.MaHH || 'Tất cả', 'quét ' + quet.length + ' · khớp ' + khop.length + ' · thiếu ' + thieu.length + ' · lạ ' + la.length
+    + (thieu.length ? ' · thiếu: ' + thieu.slice(0, 20).map(r => r.IMEI).join(', ') : ''));
+  return kq;
+}
+
+// ===== Khách trả hàng =====
+/**
+ * Khách trả lại hàng của một đơn. o = { SoDH, lines: [{ MaHH, TenHang, SoLuong, IMEI }], hoan: { SoTien, HinhThuc }, GhiChu, xemTruoc }.
+ * Hàng có mã nhập lại kho (phiếu nhập, giá vốn bình quân không đổi); đơn giảm số lượng (trả hết thì hủy đơn) nên doanh thu, công nợ đúng;
+ * tiền trả lại khách ghi thành phiếu thu âm (sổ quỹ giảm). xemTruoc: chỉ tính tổng mới và số tiền trả lại tối đa, chưa ghi gì.
+ */
+function traHang(token, o) {
+  const user = user_(token);
+  o = o || {};
+  const dh = findObj_('DonHang', o.SoDH);
+  if (!dh) throw new Error('Không tìm thấy đơn hàng ' + o.SoDH + '.');
+  if (dh.TrangThai === 'Hủy') throw new Error('Đơn đã hủy.');
+  const cu = readTable_('DonHangCT').filter(l => String(l.SoDH) === String(dh.SoDH)).sort((a, b) => a.STT - b.STT);
+  const moi = cu.map(l => Object.assign({}, l, { SoLuong: +l.SoLuong || 0 }));
+  const tra = (Array.isArray(o.lines) ? o.lines : []).filter(l => l && (+l.SoLuong || imeiList_(l.IMEI).length));
+  if (!tra.length) throw new Error('Chọn hàng khách trả.');
+  const xk = new Set(readTable_('PhieuKho').filter(p => p.Loai === 'Xuất' && String(p.SoDH) === String(dh.SoDH)).map(p => p.SoPK));
+  const daGiaoIMEI = [];
+  readTable_('PhieuKhoCT').forEach(l => { if (xk.has(l.SoPK)) imeiList_(l.IMEI).forEach(x => daGiaoIMEI.push(x)); });
+  let imeis = [];
+  const nhap = tra.map((t, i) => {
+    const im = imeiList_(t.IMEI), sl = im.length || Math.round(+t.SoLuong || 0);
+    const l = moi.find(x => (t.MaHH ? x.MaHH === t.MaHH : !x.MaHH && x.TenHang === t.TenHang) && x.SoLuong > 0);
+    if (!l) throw new Error('Dòng trả ' + (i + 1) + ': đơn không có ' + (t.TenHang || t.MaHH) + '.');
+    if (!(sl > 0) || sl > l.SoLuong) throw new Error('Dòng trả ' + (i + 1) + ': số lượng trả phải từ 1 đến ' + l.SoLuong + '.');
+    const sai = im.find(x => daGiaoIMEI.indexOf(x) < 0);
+    if (sai) throw new Error('IMEI/serial ' + sai + ' không có trong các lần giao của đơn ' + dh.SoDH + '.');
+    l.SoLuong -= sl;
+    imeis = imeis.concat(im);
+    return { MaHH: l.MaHH, TenHang: l.TenHang, Model: l.Model, DVT: l.DVT, SoLuong: sl, IMEI: im.join(', ') };
+  });
+  if (imeis.length) kiemIMEI_('Nhập', '', imeis);
+  const conLai = moi.filter(l => l.SoLuong > 0), huy = !conLai.length;
+  const cong = conLai.reduce((s, l) => s + Math.round(l.SoLuong * (+l.DonGia || 0)), 0), giam = Math.min(cong, +dh.GiamGia || 0);
+  const tongMoi = huy ? 0 : (cong - giam) + Math.round((cong - giam) * (+dh.VAT || 0) / 100);
+  const daThu = readTable_('ThuTien').filter(p => String(p.SoDH) === String(dh.SoDH)).reduce((s, p) => s + (+p.SoTien || 0), 0);
+  const hoanToiDa = Math.max(0, daThu - tongMoi);
+  if (o.xemTruoc) return { SoDH: dh.SoDH, tongCu: +dh.TongCong || 0, tongMoi: tongMoi, daThu: daThu, hoanToiDa: hoanToiDa, huy: huy };
+  const hoan = Math.round(+(o.hoan && o.hoan.SoTien) || 0);
+  if (hoan < 0 || hoan > hoanToiDa) throw new Error('Tiền trả lại khách tối đa ' + hoanToiDa + ' đ (đã thu ' + daThu + ' đ, đơn còn ' + tongMoi + ' đ).');
+  const ngay = homNay_(), ghiChu = String(o.GhiChu || '').trim().slice(0, 300);
+  const coMa = nhap.filter(l => l.MaHH);
+  const pk = coMa.length ? luuChungTu(token, 'NK', { Ngay: ngay, DoiTac: dh.TenKH, GhiChu: 'Khách trả hàng · đơn ' + dh.SoDH + (ghiChu ? ' · ' + ghiChu : ''), lines: coMa }).doc : null;
+  const ghiDon = Object.assign({}, dh, huy ? { TrangThai: 'Hủy', GhiChu: [dh.GhiChu, 'Khách trả hết hàng ' + ngay].filter(Boolean).join(' · ') } : {});
+  const don = luuChungTu(token, 'DH', Object.assign(ghiDon, { lines: huy ? cu : conLai.map(l => { const x = Object.assign({}, l); delete x.SoDH; return x; }) })).doc;
+  let pt = null;
+  if (hoan > 0) {
+    pt = withLock_(() => {
+      const p = { Ngay: ngay, MaKH: dh.MaKH, TenKH: dh.TenKH, SoDH: dh.SoDH, SoTien: -hoan, HinhThuc: String(o.hoan.HinhThuc || 'Tiền mặt').slice(0, 60), GhiChu: 'Trả lại tiền khách trả hàng', NguoiTao: user.ten, NgayTao: now_() };
+      upsert_('ThuTien', p, () => nextSo_('ThuTien', 'PT', ngay), []);
+      return p;
+    });
+  }
+  log_(user, 'Khách trả hàng', dh.SoDH, nhap.map(l => l.TenHang + ' ×' + l.SoLuong + (l.IMEI ? ' (' + l.IMEI + ')' : '')).join(', ') + (hoan ? ' · trả lại ' + hoan + ' đ' : '') + (huy ? ' · hủy đơn' : ''));
+  return { SoDH: dh.SoDH, TrangThai: don.TrangThai, TongCong: don.TongCong, SoPK: pk ? pk.SoPK : '', SoPT: pt ? pt.SoPT : '', hoan: hoan, huy: huy };
+}
+
+// ===== Phiếu bán hàng gửi khách (PDF) =====
+/** Phiếu bán hàng của một đơn: hàng, IMEI, hạn bảo hành, giảm giá, đã trả, còn nợ. Trả { ten, base64 } để app chia sẻ qua Zalo, Messenger… */
+function phieuBanHangPdf(token, soDH) {
+  user_(token);
+  const dh = findObj_('DonHang', soDH);
+  if (!dh) throw new Error('Không tìm thấy đơn hàng ' + soDH + '.');
+  const ch = cuaHang_(CUR_SHOP), c = ch.congTy, han = hanBaoHanh_(), e = s => String(s == null ? '' : s).replace(/[&<>"]/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[x]));
+  const dmy = s => /^\d{4}-\d{2}-\d{2}/.test(String(s)) ? String(s).slice(8, 10) + '/' + String(s).slice(5, 7) + '/' + String(s).slice(0, 4) : '';
+  const lines = readTable_('DonHangCT').filter(l => String(l.SoDH) === String(soDH)).sort((a, b) => a.STT - b.STT);
+  const xk = {};
+  readTable_('PhieuKho').forEach(p => { if (p.Loai === 'Xuất' && String(p.SoDH) === String(soDH)) xk[p.SoPK] = p; });
+  const may = readTable_('PhieuKhoCT').filter(l => xk[l.SoPK] && l.IMEI).map(l => ({ TenHang: l.TenHang, IMEI: l.IMEI, HetHan: han(xk[l.SoPK].Ngay, l.MaHH) }));
+  const thu = readTable_('ThuTien').filter(p => String(p.SoDH) === String(soDH));
+  const daThu = thu.reduce((s, p) => s + (+p.SoTien || 0), 0), no = (+dh.TongCong || 0) - daThu, cong = lines.reduce((s, l) => s + (+l.ThanhTien || 0), 0);
+  const dongTien = (t, v, dam) => '<tr><td colspan="3" style="text-align:right">' + t + '</td><td style="text-align:right">' + (dam ? '<b>' + tien_(v) + '</b>' : tien_(v)) + '</td></tr>';
+  const html = '<html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;font-size:12px;color:#111}h1{font-size:18px;text-align:center;margin:12px 0 4px}'
+    + 'table{width:100%;border-collapse:collapse;margin-top:8px}td,th{border:1px solid #bbb;padding:5px 6px}th{background:#f2f4f7}.nho{color:#555;font-size:11px}</style></head><body>'
+    + '<div><b>' + e(c.ten || ch.ten) + '</b><br>' + e((c.diaChi || []).join(', ')) + '<br>' + e(c.lienHe) + '</div>'
+    + '<h1>PHIẾU BÁN HÀNG</h1><div style="text-align:center">Số ' + e(dh.SoDH) + ' · ngày ' + dmy(dh.Ngay) + '</div>'
+    + '<p>Khách hàng: <b>' + e(dh.TenKH) + '</b>' + (dh.SDT ? ' · ' + e(dh.SDT) : '') + (dh.DiaChi ? '<br>Địa chỉ: ' + e(dh.DiaChi) : '') + '</p>'
+    + '<table><tr><th>Hàng hóa</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr>'
+    + lines.map(l => '<tr><td>' + e(l.TenHang) + '</td><td style="text-align:center">' + e(l.SoLuong) + '</td><td style="text-align:right">' + tien_(l.DonGia) + '</td><td style="text-align:right">' + tien_(l.ThanhTien) + '</td></tr>').join('')
+    + (+dh.GiamGia ? dongTien('Cộng tiền hàng', cong) + dongTien('Giảm giá', -dh.GiamGia) : '') + (+dh.VAT ? dongTien('Thuế GTGT ' + dh.VAT + '%', dh.TienVAT) : '')
+    + dongTien('Tổng cộng', dh.TongCong, true) + dongTien('Đã thanh toán', daThu) + (no > 0 ? dongTien('Còn phải trả', no, true) : '') + '</table>'
+    + (may.length ? '<p><b>Bảo hành</b></p><table><tr><th>Máy</th><th>IMEI / serial</th><th>Bảo hành đến</th></tr>' + may.map(m => '<tr><td>' + e(m.TenHang) + '</td><td>' + e(m.IMEI) + '</td><td>' + (m.HetHan ? dmy(m.HetHan) : 'Không bảo hành') + '</td></tr>').join('') + '</table>' : '')
+    + '<p class="nho">Cảm ơn Quý khách đã mua hàng tại ' + e(ch.ten) + '. Vui lòng giữ phiếu này để được bảo hành.</p></body></html>';
+  const ten = 'Phieu ban hang ' + String(soDH).replace(/\//g, '-') + '.pdf';
+  const pdf = Utilities.newBlob(html, 'text/html', ten.replace('.pdf', '.html')).getAs('application/pdf');
+  return { ten: ten, base64: Utilities.base64Encode(pdf.getBytes()) };
+}
+
+// ===== Nhắc khách sắp hết bảo hành =====
+/** Máy đã bán còn 0–15 ngày bảo hành (Tổng quan app, email sáng): mời khách quay lại kiểm tra máy trước khi hết hạn */
+function sapHetBaoHanh_(homNay, ngayToiDa) {
+  const toiDa = ngayToiDa || 15;
+  return dsBaoHanh_().filter(x => x.HetHan && x.MaKH).map(x => Object.assign(x, { n: Math.round((Date.parse(x.HetHan) - Date.parse(homNay)) / 864e5) }))
+    .filter(x => x.n >= 0 && x.n <= toiDa).sort((a, b) => a.n - b.n)
+    .map(x => ({ MaKH: x.MaKH, TenKH: x.TenKH, SDT: String(x.SDT || ''), TenHang: x.TenHang, IMEI: x.IMEI, HetHan: x.HetHan, n: x.n }));
+}

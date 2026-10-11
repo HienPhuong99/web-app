@@ -224,6 +224,50 @@ BUOC.push(['Nhận máy sửa chữa, đổi trạng thái, trả máy lập đ�
     assert.match(await page.locator('#view .side-cards').innerText(), /Còn nợ\s*500\.000/);
   } finally { page.off('dialog', ghi); }
 }]);
+BUOC.push(['Giảm giá đơn hàng, kiểm kho theo IMEI, khách trả hàng (hủy đơn, trả lại tiền)', async page => {
+  const hoi = [];
+  const ghi = d => { hoi.push(d.message()); d.accept(); };
+  page.on('dialog', ghi);
+  try {
+    // Giảm giá cả đơn: trừ trước VAT
+    await page.click('#nav a[data-go="donhang"]');
+    await page.locator('#topActions .btn', { hasText: 'Tạo đơn hàng' }).click();
+    await page.fill('input[data-h="TenKH"]', 'minh');
+    await page.locator('#picker [data-i]').first().click();
+    await page.fill('tr[data-i="0"] [data-f="TenHang"]', 'iphone 15');
+    await page.locator('#picker [data-i]').first().click();
+    await page.fill('input[data-h="VAT"]', '0');
+    await page.fill('input[data-h="GiamGia"]', '300000');
+    const tong = await page.locator('#view [data-t="TongCong"]').innerText(), cong = await page.locator('#view [data-t="TienHang"]').innerText();
+    assert.strictEqual(+tong.replace(/\D/g, ''), +cong.replace(/\D/g, '') - 300000);
+    await page.locator('#topActions .btn', { hasText: 'Lưu' }).click();
+    await page.waitForFunction(() => document.querySelector('#title').textContent === 'Đơn hàng', null, { timeout: 8000 });
+    const dau = await page.locator('#view tbody tr[data-i]').first().innerText();
+    assert.ok(dau.includes((+tong.replace(/\D/g, '')).toLocaleString('vi-VN')), dau);
+    // Kiểm kho: mã lạ
+    await page.click('#nav a[data-go="ton"]');
+    await page.locator('#topActions .btn', { hasText: 'Kiểm kho' }).click();
+    await page.fill('#modal [name=ds]', '123456789\n123456789');
+    assert.strictEqual(await page.locator('#modal [data-dem]').innerText(), '1');
+    await page.locator('#modal .btn', { hasText: 'So sánh' }).click();
+    await page.waitForSelector('#modal [data-kq] .stats');
+    assert.match(await page.locator('#modal [data-kq]').innerText(), /Chưa nhập kho/);
+    await page.locator('#modal [data-close]').first().click();
+    // Khách trả hết hàng của đơn sửa chữa (đã giao, đã trừ máy cũ 1.000.000): hủy đơn, trả lại 1.000.000
+    await page.click('#nav a[data-go="donhang"]');
+    await page.locator('#view tbody tr:has-text("Khách Sửa Mới")').first().click();
+    await page.waitForFunction(() => /Đơn hàng \d{3}-\d{4}\/DH/.test(document.querySelector('#title').textContent), null, { timeout: 8000 });
+    await page.locator('#topActions .btn', { hasText: 'Khách trả hàng' }).click();
+    await page.fill('#modal [data-sl="0"]', '1');
+    await page.waitForFunction(() => /trả lại tối đa/.test(document.querySelector('#modal [data-xem]').textContent), null, { timeout: 8000 });
+    assert.match(await page.locator('#modal [data-xem]').innerText(), /hủy đơn.*trả lại tối đa 1\.000\.000/);
+    assert.strictEqual(await page.inputValue('#modal [name=SoTien]'), '1.000.000');
+    await page.locator('#modal .btn', { hasText: 'Nhận hàng trả' }).click();
+    await page.waitForSelector('#modal', { state: 'hidden' });
+    await page.waitForSelector('#topActions .btn:has-text("Khôi phục đơn")');
+    assert.ok(!(await page.locator('#topActions .btn', { hasText: 'Khách trả hàng' }).count()));
+  } finally { page.off('dialog', ghi); }
+}]);
 try { require('./kiem-trinh-duyet-hopdong')(BUOC); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
 
 (async () => {

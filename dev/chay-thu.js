@@ -213,7 +213,10 @@ const ctx = vm.createContext({
     DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' },
     computeDigest: (alg, s) => [...crypto.createHash(alg).update(String(s), 'utf8').digest()].map(b => (b > 127 ? b - 256 : b)),
     base64Decode: s => { if (!/^[A-Za-z0-9+\/=\s]*$/.test(s)) throw new Error('Invalid argument'); return [...Buffer.from(s, 'base64')].map(b => (b > 127 ? b - 256 : b)); },
-    newBlob: (bytes, type, name) => ({ getBytes: () => bytes, getContentType: () => type, getName: () => name }),
+    newBlob: function blob(bytes, type, name) { // chuỗi (HTML) → mảng byte; getAs giả: giữ nội dung, đổi loại (đủ để kiểm tra luồng tạo PDF)
+      if (typeof bytes === 'string') bytes = [...Buffer.from(bytes, 'utf8')].map(b => (b > 127 ? b - 256 : b));
+      return { getBytes: () => bytes, getContentType: () => type, getName: () => name, getAs: t => blob(bytes, t, name) };
+    },
     base64Encode: bytes => Buffer.from(bytes.map(b => b & 255)).toString('base64'),
     formatDate: (d, tz, fmt) => {
       const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(d).map(x => [x.type, x.value]));

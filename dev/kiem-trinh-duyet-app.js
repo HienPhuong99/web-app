@@ -422,6 +422,56 @@ buoc('Thu cũ đổi mới khi bán nhanh; nhận bảo hành từ kết quả t
   await v(page, 'nut-lui').click();
 });
 
+buoc('Kiểm kho theo IMEI; bán có giảm giá, gửi phiếu PDF; khách trả máy (nhập lại kho, trả lại tiền)', async (page, c) => {
+  await page.getByTestId('tab-tai-khoan').click();
+  await v(page, 'mo-kiem-kho').click();
+  const them = async ma => { await v(page, 'o-kiem').fill(ma); await v(page, 'nut-them-kiem').click(); };
+  await them('356789012345698');
+  await them('999999999999');
+  await them('356789012345698'); // trùng: không tính lại
+  await v(page, 'the-kiem-kho').getByText('ĐÃ QUÉT 2 MÁY').waitFor();
+  await v(page, 'nut-so-sanh').click();
+  await v(page, 'kq-kiem').waitFor({ timeout: 15000 });
+  await v(page, 'ds-la').getByText('Chưa nhập kho', { exact: false }).waitFor();
+  await v(page, 'ds-thieu').waitFor(); // máy khác trong kho chưa quét
+  await v(page, 'nut-luu-kiem').click();
+  await v(page, 'kq-kiem').getByText('Đã lưu vào nhật ký').waitFor({ timeout: 15000 });
+  await khongTranNgang(page);
+  await chup(page, '15-kiem-kho');
+  await v(page, 'nut-lui').click();
+  // Bán có giảm giá
+  await page.getByTestId('tab-ban').click();
+  await v(page, 'o-imei-ban').fill('356789012345698');
+  await v(page, 'nut-them-imei').click();
+  await v(page, 'dong-gio').getByText('iPhone 16 Pro Max', { exact: false }).waitFor({ timeout: 15000 });
+  await v(page, 'o-giam-gia').fill('200000');
+  await v(page, 'tong-cong').getByText('28.000.000 đ').waitFor();
+  await v(page, 'o-tim-khach-ban').fill('Khách Trả Máy');
+  await v(page, 'o-sdt-khach-moi').fill('0988 555 666');
+  await v(page, 'nut-khach-moi').click();
+  page.once('dialog', d => d.accept());
+  await v(page, 'nut-ban').click();
+  await v(page, 'da-ban').waitFor({ timeout: 20000 });
+  const [tai] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }), v(page, 'nut-gui-phieu').click()]);
+  assert.match(tai.suggestedFilename(), /^Phieu ban hang \d{3}-\d{4}-DH\.pdf$/);
+  // Khách trả máy vừa mua: nhập lại kho, trả lại 28.000.000
+  await v(page, 'nut-xem-khach').click();
+  await v(page, 'nut-tra-may-ban').click({ timeout: 15000 });
+  await v(page, 'xem-tra').getByText('hủy đơn', { exact: false }).waitFor({ timeout: 15000 });
+  assert.strictEqual(await v(page, 'o-hoan').inputValue(), '28.000.000');
+  await v(page, 'nut-nhan-tra').click();
+  await v(page, 'ket-qua-tra').waitFor({ timeout: 15000 });
+  assert.match(await v(page, 'ket-qua-tra').innerText(), /đã hủy.*28\.000\.000/s);
+  const may = await page.evaluate(() => localStorage.getItem('may'));
+  assert.strictEqual((await api(c, { may, fn: 'traMaKho', args: ['356789012345698'] })).result.trangThai, 'trongKho');
+  await chup(page, '16-tra-may');
+  await v(page, 'nut-xong-tra').click();
+  await v(page, 'cong-no').getByText('Không còn nợ').waitFor({ timeout: 15000 });
+  await v(page, 'nut-lui').click();
+  await page.getByTestId('tab-ban').click();
+  await v(page, 'nut-ban-moi').click();
+});
+
 buoc('Tài khoản → Đăng xuất: hỏi lại, về màn hình đăng nhập, mở lại vẫn phải đăng nhập', async (page, c) => {
   await page.getByTestId('tab-tai-khoan').click();
   await page.getByTestId('tk-ten').getByText('Quản trị').waitFor();

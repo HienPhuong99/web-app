@@ -7,7 +7,8 @@ import type { HoSoKhach } from '../../lib/api';
 import { ngay, tien } from '../../lib/dinhDang';
 import { linkGoi, linkZalo, soDienThoai } from '../../lib/lienHe';
 import { LOC_DON, locDon, type LocDon } from '../../lib/locDs';
-import { useTaiPdf } from '../../lib/pdf';
+import { useGuiPhieu, useTaiPdf } from '../../lib/pdf';
+import { hoi } from '../../ui/hoi';
 import { useDuLieu } from '../../lib/useDuLieu';
 import { BoLoc } from '../../ui/BoLoc';
 import { ChuLoi, ChuNhat, Dong, DongTT, KhungTrang, Nhan, TieuDeMuc, Vach } from '../../ui/DanhSach';
@@ -23,7 +24,8 @@ const MAU_DON: Record<string, 'xanh' | 'vang' | 'do' | 'xam'> = { 'Đã giao': '
 export default function HoSoKhachMan() {
   const { ma } = useLocalSearchParams<{ ma: string }>();
   const dl = useDuLieu<HoSoKhach>('chiTietKhach', [ma]), hs = dl.du, keo = useKeo(dl.lamMoi); // thu tiền xong quay lại: công nợ đã sửa sẵn, máy chủ xác nhận ở nền
-  const pdf = useTaiPdf();
+  const pdf = useTaiPdf(), phieu = useGuiPhieu();
+  const guiPhieu = async (soDH: string) => { if (await hoi('Gửi phiếu bán hàng?', `Phiếu đơn ${soDH} (hàng, IMEI, hạn bảo hành) dạng PDF để gửi khách qua Zalo, Messenger…`, 'Gửi')) phieu.gui(soDH); };
   const [locD, setLocD] = useState<LocDon>('tat');
 
   const kh = hs?.kh, sdt = soDienThoai(kh?.SDT);
@@ -72,18 +74,20 @@ export default function HoSoKhachMan() {
             {locDon(hs.don, locD).map((d, i) => (
               <View key={d.SoDH}>
                 {i ? <Vach /> : null}
-                <View style={s.dongDon}>
+                <Pressable onPress={() => guiPhieu(d.SoDH)} style={({ pressed }) => [s.dongDon, pressed && { opacity: 0.6 }]} accessibilityRole="button" accessibilityLabel={'Gửi phiếu đơn ' + d.SoDH} testID={'don-' + d.SoDH}>
                   <View style={{ flex: 1 }}>
-                    <Text style={s.chinh}>{d.SoDH}</Text>
+                    <Text style={s.chinh}>{d.SoDH}{phieu.dang === d.SoDH ? ' · đang tạo phiếu…' : ''}</Text>
                     <Text style={s.chuPhu}>{ngay(d.Ngay)}{d.TrangThai !== 'Hủy' && d.TongCong > d.daThu ? ` · còn ${tien(d.TongCong - d.daThu)}` : ''}</Text>
                   </View>
                   <View style={{ alignItems: 'flex-end', gap: 4 }}>
                     <Text style={s.tien}>{tien(d.TongCong)}</Text>
                     <Nhan chu={d.TrangThai} loai={MAU_DON[d.TrangThai] ?? 'xam'} />
                   </View>
-                </View>
+                  <Ionicons name="share-outline" size={18} color={mau.xam} />
+                </Pressable>
               </View>
             ))}
+            <ChuLoi chu={phieu.loi} />
           </The>
 
           {hs.thu.length ? (

@@ -57,6 +57,8 @@ export type TongQuan = {
   /** lãi gộp hôm nay (doanh thu chưa VAT − giá vốn); null khi không phải quản trị, không có ở máy chủ bản cũ */
   lai?: LaiGop | null;
   /** máy sửa đến / quá hẹn trả hoặc đã xong chờ khách lấy (máy chủ bản cũ không có) */
+  /** máy còn 0–15 ngày bảo hành: mời khách quay lại */
+  sapHetBH?: { MaKH: string; TenKH: string; SDT: string; TenHang: string; IMEI: string; HetHan: string; n: number }[];
   suaChua?: { SoPN: string; MaKH: string; TenKH: string; SDT: string; TenMay: string; TrangThai: string; NgayHen: string; n: number | null }[];
 };
 /** Phiếu nhận bảo hành – sửa chữa (DichVu.gs) */
