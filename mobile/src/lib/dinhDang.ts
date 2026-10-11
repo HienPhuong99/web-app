@@ -47,7 +47,14 @@ export function thu(s: string): string {
   return Number.isNaN(d) ? '' : d === 0 ? 'CN' : 'T' + (d + 1);
 }
 
-/** Ngày hôm nay theo giờ của máy, dạng "2026-10-11" (dùng làm ngày phiếu thu) */
+/** Ngày theo giờ Việt Nam (UTC+7, như máy chủ) của thời điểm d, dạng "2026-10-11" – điện thoại để múi giờ khác vẫn ghi đúng ngày phiếu thu */
 export function homNay(d: Date = new Date()): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return new Date(d.getTime() + 7 * 36e5).toISOString().slice(0, 10);
+}
+
+/** Hôm nay (giờ Việt Nam) cộng n ngày theo lịch, dạng "2026-10-14" */
+export function congNgay(n: number, d: Date = new Date()): string {
+  const v = new Date(d.getTime() + 7 * 36e5);
+  v.setUTCDate(v.getUTCDate() + n);
+  return v.toISOString().slice(0, 10);
 }

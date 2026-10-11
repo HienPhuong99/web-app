@@ -1,7 +1,7 @@
 // Hàm thuần của app: node --test test/   (Node 22.18+ tự bỏ kiểu TypeScript)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { tien, tienGon, ngay, tinhTrangBaoHanh, loiChao, thu, homNay } from '../src/lib/dinhDang.ts';
+import { tien, tienGon, ngay, tinhTrangBaoHanh, loiChao, thu, homNay, congNgay } from '../src/lib/dinhDang.ts';
 import { dungLuhn, chuanHoaMa, loaiMa, goiYMa } from '../src/lib/maQuet.ts';
 
 test('tiền', () => {
@@ -81,8 +81,12 @@ test('chuẩn hóa mã quét', () => {
   assert.equal(chuanHoaMa(''), '');
 });
 
-test('hôm nay theo giờ máy', () => {
-  assert.equal(homNay(new Date(2026, 0, 5, 23, 59)), '2026-01-05');
-  assert.equal(homNay(new Date(2026, 11, 31, 0, 1)), '2026-12-31');
+test('hôm nay theo giờ Việt Nam', () => {
+  // giờ Việt Nam (UTC+7) bất kể múi giờ của máy chạy
+  assert.equal(homNay(new Date(Date.UTC(2026, 0, 5, 16, 59))), '2026-01-05'); // 23:59 ngày 5 giờ VN
+  assert.equal(homNay(new Date(Date.UTC(2026, 0, 5, 17, 1))), '2026-01-06'); // 00:01 ngày 6 giờ VN
+  assert.equal(homNay(new Date(Date.UTC(2026, 11, 31, 16, 30))), '2026-12-31');
   assert.match(homNay(), /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(congNgay(3, new Date(Date.UTC(2026, 9, 11, 17, 30))), '2026-10-15'); // 00:30 ngày 12 giờ VN + 3
+  assert.equal(congNgay(1, new Date(Date.UTC(2026, 11, 31, 2))), '2027-01-01');
 });

@@ -317,7 +317,7 @@ buoc('Tổng quan: phím tắt Bán nhanh, bấm khách còn nợ mở hồ sơ'
 });
 
 buoc('Tổng quan động: bấm số đơn → đơn và phiếu thu hôm nay, lật ngày; bấm cột 7 ngày; khách còn nợ → hồ sơ', async page => {
-  const homNay = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  const homNay = new Date(Date.now() + 7 * 36e5).toISOString().slice(0, 10); // hôm nay theo giờ Việt Nam, như app và máy chủ
   const dmy = n => n.split('-').reverse().join('/');
   await page.getByTestId('tab-index').click();
   await v(page, 'so-don').click({ timeout: 15000 });

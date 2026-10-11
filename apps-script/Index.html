@@ -402,7 +402,10 @@ const short = n => Math.abs(n) >= 1e9 ? (n / 1e9).toLocaleString('vi-VN', { maxi
 const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
 const digits = s => String(s ?? '').replace(/\D/g, '');
 const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-const today = () => iso(new Date());
+// Giờ Việt Nam (UTC+7, không đổi giờ mùa hè) dù máy để múi giờ khác: "hôm nay", "tháng này" khớp với ngày máy chủ ghi vào chứng từ
+const nowVN = () => { const d = new Date(); return new Date(d.getTime() + (d.getTimezoneOffset() + 420) * 6e4); };
+const today = () => iso(nowVN());
+const ngayCong = n => { const d = nowVN(); return iso(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)); }; // hôm nay ± n ngày (cộng theo lịch, không lệch khi đổi giờ mùa hè)
 const dmy = s => s ? esc(String(s).slice(0, 10).split('-').reverse().join('/')) : '';
 const isAdmin = () => !!S.user && S.user.vaiTro === 'admin';
 const errMsg = e => String((e && e.message) || e).replace(/^(Exception|Error):\s*/, '');
@@ -916,10 +919,10 @@ function moDanhSach({ view, id, f, tab }) {
 const ngayLocal = s => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
 const KY_TQ = {
   thang: ['Tháng này', () => [today().slice(0, 8) + '01', today()]],
-  truoc: ['Tháng trước', () => { const d = new Date(); return [iso(new Date(d.getFullYear(), d.getMonth() - 1, 1)), iso(new Date(d.getFullYear(), d.getMonth(), 0))]; }],
-  quy: ['Quý này', () => { const d = new Date(); return [iso(new Date(d.getFullYear(), d.getMonth() - d.getMonth() % 3, 1)), today()]; }],
+  truoc: ['Tháng trước', () => { const d = nowVN(); return [iso(new Date(d.getFullYear(), d.getMonth() - 1, 1)), iso(new Date(d.getFullYear(), d.getMonth(), 0))]; }],
+  quy: ['Quý này', () => { const d = nowVN(); return [iso(new Date(d.getFullYear(), d.getMonth() - d.getMonth() % 3, 1)), today()]; }],
   nam: ['Năm nay', () => [today().slice(0, 4) + '-01-01', today()]],
-  d30: ['30 ngày qua', () => { const d = new Date(); return [iso(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 29)), today()]; }],
+  d30: ['30 ngày qua', () => { const d = nowVN(); return [iso(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 29)), today()]; }],
 };
 function kyTruoc(tu, den) {
   const a = ngayLocal(tu), n = Math.round((ngayLocal(den) - a) / 864e5) + 1;
@@ -954,7 +957,7 @@ function vHome(el) {
   setTop('Tổng quan', 'Bảng điều khiển', [{ t: 'Tải lại', ic: 'refresh', fn: run(async () => { await loadAll(); if (S.q.home) S.q.home.tk = null; render(); toast('Đã tải lại dữ liệu.'); }) }]);
   const st = S.q.home || (S.q.home = { ky: 'thang' });
   const [tenKy, layKy] = KY_TQ[st.ky] || KY_TQ.thang, [tu, den] = layKy(), [tu0, den0] = kyTruoc(tu, den);
-  const now = today(), d0 = new Date(), kyChu = tenKy.toLowerCase();
+  const now = today(), d0 = nowVN(), kyChu = tenKy.toLowerCase();
   const live = S.donHang.filter(d => d.TrangThai !== 'Hủy');
   const donKy = trongKy(live, tu, den), thuKy = trongKy(S.thuTien, tu, den), bgKy = trongKy(S.baoGia, tu, den);
   const ds = sum(donKy, d => d.TongCong), dsTruoc = sum(trongKy(live, tu0, den0), d => d.TongCong);
@@ -2324,7 +2327,7 @@ async function lichAct(el, a) {
   } else if (act === 'lich-huy') {
     const r = d.lich[i];
     if (!confirm(`Hủy ghi nhận thu ${r.Nhan} của ${d.SoHD}? Phiếu thu ${r.SoPT} sẽ bị xóa và đợt về chưa thu.`)) return;
-    const k = await api('huyThuDotHopDong', d.SoHD, r.Dot);
+    const k = await api('huyThuDotHopDong', d.SoHD, r.Dot, r.SoPT);
     capNhatSauThu({ lich: k.lich }, d.SoHD);
     S.thuTien = S.thuTien.filter(p => p.SoPT !== k.soPT); derive(); render();
     toast('Đã hủy ghi nhận thu của đợt.');
@@ -2348,7 +2351,7 @@ function openThuDot(h, r) {
       <p class="muted">Tạo phiếu thu cho đơn ${esc(h.SoDH)} (${esc(h.TenDN)}); công nợ của khách tự giảm.</p>
       ${S.congTy.qrSoTK ? `<div class="qr"><button type="button" class="btn sm" data-qr>${icon('card')}Mã QR chuyển khoản</button><div class="qr-box" data-qrbox></div></div>` : ''}`,
     buttons: [{ t: 'Ghi nhận đã thu', ic: 'check', cls: 'primary', save: true, fn: run(async mm => {
-      const k = await api('thuDotHopDong', h.SoHD, r.Dot, formData(mm));
+      const k = await api('thuDotHopDong', h.SoHD, r.Dot, Object.assign(formData(mm), { kiemNgay: r.NgayDen, kiemTien: r.SoTien }));
       capNhatSauThu(k, h.SoHD); upsertLocal('thuTien', 'SoPT', k.phieu); sortAll(); derive();
       closeModal(); render(); toast(`Đã ghi nhận thu ${r.Nhan}: ${money(k.phieu.SoTien)} ₫ (phiếu ${k.phieu.SoPT}).`);
     }) }],
@@ -2853,7 +2856,7 @@ function downloadCsv(name, head, rows) {
 }
 
 function vBaoCao(el) {
-  const t = today(), d0 = new Date(), y = d0.getFullYear(), mo = d0.getMonth();
+  const t = today(), d0 = nowVN(), y = d0.getFullYear(), mo = d0.getMonth();
   const st = S.q.baocao || (S.q.baocao = { from: t.slice(0, 8) + '01', to: t, tab: 'ngay' });
   const KY = {
     thang: () => ({ from: iso(new Date(y, mo, 1)), to: t }), truoc: () => ({ from: iso(new Date(y, mo - 1, 1)), to: iso(new Date(y, mo, 0)) }),
@@ -3074,7 +3077,7 @@ function vSuaChua(el) {
 
 function openSuaChua(p) {
   const moi = !p || !p.SoPN, daTra = !moi && p.TrangThai === 'Đã trả khách', khoa = daTra && !isAdmin() ? ' disabled' : '';
-  p = Object.assign({ Loai: 'Sửa chữa', MaKH: '', TenKH: '', SDT: '', TenMay: '', IMEI: '', TinhTrang: '', PhuKien: '', MatKhauMay: '', NgayHen: iso(new Date(Date.now() + 3 * 864e5)), TrangThai: 'Đã nhận', ChiPhi: '', KetQua: '' }, p || {});
+  p = Object.assign({ Loai: 'Sửa chữa', MaKH: '', TenKH: '', SDT: '', TenMay: '', IMEI: '', TinhTrang: '', PhuKien: '', MatKhauMay: '', NgayHen: ngayCong(3), TrangThai: 'Đã nhận', ChiPhi: '', KetQua: '' }, p || {});
   const tt = (S.ttSua || []).filter(t => t !== 'Đã trả khách' || daTra), opt = (ds, v) => ds.map(x => `<option${x === v ? ' selected' : ''}>${esc(x)}</option>`).join('');
   const anh = anhSua(p);
   const m = modal({

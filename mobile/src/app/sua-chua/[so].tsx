@@ -7,7 +7,7 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../lib/auth';
 import { TT_SUA, type CauHinh, type PhieuSua } from '../../lib/api';
-import { homNay, ngay, tien } from '../../lib/dinhDang';
+import { congNgay, ngay, tien } from '../../lib/dinhDang';
 import { docTien, soTienNhap } from '../../lib/gioHang';
 import { linkGoi, linkZalo, soDienThoai } from '../../lib/lienHe';
 import { luu } from '../../lib/boNho';
@@ -21,7 +21,6 @@ import { DongCapNhat, KhungCho, useKeo } from '../../ui/TrangThaiTai';
 import { mau } from '../../ui/theme';
 import { MAU_SUA, maDuongDan, moTaHen, tuDuongDan } from '../../lib/phieuSua';
 
-const congNgay = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return homNay(d); };
 const rung = () => { if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {}); };
 
 export default function PhieuSuaMan() {

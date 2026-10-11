@@ -332,6 +332,10 @@ BUOC.push(['Phiếu nhập từ khách (thu cũ, khách trả hàng) không thà
   assert.match(await page.locator('tr[data-go="pk:T-TRA"]').textContent(), /Khách trả hàng/);
   await page.evaluate(() => { S.phieuKho = S.phieuKho.filter(p => !/^T-/.test(p.SoPK)); S.dirty = false; go('home'); });
 }]);
+BUOC.push(['Ngày "hôm nay" trên web theo giờ Việt Nam như máy chủ, dù máy để múi giờ khác', async page => {
+  const [web, vn] = await page.evaluate(() => [today(), new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())]);
+  assert.strictEqual(web, vn);
+}]);
 try { require('./kiem-trinh-duyet-hopdong')(BUOC); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
 
 (async () => {

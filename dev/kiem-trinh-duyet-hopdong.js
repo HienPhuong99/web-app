@@ -87,7 +87,7 @@ module.exports = BUOC => {
 
   BUOC.push(['Hợp đồng: trạng thái sắp hết hạn / đã hết hạn và bộ lọc', async page => {
     await page.evaluate(async () => {
-      const ngay = n => iso(new Date(Date.now() + n * 864e5));
+      const ngay = n => ngayCong(n);
       const mau = { LoaiHD: 'Hợp đồng mua bán', TenDN: 'Công ty Hạn', TrangThai: 'Đang hiệu lực', VAT: 0, lines: [] };
       await api('luuHopDong', Object.assign({}, mau, { NgayHieuLuc: ngay(-100), NgayHetHan: ngay(10) }));
       await api('luuHopDong', Object.assign({}, mau, { TenDN: 'Công ty Quá Hạn', NgayHieuLuc: ngay(-200), NgayHetHan: ngay(-1) }));
@@ -129,7 +129,7 @@ module.exports = BUOC => {
     // gia hạn: sửa ngày hết hạn thì hợp đồng rời khỏi danh sách
     await page.locator('tbody tr[data-i]').first().click();
     await page.waitForSelector('input[data-h="NgayHetHan"]');
-    await page.fill('input[data-h="NgayHetHan"]', await page.evaluate(() => iso(new Date(Date.now() + 365 * 864e5))));
+    await page.fill('input[data-h="NgayHetHan"]', await page.evaluate(() => ngayCong(365)));
     await luu(page);
     await page.waitForFunction(() => !S.dirty);
     await page.click('#nav a[data-go="hdhan"]');
@@ -247,7 +247,7 @@ module.exports = BUOC => {
     await page.selectOption('select[data-h="TuGiaHan"]', '1');
     assert.strictEqual(await page.inputValue('input[data-h="ThangGiaHan"]'), '12'); // chọn tự gia hạn thì mặc định 12 tháng
     await page.selectOption('select[data-h="TrangThai"]', 'Đang hiệu lực');
-    await page.fill('input[data-h="NgayHetHan"]', await page.evaluate(() => iso(new Date(Date.now() + 40 * 864e5))));
+    await page.fill('input[data-h="NgayHetHan"]', await page.evaluate(() => ngayCong(40)));
     await page.fill('tr[data-i="0"] [data-f="TenHang"]', 'Máy thử IMEI');
     await page.keyboard.press('Escape');
     await page.fill('tr[data-i="0"] [data-f="IMEI"]', '356789012345671');
@@ -281,7 +281,7 @@ module.exports = BUOC => {
   BUOC.push(['Hợp đồng: hạn báo trước, nhắc khách qua Zalo/email, nút trong dòng không mở hợp đồng', async page => {
     await page.evaluate(async () => {
       await api('luuHopDong', { LoaiHD: 'Hợp đồng nguyên tắc', TenDN: 'Công ty Báo Trước', NguoiDaiDien: 'Lê Văn C', SDT: '0912 345 678 / 0988000111', TrangThai: 'Đang hiệu lực', BaoTruocNgay: 60, TuGiaHan: '1', ThangGiaHan: 6,
-        NgayHieuLuc: iso(new Date(Date.now() - 300 * 864e5)), NgayHetHan: iso(new Date(Date.now() + 50 * 864e5)), VAT: 0, lines: [] });
+        NgayHieuLuc: ngayCong(-300), NgayHetHan: ngayCong(50), VAT: 0, lines: [] });
       await loadAll(); go('hdhan');
     });
     const dong = page.locator('tbody tr[data-i]', { hasText: 'Công ty Báo Trước' });
@@ -317,7 +317,7 @@ module.exports = BUOC => {
     assert.strictEqual(tong, 37290000);
     await page.fill('[data-gen="traTruoc"]', '10000000');
     await page.fill('[data-gen="soKy"]', '3');
-    await page.fill('[data-gen="ngayDau"]', await page.evaluate(() => iso(new Date(Date.now() - 864e5)))); // kỳ 1 đã quá hạn 1 ngày
+    await page.fill('[data-gen="ngayDau"]', await page.evaluate(() => ngayCong(-1))); // kỳ 1 đã quá hạn 1 ngày
     await page.click('[data-act="lich-tao"]');
     const so4 = await page.locator('[data-lich] tbody tr').count();
     assert.strictEqual(so4, 4);
