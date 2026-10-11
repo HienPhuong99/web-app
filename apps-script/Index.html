@@ -731,7 +731,7 @@ function modal({ title, body, buttons = [], wide }) {
   if (f) f.focus();
   return m;
 }
-function closeModal() { const m = $('#modal'); m.classList.add('hidden'); m.innerHTML = ''; hidePicker(); }
+function closeModal() { const m = $('#modal'); m.classList.add('hidden'); m.innerHTML = ''; m.oninput = m.onchange = null; hidePicker(); } // bỏ cả bộ nghe gõ của hộp thoại trước (vd. trả hàng)
 
 // fields: [tên, nhãn, {ro, ph, area, options, type, money, list, full}]
 function formHtml(fields, o) {
@@ -797,7 +797,7 @@ function listCard(el, cfg) {
     if (n > daVe) { body.insertAdjacentHTML('beforeend', dongHtml(daVe, n)); daVe = n; }
     const can = Math.min(lim, rows.length), con = rows.length - can;
     count.textContent = con > 0 ? `Hiện ${can} / ${rows.length} dòng` : `${rows.length} dòng`;
-    if (daVe < can) { hen = setTimeout(() => veDen(can), 16); return; }
+    if (daVe < can) { hen = setTimeout(() => { if (card.isConnected) veDen(can); }, 16); return; } // đã rời màn hình: thôi vẽ tiếp
     if (con > 0) body.insertAdjacentHTML('beforeend', `<tr class="them"><td colspan="${cfg.cols.length}"><button type="button" class="btn sm">Hiện thêm ${Math.min(LIMIT, con)} dòng (còn ${con})</button></td></tr>`);
   };
   const refresh = () => {
@@ -1225,15 +1225,16 @@ function openThu(pt) {
   pt = Object.assign({ Ngay: today(), HinhThuc: hinhThuc[0], MaKH: '', TenKH: '', SoDH: '', SoTien: '', GhiChu: '' }, pt || {});
   if (isNew && pt.SoDH) { const d = S.donHang.find(x => x.SoDH === pt.SoDH); if (d) Object.assign(pt, { MaKH: d.MaKH, TenKH: d.TenKH, SoTien: conNo(d) }); }
   if (isNew && pt.MaKH && !pt.TenKH) { const k = S.khach.find(x => x.MaKH === pt.MaKH); if (k) pt.TenKH = k.TenKH; }
-  const ordersOf = ma => S.donHang.filter(x => x.MaKH === ma && x.TrangThai !== 'Hủy' && (conNo(x) > 0 || x.SoDH === pt.SoDH));
+  const ordersOf = ma => S.donHang.filter(x => x.MaKH === ma && (x.SoDH === pt.SoDH || (x.TrangThai !== 'Hủy' && conNo(x) > 0))); // đơn đang gắn vẫn hiện dù đã hủy
+  const traLai = +pt.SoTien < 0; // phiếu trả lại tiền khách (trả hàng): chỉ xem, sửa ghi chú
   const orderOpts = ma => `<option value="">— Không gắn đơn (trả trước / nợ cũ) —</option>` + ordersOf(ma).map(x =>
     `<option value="${esc(x.SoDH)}"${x.SoDH === pt.SoDH ? ' selected' : ''}>${esc(x.SoDH)} · ${dmy(x.Ngay)} · còn nợ ${money(conNo(x))} ₫</option>`).join('');
   const m = modal({
-    title: isNew ? 'Thu tiền khách hàng' : 'Phiếu thu ' + pt.SoPT,
+    title: isNew ? 'Thu tiền khách hàng' : (traLai ? 'Phiếu trả lại tiền ' : 'Phiếu thu ') + pt.SoPT,
     body: `<div class="fgrid">
       <label class="field full"><span class="lb">Khách hàng *</span><input name="TenKH" value="${esc(pt.TenKH)}" placeholder="Gõ tên hoặc SĐT để tìm" autocomplete="off"${isNew ? '' : ' readonly'}><input type="hidden" name="MaKH" value="${esc(pt.MaKH)}"></label>
       <label class="field full"><span class="lb">Thu cho đơn hàng</span><select name="SoDH">${orderOpts(pt.MaKH)}</select></label>
-      <label class="field"><span class="lb">Số tiền *</span><input name="SoTien" class="money num" inputmode="numeric" value="${money(pt.SoTien)}"></label>
+      <label class="field"><span class="lb">Số tiền *</span><input name="SoTien" class="money num" inputmode="numeric" value="${money(traLai ? -pt.SoTien : pt.SoTien)}"${traLai ? ' readonly' : ''}></label>
       <label class="field"><span class="lb">Ngày thu</span><input name="Ngay" type="date" value="${esc(pt.Ngay)}"></label>
       <label class="field"><span class="lb">Hình thức</span><select name="HinhThuc">${hinhThuc.concat(hinhThuc.includes(pt.HinhThuc) ? [] : [pt.HinhThuc]).map(x => `<option${x === pt.HinhThuc ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
       <label class="field"><span class="lb">Ghi chú</span><input name="GhiChu" value="${esc(pt.GhiChu)}" placeholder="vd: Đặt cọc 50%"></label>
@@ -1768,7 +1769,7 @@ function drawTotals(el) {
     if (gt) gt.textContent = money(sum(filled(d.lines), l => (+l.SoLuong || 0) * (+l.GiaVon || 0))) + ' ₫';
     return;
   }
-  const cong = sum(d.lines, lineTotal), giam = Math.min(Math.max(0, cong), +d.GiamGia || 0), tien = cong - giam, vat = +d.VAT || 0, tienVat = Math.round(tien * vat / 100);
+  const cong = sum(filled(d.lines), lineTotal), giam = Math.min(Math.max(0, cong), +d.GiamGia || 0), tien = cong - giam, vat = +d.VAT || 0, tienVat = Math.round(tien * vat / 100);
   $('[data-t="TienHang"]', el).textContent = money(cong) + ' ₫';
   const sauGiam = $('[data-t="SauGiam"]', el);
   if (sauGiam) sauGiam.textContent = giam ? 'còn ' + money(tien) + ' ₫' : '';
@@ -2026,11 +2027,12 @@ function docPrintHtml(L, d) {
 }
 
 function ptPrintHtml(p) {
-  return `<div class="p-page">${letterhead('PHIẾU THU')}
-    ${infoTable([['Số phiếu:', p.SoPT, 'Ngày:', dmy(p.Ngay)], ['Người nộp tiền:', p.TenKH, 'Mã khách:', p.MaKH],
-      ['Lý do nộp:', (p.SoDH ? 'Thanh toán đơn hàng ' + p.SoDH : 'Thanh toán công nợ') + (p.GhiChu ? ' – ' + p.GhiChu : ''), 'Hình thức:', p.HinhThuc]])}
-    <p style="font-size:14px">Số tiền: <b>${money(p.SoTien)} đồng</b><br>Bằng chữ: <i>${esc(docSo(p.SoTien))}</i></p>
-    ${signs(['Người nộp tiền', 'Người thu tiền'])}</div>`;
+  const chi = +p.SoTien < 0, tien = Math.abs(+p.SoTien || 0); // số âm: cửa hàng trả lại tiền khách (khách trả hàng)
+  return `<div class="p-page">${letterhead(chi ? 'PHIẾU CHI TRẢ LẠI TIỀN KHÁCH' : 'PHIẾU THU')}
+    ${infoTable([['Số phiếu:', p.SoPT, 'Ngày:', dmy(p.Ngay)], [chi ? 'Người nhận tiền:' : 'Người nộp tiền:', p.TenKH, 'Mã khách:', p.MaKH],
+      [chi ? 'Lý do chi:' : 'Lý do nộp:', (chi ? 'Trả lại tiền khách trả hàng' + (p.SoDH ? ', đơn ' + p.SoDH : '') : p.SoDH ? 'Thanh toán đơn hàng ' + p.SoDH : 'Thanh toán công nợ') + (p.GhiChu ? ' – ' + p.GhiChu : ''), 'Hình thức:', p.HinhThuc]])}
+    <p style="font-size:14px">Số tiền: <b>${money(tien)} đồng</b><br>Bằng chữ: <i>${esc(docSo(tien))}</i></p>
+    ${signs(chi ? ['Người nhận tiền', 'Người chi tiền'] : ['Người nộp tiền', 'Người thu tiền'])}</div>`;
 }
 
 // ===================== Ô gợi ý tìm hàng / tìm khách =====================
@@ -2401,7 +2403,7 @@ function vHDLich(el) {
 
 const hdTitle = () => S.hd.SoHD ? 'Hợp đồng ' + S.hd.SoHD : 'Hợp đồng mới';
 const blankHDLine = () => ({ MaHH: '', TenHang: '', DVT: '', SoLuong: '', DonGia: '', IMEI: '' });
-const hdTotal = () => { const t = sum(S.hd.lines, lineTotal), v = Math.min(100, Math.max(0, +S.hd.VAT || 0)), tv = Math.round(t * v / 100); return { tien: t, vat: v, tienVat: tv, tong: t + tv }; };
+const hdTotal = () => { const t = sum(filled(S.hd.lines), lineTotal), v = Math.min(100, Math.max(0, +S.hd.VAT || 0)), tv = Math.round(t * v / 100); return { tien: t, vat: v, tienVat: tv, tong: t + tv }; };
 function hdTail() { const ls = S.hd.lines; if (!ls.length || String(ls[ls.length - 1].TenHang).trim()) ls.push(blankHDLine()); }
 
 function newHD(init) {
@@ -2581,7 +2583,7 @@ async function huyKy() {
 
 // Đơn hàng của khách đã chọn (đơn đang gắn vào hợp đồng luôn có mặt trong danh sách)
 function hdOrderOptions() {
-  const d = S.hd, ds = S.donHang.filter(x => x.TrangThai !== 'Hủy' && ((d.MaKH && x.MaKH === d.MaKH) || x.SoDH === d.SoDH));
+  const d = S.hd, ds = S.donHang.filter(x => x.SoDH === d.SoDH || (x.TrangThai !== 'Hủy' && d.MaKH && x.MaKH === d.MaKH)); // đơn đang gắn vẫn hiện dù đã hủy, lưu không bị mất liên kết
   return `<option value="">— Không gắn đơn hàng —</option>` + ds.map(x => `<option value="${esc(x.SoDH)}"${x.SoDH === d.SoDH ? ' selected' : ''}>${esc(x.SoDH)} · ${dmy(x.Ngay)} · ${money(x.TongCong)} ₫</option>`).join('');
 }
 

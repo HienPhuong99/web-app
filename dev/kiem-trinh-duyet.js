@@ -336,6 +336,25 @@ BUOC.push(['Ngày "hôm nay" trên web theo giờ Việt Nam như máy chủ, d�
   const [web, vn] = await page.evaluate(() => [today(), new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())]);
   assert.strictEqual(web, vn);
 }]);
+BUOC.push(['Tiền trên màn hình khớp lúc lưu: bỏ dòng không tên; phiếu trả lại tiền chỉ xem; đơn đã hủy vẫn chọn được khi đang gắn', async page => {
+  // Tổng đơn: dòng đã xóa tên hàng không tính (máy chủ cũng bỏ dòng đó khi lưu)
+  await page.evaluate(() => newDoc('DH', { VAT: 0, lines: [{ TenHang: 'Hàng A', SoLuong: 1, DonGia: 100000 }, { TenHang: '', SoLuong: 2, DonGia: 5000000 }] }));
+  await page.waitForSelector('#view [data-t="TongCong"]');
+  assert.strictEqual(+(await page.locator('#view [data-t="TongCong"]').innerText()).replace(/\D/g, ''), 100000);
+  await page.evaluate(() => { S.dirty = false; go('home'); });
+  // Phiếu trả lại tiền (số âm): tiêu đề rõ, số tiền không sửa được, hiện không dấu trừ
+  const d = await page.evaluate(() => S.donHang[0]);
+  await page.evaluate(d => openThu({ SoPT: 'PT-TRA', MaKH: d.MaKH, TenKH: d.TenKH, SoDH: d.SoDH, SoTien: -500000, HinhThuc: 'Tiền mặt', Ngay: today(), NguoiTao: 'x', NgayTao: 'y' }), d);
+  assert.match(await page.locator('#modal h3').innerText(), /Phiếu trả lại tiền PT-TRA/);
+  assert.deepStrictEqual([await page.locator('#modal [name=SoTien]').inputValue(), await page.locator('#modal [name=SoTien]').getAttribute('readonly')], ['500.000', '']);
+  await page.locator('#modal [data-close]').first().click();
+  // Phiếu gắn đơn đã hủy: lựa chọn đơn vẫn là đơn đó (không tự bỏ liên kết khi lưu)
+  const huy = await page.evaluate(() => { const x = S.donHang[0]; x._tt = x.TrangThai; x.TrangThai = 'Hủy'; return x; });
+  await page.evaluate(d => openThu({ SoPT: 'PT-CU', MaKH: d.MaKH, TenKH: d.TenKH, SoDH: d.SoDH, SoTien: 100000, HinhThuc: 'Tiền mặt', Ngay: today(), NguoiTao: 'x', NgayTao: 'y' }), huy);
+  assert.strictEqual(await page.locator('#modal [name=SoDH]').inputValue(), huy.SoDH);
+  await page.locator('#modal [data-close]').first().click();
+  await page.evaluate(() => { const x = S.donHang[0]; x.TrangThai = x._tt; delete x._tt; });
+}]);
 try { require('./kiem-trinh-duyet-hopdong')(BUOC); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
 
 (async () => {

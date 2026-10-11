@@ -624,6 +624,11 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   const sq = goi(binh4, 'soQuyMay', '');
   assert.strictEqual(sq.ton.tienMat, tmTruoc - 28000000);
   assert.ok(sq.ds.some(x => x.loai === 'chi' && x.so === r.SoPT && x.SoTien === 28000000));
+  // Mở phiếu trả lại tiền trên web rồi bấm Lưu (ô số tiền không có dấu trừ): vẫn là số âm; đổi số tiền thì không được
+  const ptTra = G.findObj_('ThuTien', r.SoPT), at2 = G.dangNhap('admin', adminPass).token;
+  assert.strictEqual(G.luuThuTien(at2, Object.assign({}, ptTra, { SoTien: 28000000, GhiChu: 'khách nhận tiền mặt' })).SoTien, -28000000);
+  assert.strictEqual(G.findObj_('ThuTien', r.SoPT).SoTien, -28000000);
+  assert.throws(() => G.luuThuTien(at2, Object.assign({}, ptTra, { SoTien: 1000 })), /phiếu trả lại tiền khách/);
   assert.strictEqual(G.giaVonBQ_().HH0001, 25000000); // nhập lại không ghi giá: giá vốn bình quân không đổi
   const bh = goi(binh4, 'traBaoHanh', '357000000000011');
   assert.ok(!bh.ds.some(x => x.MaKH === kh.MaKH)); // máy đã trả: không còn bảo hành cho khách này

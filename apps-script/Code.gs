@@ -837,10 +837,17 @@ function dotCuaPhieu_(soPT) { return readTable_('HopDongLich').find(r => String(
 const phieuCuaDot_ = (soPT, dot, viec) => 'Phiếu ' + soPT + ' ghi nhận ' + dot.Nhan + ' của hợp đồng ' + dot.SoHD + ': không ' + viec + ' ở đây. Mở hợp đồng → Lịch thanh toán → Hủy ghi nhận thu.';
 // Kiểm tra và ghi một phiếu thu. Gọi bên trong withLock_ (khóa không lồng nhau được, nên các hàm đã giữ khóa dùng thẳng hàm này).
 function ghiPhieuThu_(user, pt) {
-  const dot = pt.SoPT && dotCuaPhieu_(pt.SoPT); // sửa phiếu đang ghi nhận một đợt hợp đồng: không đổi tiền / đơn (phiếu mất khỏi Sheet thì cũng không ghi lại)
-  if (dot) { const cu = findObj_('ThuTien', pt.SoPT); if (!cu || Math.round(+pt.SoTien || 0) !== +cu.SoTien || String(pt.SoDH || '') !== String(cu.SoDH || '')) throw new Error(phieuCuaDot_(pt.SoPT, dot, 'sửa số tiền / đơn hàng')); }
-  pt.SoTien = Math.round(+pt.SoTien || 0);
-  if (pt.SoTien <= 0) throw new Error('Nhập số tiền thu.');
+  const dot = pt.SoPT && dotCuaPhieu_(pt.SoPT), cu = pt.SoPT ? findObj_('ThuTien', pt.SoPT) : null;
+  const doiTienDon = () => Math.round(+pt.SoTien || 0) !== +cu.SoTien || String(pt.SoDH || '') !== String(cu.SoDH || '');
+  // sửa phiếu đang ghi nhận một đợt hợp đồng: không đổi tiền / đơn (phiếu mất khỏi Sheet thì cũng không ghi lại)
+  if (dot && (!cu || doiTienDon())) throw new Error(phieuCuaDot_(pt.SoPT, dot, 'sửa số tiền / đơn hàng'));
+  if (cu && +cu.SoTien < 0) { // phiếu trả lại tiền khách (số âm, do trả hàng): giữ số âm; ô số tiền gửi lên không có dấu trừ
+    if (Math.abs(Math.round(+pt.SoTien || 0)) !== -cu.SoTien || String(pt.SoDH || '') !== String(cu.SoDH || '')) throw new Error('Phiếu ' + pt.SoPT + ' là phiếu trả lại tiền khách: không sửa số tiền / đơn hàng.');
+    pt.SoTien = +cu.SoTien;
+  } else {
+    pt.SoTien = Math.round(+pt.SoTien || 0);
+    if (pt.SoTien <= 0) throw new Error('Nhập số tiền thu.');
+  }
   if (pt.SoDH) {
     const dh = findObj_('DonHang', pt.SoDH);
     if (!dh) throw new Error('Không tìm thấy đơn hàng ' + pt.SoDH + '.');
