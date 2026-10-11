@@ -40,7 +40,7 @@ function luuEmailSang(token, o) {
 
 function ghiCaiDat_(khoa, giaTri) {
   const sh = sheet_('CaiDat'), r = findRow_(sh, khoa), row = toRow_(sh, { Khoa: khoa, GiaTri: giaTri });
-  if (r) sh.getRange(r, 1, 1, row.length).setValues([row]); else sh.appendRow(row);
+  ghiDong_(sh, [row], r);
 }
 
 /**

@@ -97,7 +97,7 @@ function luuHopDong(token, doc) {
     if (lines.length) {
       const sh = sheet_('HopDongCT');
       const rows = lines.map(l => toRow_(sh, Object.assign({ SoHD: head.SoHD }, l)));
-      sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+      ghiDong_(sh, rows);
     }
     log_(user, (old ? 'Sửa' : 'Thêm') + ' hợp đồng', head.SoHD, head.TenDN + ' · ' + head.LoaiHD + ' · ' + head.TongCong + ' đ');
     head.lines = lines;
@@ -167,7 +167,7 @@ function luuLichHopDong(token, soHD, rows) {
     deleteWhere_('HopDongLich', soHD);
     if (moi.length) {
       const sh = sheet_('HopDongLich'), out = moi.map(r => toRow_(sh, r));
-      sh.getRange(sh.getLastRow() + 1, 1, out.length, out[0].length).setValues(out);
+      ghiDong_(sh, out);
     }
     const khoa = ls => JSON.stringify(ls.map(x => [String(x.Nhan), String(x.NgayDen), +x.SoTien]));
     if (hd.FileId && khoa(cu) !== khoa(moi)) { // lịch có trong file nên file cũ
@@ -629,6 +629,9 @@ const HD_LOAI_MAC_DINH = [
   { ten: 'Hợp đồng cộng tác viên bán hàng', moTa: 'Cộng tác viên giới thiệu khách, hưởng hoa hồng theo đơn: mức hoa hồng, đối chiếu, thanh toán, trách nhiệm hai bên.', mau: HD_MAU_CONG_TAC_VIEN },
 ];
 
+// Các loại mặc định thêm ở bản có SCHEMA 10: Sheet đang dùng mẫu được tự thêm khi nâng cấp (không tạo lại loại cũ quản trị đã xóa)
+const HD_LOAI_MOI_ = ['Hợp đồng đặt cọc mua hàng', 'Hợp đồng cho thuê thiết bị', 'Hợp đồng bảo hành mở rộng', 'Hợp đồng cộng tác viên bán hàng'];
+
 // Dựng nội dung mẫu vào file Google Docs mới. Mỗi đoạn đặt tường minh toàn bộ định dạng (phông, cỡ, đậm, nghiêng, căn lề, thụt lề) trong một lần gọi,
 // không dựa vào việc đoạn mới có thừa hưởng kiểu của đoạn trước hay không.
 function dungMau_(doc, muc) {
@@ -697,11 +700,11 @@ function thuMuc_() {
   return f;
 }
 
-/** Tạo file Google Docs mẫu cho các loại hợp đồng mặc định còn thiếu (chỉ một loại nếu có tên). Trả về tên các loại vừa tạo. */
-function taoMauMacDinh_() {
+/** Tạo file Google Docs mẫu cho các loại hợp đồng mặc định còn thiếu (chi: chỉ các loại có tên trong danh sách). Trả về tên các loại vừa tạo. */
+function taoMauMacDinh_(chi) {
   const moi = [], co = readTable_('MauHopDong').map(m => String(m.LoaiHD));
   HD_LOAI_MAC_DINH.forEach(l => {
-    if (co.includes(l.ten)) return;
+    if (co.includes(l.ten) || (chi && !chi.includes(l.ten))) return;
     const ten = 'MẪU - ' + l.ten + ' - ' + cuaHang_(CUR_SHOP).ten;
     const doc = DocumentApp.create(ten);
     dungMau_(doc, l.mau);
@@ -710,7 +713,7 @@ function taoMauMacDinh_() {
     withLock_(() => {
       if (readTable_('MauHopDong').some(m => String(m.LoaiHD) === l.ten)) { try { DriveApp.getFileById(doc.getId()).setTrashed(true); } catch (e) {} return; } // người khác vừa tạo xong
       const sh = sheet_('MauHopDong');
-      sh.appendRow(toRow_(sh, { LoaiHD: l.ten, LinkMau: doc.getUrl(), MoTa: l.moTa, NgayTao: now_() }));
+      ghiDong_(sh, [toRow_(sh, { LoaiHD: l.ten, LinkMau: doc.getUrl(), MoTa: l.moTa, NgayTao: now_() })]);
       moi.push(l.ten);
     });
   });
@@ -966,7 +969,7 @@ function luuMauHopDong(token, m) {
   withLock_(() => {
     const sh = sheet_('MauHopDong'), r = findRow_(sh, loai), cu = r ? rowObj_(sh, r) : null;
     const o = { LoaiHD: loai, LinkMau: 'https://docs.google.com/document/d/' + id + '/edit', MoTa: String((m && m.MoTa) || (cu && cu.MoTa) || '').trim().slice(0, 300), NgayTao: (cu && cu.NgayTao) || now_() };
-    if (r) writeRow_(sh, r, o); else sh.appendRow(toRow_(sh, o));
+    ghiDong_(sh, [toRow_(sh, o)], r);
     log_(user, (cu ? 'Sửa' : 'Thêm') + ' mẫu hợp đồng', loai, o.LinkMau);
   });
   return trangMau_();

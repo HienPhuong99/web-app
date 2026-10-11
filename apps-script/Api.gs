@@ -70,8 +70,8 @@ function dangNhapMay_(tenDangNhap, matKhau, tenMay) {
   const ma = bamMay_(may), u = String(dn.user.u).toLowerCase();
   withLock_(() => {
     const sh = sheet_('ThietBi');
-    sh.appendRow(toRow_(sh, { MaMay: ma, TenDangNhap: u, TenMay: String(tenMay == null ? '' : tenMay).trim().slice(0, 60) || 'Điện thoại',
-      CapLuc: String(dn.user.t), NgayTao: now_(), LanCuoi: now_() }));
+    ghiDong_(sh, [toRow_(sh, { MaMay: ma, TenDangNhap: u, TenMay: String(tenMay == null ? '' : tenMay).trim().slice(0, 60) || 'Điện thoại',
+      CapLuc: String(dn.user.t), NgayTao: now_(), LanCuoi: now_() })]);
     // Quá số máy cho phép: đăng xuất máy lâu không dùng nhất
     const cua = readTable_('ThietBi').filter(r => String(r.TenDangNhap).toLowerCase() === u)
       .sort((a, b) => String(b.LanCuoi).localeCompare(String(a.LanCuoi)) || (+b.CapLuc || 0) - (+a.CapLuc || 0));
