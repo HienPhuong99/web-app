@@ -80,7 +80,7 @@ export default function ThuTienMan() {
   return (
     <KhungTrang coTab={false}>
       <DauTrang tieuDe="Thu tiền" phu={hs ? `${hs.kh.TenKH} · còn nợ ${tien(Math.max(0, hs.no))}` : undefined} />
-      <ChuLoi chu={!hs ? loi || dlHs.loi : ''} />
+      <ChuLoi chu={!hs ? loi || dlHs.loi : dlHs.loi ? `Chưa lấy được số nợ mới nhất (${dlHs.loi}). Số tiền gợi ý theo lần tải trước – kiểm tra lại trước khi thu.` : ''} testID="loi-so-moi" />
       {!hs && !loi && !dlHs.loi ? <KhungCho dong={3} /> : null}
       {hs ? (
         <>

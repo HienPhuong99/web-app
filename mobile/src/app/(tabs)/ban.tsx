@@ -118,7 +118,7 @@ export default function BanMan() {
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       // Máy chủ đã ghi xong: sửa luôn số trên Tổng quan, kho, công nợ, hồ sơ khách; lần mở sau vẫn lấy số máy chủ làm chuẩn
       boNho.mot<HangKho[]>('khoMay', [], h => khoSauBan(h, lines));
-      boNho.mot<TongQuan>('tongQuanMay', [], tq => tongQuanSauBan(tq, r));
+      boNho.mot<TongQuan>('tongQuanMay', [], tq => tongQuanSauBan(tq, r, homNay()));
       boNho.mot<HoSoKhach>('chiTietKhach', [r.MaKH], hs => hoSoSauBan(hs, r, homNay()));
       boNho.moi<DsKhach>('dsKhachMay', ds => dsKhachDoiNo(ds, r.MaKH, r.TongCong - r.daThu));
       dlKho.tai(); // tồn kho mới từ máy chủ
