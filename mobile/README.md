@@ -28,7 +28,7 @@ App mặc định nối tới **link web app thật** (`extra.apiUrl` trong `app
 ### Giới hạn cần biết
 
 - **Đọc mã từ ảnh**: Android đọc được cả mã vạch và mã QR. iPhone chỉ đọc được **mã QR** trong ảnh (giới hạn của `expo-camera`). Với mã vạch IMEI trên iPhone: mở ảnh trong app Ảnh, giữ tay lên dãy số để **Sao chép** (Live Text), rồi bấm **Dán** trong app.
-- **Thông báo đẩy** cần làm một lần: trong `mobile/` chạy `npx eas-cli@latest init` (đăng nhập tài khoản Expo, chọn tạo dự án). Lệnh này ghi `extra.eas.projectId` vào `app.json`; commit thay đổi đó. Chưa có projectId thì app báo rõ khi bật thông báo.
+- **Thông báo đẩy**: app đã gắn với dự án Expo `@hienphuong/phuonghihi` (`extra.eas.projectId` trong `app.json`). Đổi sang tài khoản Expo khác thì xóa `extra.eas` và `owner` trong `app.json`, rồi trong `mobile/` chạy `npx expo login` và `npx eas-cli@latest init`.
   - iPhone: nhận thông báo được cả trong Expo Go.
   - Android: **Expo Go không nhận thông báo đẩy**, cần cài bản APK (bên dưới).
   - Máy chủ gửi bằng `UrlFetchApp`, một quyền mới của Apps Script: chủ Sheet chạy `caiDat` trong trình soạn thảo một lần và bấm **Cho phép** (xem `HUONG_DAN.md`).
