@@ -2245,8 +2245,10 @@ function dotCanThu() {
   const so = new Set(S.hopDong.map(h => h.SoHD));
   return S.hopDongLich.filter(r => so.has(r.SoHD) && ['quahan', 'sap'].includes(trangThaiDot(r))).sort((a, b) => String(a.NgayDen).localeCompare(String(b.NgayDen)));
 }
+let lichTheoHD = { ds: null, m: {} }; // gom lịch theo số hợp đồng một lần mỗi khi danh sách lịch đổi, không lọc lại cho từng dòng
 function tienDoThu(h) { // dòng nhỏ dưới giá trị hợp đồng ở danh sách: đã thu bao nhiêu đợt
-  const l = S.hopDongLich.filter(r => r.SoHD === h.SoHD);
+  if (lichTheoHD.ds !== S.hopDongLich) { const m = {}; S.hopDongLich.forEach(r => { (m[r.SoHD] || (m[r.SoHD] = [])).push(r); }); lichTheoHD = { ds: S.hopDongLich, m }; }
+  const l = lichTheoHD.m[h.SoHD] || [];
   return l.length ? `<span class="sub">Đã thu ${l.filter(r => r.SoPT).length}/${l.length} đợt</span>` : '';
 }
 
@@ -2320,7 +2322,8 @@ async function lichAct(el, a) {
     const daThu = d.lich.filter(r => r.SoPT), moi = taoLichTraGop({ tong: hdTotal().tong, traTruoc: parseMoney(g('traTruoc').value) || 0, soKy: +g('soKy').value, ngayDau: g('ngayDau').value, chuKy: +g('chuKy').value,
       ngayKy: d.Ngay || today(), daThu: sum(daThu, r => r.SoTien) });
     d.lich = daThu.concat(moi); d.lichSua = true; drawHDLich(el); setDirty(true);
-    toast(`Đã tạo ${moi.length} đợt. Kiểm tra rồi bấm Lưu.`);
+    const boTraTruoc = daThu.length && (parseMoney(g('traTruoc').value) || 0) > 0; // đã có đợt thu: phần đã thu thay cho trả trước
+    toast(`Đã tạo ${moi.length} đợt${boTraTruoc ? `, chia phần còn lại sau ${money(sum(daThu, r => r.SoTien))} ₫ đã thu (không thêm dòng Trả trước)` : ''}. Kiểm tra rồi bấm Lưu.`);
   } else if (act === 'lich-thu') {
     if (S.dirty) throw new Error('Lưu hợp đồng trước khi ghi nhận thu.');
     openThuDot(d, d.lich[i]);
