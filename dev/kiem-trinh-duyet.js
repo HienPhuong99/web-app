@@ -28,6 +28,8 @@ BUOC.push(['Báo giá vẫn lập, lưu và hỏi khi bỏ dở (hồi quy sau k
     await page.fill('tr[data-i="0"] [data-f="TenHang"]', 'iphone 16');
     await page.locator('#picker [data-i]').first().click();
     await page.locator('#topActions .btn', { hasText: 'Lưu' }).click();
+    await page.waitForFunction(() => document.querySelector('#title').textContent === 'Báo giá' && !S.dirty, null, { timeout: 8000 }); // lưu xong tự về danh sách
+    await page.locator('#view tbody tr[data-i]').first().click(); // mở lại báo giá vừa lưu
     await page.waitForFunction(() => /Báo giá \d{3}-\d{4}\/BG/.test(document.querySelector('#title').textContent), null, { timeout: 8000 });
     await page.locator('#topActions .btn', { hasText: 'Sao chép' }).click(); // bản sao chưa lưu
     await page.click('#nav a[data-go="home"]');
