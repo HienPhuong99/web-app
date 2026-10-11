@@ -293,6 +293,24 @@ BUOC.push(['Danh sách dài: vẽ dần, nút Hiện thêm, lọc lại về 300
   assert.strictEqual(await page.locator('#view tr.them').count(), 0);
   await page.evaluate(() => { S.khach = S.khach.filter(k => !/^KX/.test(k.MaKH)); S.q.khach = null; go('home'); });
 }]);
+BUOC.push(['Màn soạn chứng từ: bảng dòng hàng vừa màn 1280px; trên điện thoại các nút gom một hàng vuốt ngang', async page => {
+  const vp = page.viewportSize();
+  try {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.evaluate(() => openDoc('DH', S.donHang[0]));
+    await page.waitForSelector('table.lines tbody tr');
+    const [sw, cw] = await page.evaluate(() => { const w = document.querySelector('.lines-wrap'); return [w.scrollWidth, w.clientWidth]; });
+    assert.ok(sw <= cw + 1, `Bảng dòng hàng không phải cuộn ngang ở 1280px: ${sw} > ${cw}`);
+    await page.setViewportSize({ width: 375, height: 740 });
+    await page.waitForTimeout(200);
+    const top = await page.evaluate(() => { const a = document.querySelector('#topActions'); return [a.children.length, a.getBoundingClientRect().height, a.scrollWidth > a.clientWidth, document.documentElement.scrollWidth - document.documentElement.clientWidth]; });
+    assert.ok(top[0] >= 3 && top[1] < 60 && top[2], 'Điện thoại: nút một hàng vuốt được ' + top);
+    assert.strictEqual(top[3], 0, 'Trang không được tràn ngang');
+    await page.evaluate(() => { S.dirty = false; go('donhang'); });
+    const mot = await page.evaluate(() => document.querySelector('#topActions').scrollWidth <= document.querySelector('#topActions').clientWidth + 1);
+    assert.ok(mot, 'Màn danh sách (1 nút) vẫn như cũ');
+  } finally { await page.setViewportSize(vp); await page.evaluate(() => { S.dirty = false; go('home'); }); }
+}]);
 try { require('./kiem-trinh-duyet-hopdong')(BUOC); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
 
 (async () => {

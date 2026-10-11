@@ -75,6 +75,12 @@ svg.i { width: 18px; height: 18px; flex: none; }
 .topbar .crumb { color: var(--muted); font-size: 12.5px; font-weight: 500; }
 .topbar h1 { font-size: 21px; margin: 0; line-height: 1.3; }
 .top-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+/* Điện thoại, từ 3 nút trở lên (màn soạn chứng từ): một hàng vuốt ngang thay vì 3–4 hàng nút dính trên đầu trang */
+@media (max-width: 600px) {
+  .top-actions:has(> .btn:nth-child(3)) { flex-wrap: nowrap; overflow-x: auto; width: calc(100% + 32px); margin: 0 -16px; padding: 2px 16px 4px; scrollbar-width: none; overscroll-behavior-x: contain; scroll-snap-type: x proximity; }
+  .top-actions:has(> .btn:nth-child(3))::-webkit-scrollbar { display: none; }
+  .top-actions:has(> .btn:nth-child(3)) > .btn { flex: none; scroll-snap-align: start; }
+}
 .view { padding: 4px 28px 40px; }
 .menu-btn { display: none; }
 .scrim { display: none; }
@@ -261,6 +267,7 @@ table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; }
 .doc-head .full { grid-column: 1 / -1; }
 .lines-wrap { overflow: auto; border-top: 1px solid var(--line); }
 table.lines { width: 100%; border-collapse: collapse; min-width: 1040px; }
+table.lines.gon { min-width: 900px; } /* chứng từ: vừa màn 1280px có thanh bên, không phải cuộn ngang */
 .lines th { background: #fafbfc; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .lines td { padding: 3px 4px; border-bottom: 1px solid #f1f3f6; }
 .lines input, .lines select { width: 100%; border-color: transparent; background: transparent; padding: 7px 8px; border-radius: 8px; }
@@ -1673,8 +1680,8 @@ function vDoc(el) {
   ];
   // [tiêu đề, độ rộng px] – cột tên hàng tự giãn
   const heads = price
-    ? [['#', 40], ['Tên hàng hóa, dịch vụ'], ['Model', 110], ['ĐVT', 70], ['Xuất xứ', 110], ['SL', 70], ['Loại giá', 132], ['Đơn giá', 110], ['Thành tiền', 120]].concat(L === 'DH' && saved ? [['Đã giao', 80]] : [])
-    : [['#', 40], ['Tên hàng hóa'], ['Model', 150], ['ĐVT', 80], ['Số lượng', 100], ['IMEI / Serial', 260]].concat(L === 'NK' ? [['Giá nhập', 130]] : [], [[L === 'XK' ? 'Có thể xuất' : 'Tồn hiện tại', 120]]);
+    ? [['#', 34], ['Tên hàng hóa, dịch vụ'], ['Model', 100], ['ĐVT', 62], ['Xuất xứ', 100], ['SL', 58], ['Loại giá', 118], ['Đơn giá', 112], ['Thành tiền', 118]].concat(L === 'DH' && saved ? [['Đã giao', 72]] : [])
+    : [['#', 34], ['Tên hàng hóa'], ['Model', 120], ['ĐVT', 64], ['Số lượng', 84], ['IMEI / Serial', 240]].concat(L === 'NK' ? [['Giá nhập', 118]] : [], [[L === 'XK' ? 'Có thể xuất' : 'Tồn hiện tại', 108]]);
   const numCol = ['SL', 'Số lượng', 'Đơn giá', 'Thành tiền', 'Đã giao', 'Tồn hiện tại', 'Có thể xuất', 'Giá nhập'];
   const payCard = L === 'DH' && saved ? (() => {
     const pts = S.thuTien.filter(p => p.SoDH === d.SoDH), pks = S.phieuKho.filter(p => p.SoDH === d.SoDH);
@@ -1690,7 +1697,7 @@ function vDoc(el) {
   })() : '';
 
   el.innerHTML = `<div class="card"><div class="doc-head">${head.join('')}</div>
-    <div class="lines-wrap"><table class="lines"><thead><tr>${heads.map(([h, w]) => `<th class="${numCol.includes(h) ? 'num' : ''}"${w ? ` style="width:${w}px"` : ''}>${h}</th>`).join('')}<th style="width:44px"></th></tr></thead><tbody></tbody></table></div>
+    <div class="lines-wrap"><table class="lines gon"><thead><tr>${heads.map(([h, w]) => `<th class="${numCol.includes(h) ? 'num' : ''}"${w ? ` style="width:${w}px"` : ''}>${h}</th>`).join('')}<th style="width:44px"></th></tr></thead><tbody></tbody></table></div>
     <div class="doc-foot"><button class="btn sm" data-act="addline">${icon('plus')}Thêm dòng</button>
       <span class="hint">${price ? 'Gõ tên hoặc model để chọn hàng. Cột "Loại giá": chọn Giá sỉ / Giá lẻ để lấy giá từ bảng giá; tự sửa đơn giá thì tự chuyển sang Giá tùy chọn.' : 'Gõ tên hoặc model để chọn hàng, rồi nhập số lượng. Máy có IMEI/serial: gõ hoặc quét mã vào cột IMEI, mỗi máy một mã – số lượng tự đếm theo số mã.' + (L === 'NK' ? ' Giá nhập (giá 1 đơn vị) dùng để tính lãi và nợ nhà cung cấp.' : '')}</span>
       ${price ? `<div class="totals"><div><span>Cộng tiền hàng</span><b data-t="TienHang"></b></div><div><span>Giảm giá <small class="muted" data-t="SauGiam"></small></span><input data-h="GiamGia" class="money num giam" inputmode="numeric" value="${money(d.GiamGia)}" aria-label="Giảm giá cả đơn" placeholder="0"></div><div><span>Thuế GTGT (<span data-t="VATp"></span>%)</span><b data-t="TienVAT"></b></div>
