@@ -270,6 +270,29 @@ BUOC.push(['Giảm giá đơn hàng, kiểm kho theo IMEI, khách trả hàng (h
     assert.ok(!(await page.locator('#topActions .btn', { hasText: 'Khách trả hàng' }).count()));
   } finally { page.off('dialog', ghi); }
 }]);
+BUOC.push(['Danh sách dài: vẽ dần, nút Hiện thêm, lọc lại về 300 dòng đầu; logo cửa hàng không bị thu nhỏ', async page => {
+  // logo SVG từng ăn theo padding của .logo (khung tiêu đề thanh bên) nên chỉ còn một chấm
+  assert.ok(await page.evaluate(() => document.querySelector('#sideMark svg rect').getBoundingClientRect().width > 30), 'Logo thanh bên phải đầy khung');
+  await page.evaluate(() => { const g = S.khach.slice(); for (let i = 0; S.khach.length < 700; i++) S.khach.push(Object.assign({}, g[i % g.length], { MaKH: 'KX' + String(i).padStart(5, '0'), TenKH: 'Khách dài ' + i })); S.q.khach = null; go('khach'); }); // bỏ chữ tìm bước trước còn nhớ
+  await page.waitForFunction(() => document.querySelectorAll('#view tbody tr[data-i]').length === 300);
+  assert.match(await page.locator('#view .count').textContent(), /Hiện 300 \/ 700 dòng/);
+  await page.locator('#view tr.them button', { hasText: 'Hiện thêm 300 dòng (còn 400)' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('#view tbody tr[data-i]').length === 600);
+  await page.locator('#view tr.them button', { hasText: 'còn 100' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('#view tbody tr[data-i]').length === 700);
+  assert.strictEqual(await page.locator('#view tr.them').count(), 0);
+  assert.match(await page.locator('#view .count').textContent(), /^700 dòng/);
+  await page.locator('#view tbody tr[data-i="650"]').click(); // dòng vẽ sau vẫn mở đúng khách
+  await page.waitForSelector('#modal:not(.hidden)');
+  assert.match(await page.locator('#modal h3').textContent(), /Khách dài/);
+  await page.locator('#modal [data-close]').first().click();
+  await page.fill('#view .search input', 'Khách dài 69');
+  await page.waitForFunction(() => /^\d+ dòng/.test(document.querySelector('#view .count').textContent) && document.querySelectorAll('#view tbody tr[data-i]').length < 300);
+  const tim = await page.evaluate(() => [+document.querySelector('#view .count').textContent.match(/\d+/)[0], [...document.querySelectorAll('#view tbody tr[data-i]')].map(r => r.textContent)]);
+  assert.ok(tim[0] > 0 && tim[0] === tim[1].length && tim[1].every(t => /Khách dài \d*69/.test(t)), 'Lọc lại phải hiện đủ dòng khớp: ' + tim[0]);
+  assert.strictEqual(await page.locator('#view tr.them').count(), 0);
+  await page.evaluate(() => { S.khach = S.khach.filter(k => !/^KX/.test(k.MaKH)); S.q.khach = null; go('home'); });
+}]);
 try { require('./kiem-trinh-duyet-hopdong')(BUOC); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
 
 (async () => {

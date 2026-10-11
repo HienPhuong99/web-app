@@ -48,7 +48,7 @@ svg.i { width: 18px; height: 18px; flex: none; }
 @media (max-width: 860px) { .login { grid-template-columns: 1fr; } .login-art { display: none; } }
 .mark { width: 42px; height: 42px; border-radius: 12px; background: var(--brand); color: #fff; display: grid; place-items: center; box-shadow: 0 6px 14px rgba(var(--brand-rgb),.3); flex: none; overflow: hidden; }
 .mark svg { width: 22px; height: 22px; }
-.mark svg.logo { width: 100%; height: 100%; }
+.mark svg.logo { width: 100%; height: 100%; padding: 0; display: block; } /* padding 0: không ăn theo .logo (khung tiêu đề thanh bên) */
 .login-art .mark { background: rgba(255,255,255,.18); box-shadow: none; }
 
 /* ---- Khung: menu trái + nội dung ---- */
@@ -154,6 +154,7 @@ table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; }
 .code { font-weight: 600; color: var(--brand); white-space: nowrap; }
 .tbl .wrap { min-width: 200px; }
 .sub { display: block; color: var(--muted); font-size: 12.5px; }
+.tbl tr.them td { text-align: center; padding: 14px !important; cursor: default; background: none !important; }
 .empty { text-align: center; color: var(--muted); padding: 36px 16px !important; }
 .muted { color: var(--muted); } .red { color: #b42318; } .green { color: var(--green); } .warn { color: #b45309; }
 .foot { padding: 12px 18px; color: var(--ink2); font-size: 13px; display: flex; gap: 18px; flex-wrap: wrap; }
@@ -181,7 +182,9 @@ table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; }
 .kpi .ic { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; flex: none; }
 .kpi .ic svg { width: 22px; height: 22px; }
 .kpi .l { color: var(--muted); font-size: 13px; font-weight: 500; }
-.kpi .v { font-size: 23px; font-weight: 700; margin: 2px 0; letter-spacing: -.3px; }
+.kpi > div:last-child { min-width: 0; }
+.kpi .v { font-size: clamp(19px, 1.5vw, 23px); font-weight: 700; margin: 2px 0; letter-spacing: -.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi .v .cur { font-size: .62em; font-weight: 600; margin-left: 3px; color: var(--muted); }
 .kpi .s { font-size: 12.5px; color: var(--muted); }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-bottom: 16px; }
 .donut { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
@@ -382,7 +385,7 @@ const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], k
   thongKe: { topHang: [], theoNhom: [] }, taiKhoan: null, baoHanh: null, nhatKy: null, view: 'home', loai: '', doc: null, extra: {}, dirty: false, q: {}, onNew: null };
 const D = { thuDH: {}, thuKH: {}, muaKH: {}, noKH: {}, dhBG: {} }; // số liệu suy ra: đã thu, công nợ, báo giá đã chốt
 const LG = { si: 'Giá sỉ', le: 'Giá lẻ', tuy: 'Giá tùy chọn' };
-const LIMIT = 300;
+const LIMIT = 300, DAU = 60; // danh sách: mỗi lần hiện thêm LIMIT dòng; DAU dòng đầu vẽ ngay
 const $ = (s, r = document) => r.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const money = n => n === '' || n == null || isNaN(n) ? '' : Math.round(+n).toLocaleString('vi-VN');
@@ -773,16 +776,33 @@ function listCard(el, cfg) {
     nutChieu.innerHTML = icon(giam ? 'arrowDown' : 'arrowUp');
     nutChieu.title = t; nutChieu.setAttribute('aria-label', t);
   };
-  let rows = [];
+  let rows = [], lim = LIMIT, luot = 0;
+  // Vẽ trước DAU dòng cho màn hình hiện ngay, phần còn lại (tới lim) vẽ ở khung hình sau; lượt cũ bị bỏ nếu đã lọc lại
+  const dongHtml = (a, b) => rows.slice(a, b).map((r, i) => `<tr data-i="${a + i}">${cfg.cols.map(c => `<td class="${c.cls || ''}">${c.f ? c.f(r) : esc(r[c.k])}</td>`).join('')}</tr>`).join('');
+  const veThem = () => {
+    const n = Math.min(lim, rows.length), con = rows.length - n;
+    count.textContent = con > 0 ? `Hiện ${n} / ${rows.length} dòng` : `${rows.length} dòng`;
+    $('tr.them', body)?.remove();
+    if (con > 0) body.insertAdjacentHTML('beforeend', `<tr class="them"><td colspan="${cfg.cols.length}"><button type="button" class="btn sm">Hiện thêm ${Math.min(LIMIT, con)} dòng (còn ${con})</button></td></tr>`);
+  };
+  const veTiep = tu => {
+    const l = luot;
+    requestAnimationFrame(() => setTimeout(() => {
+      if (l !== luot) return;
+      $('tr.them', body)?.remove();
+      body.insertAdjacentHTML('beforeend', dongHtml(tu, Math.min(lim, rows.length)));
+      veThem();
+    }));
+  };
   const refresh = () => {
     const w = words(st.text), md = macDinh(), sx = tieuChi(st.f.sx);
     rows = cfg.data().filter(r => (!cfg.filter || cfg.filter(r, st.f)) && matches(w, r, cfg.text));
     if (sx) rows = sapXep(rows, sx[2], st.f.chieu);
     veChieu();
-    const shown = rows.slice(0, LIMIT);
-    body.innerHTML = shown.length ? shown.map((r, i) => `<tr data-i="${i}">${cfg.cols.map(c => `<td class="${c.cls || ''}">${c.f ? c.f(r) : esc(r[c.k])}</td>`).join('')}</tr>`).join('')
-      : `<tr><td class="empty" colspan="${cfg.cols.length}">Không có dữ liệu phù hợp</td></tr>`;
-    count.textContent = rows.length > LIMIT ? `Hiện ${LIMIT} / ${rows.length} dòng` : `${rows.length} dòng`;
+    lim = LIMIT; luot++;
+    body.innerHTML = rows.length ? dongHtml(0, Math.min(DAU, lim)) : `<tr><td class="empty" colspan="${cfg.cols.length}">Không có dữ liệu phù hợp</td></tr>`;
+    if (rows.length > DAU) veTiep(DAU);
+    else veThem();
     if (cfg.foot) $('.foot', card).innerHTML = cfg.foot(rows);
     // Đang lọc / tìm / sắp xếp khác mặc định: hiện nút Bỏ lọc, tô đậm ô lọc đang dùng
     const khac = k => k === 'chieu' ? !!sx && st.f.chieu !== sx[3] : String(st.f[k] ?? '') !== String(md[k] ?? ''); // chiều: so với mặc định của tiêu chí đang chọn
@@ -810,6 +830,7 @@ function listCard(el, cfg) {
     refresh(); q.focus();
   };
   body.onclick = e => {
+    if (e.target.closest('tr.them')) { const tu = Math.min(lim, rows.length); lim += LIMIT; luot++; veTiep(tu); return; }
     const tr = e.target.closest('tr[data-i]'); if (!tr) return;
     const a = e.target.closest('[data-act]'); // nút trong dòng (cfg.act) không mở chứng từ
     if (a && cfg.act) return cfg.act(rows[+tr.dataset.i], a.dataset.act);
@@ -838,7 +859,7 @@ const locGiaTri = (id, nhan, vals) => ({ id, t: nhan, options: [['', nhan]].conc
 // key: số liệu bấm được (data-ct) để mở bảng chi tiết
 function kpi(key, ic, bg, fg, label, value, sub) {
   return `<div class="card kpi" data-ct="${key}" role="button" tabindex="0" title="Bấm để xem chi tiết"><div class="ic" style="background:${bg};color:${fg}">${icon(ic)}</div>
-    <div><div class="l">${label}</div><div class="v">${value}</div><div class="s">${sub}</div></div></div>`;
+    <div><div class="l">${label}</div><div class="v" title="${esc(String(value).replace(/<[^>]*>/g, ''))}">${String(value).replace(/ ₫$/, '<span class="cur">₫</span>')}</div><div class="s">${sub}</div></div></div>`;
 }
 // items: [{ label, value, color, k }]; key: tiền tố data-ct, mỗi phần và mỗi dòng chú thích bấm được (key + ':' + k)
 function donut(items, center, label, fmt, key) {
