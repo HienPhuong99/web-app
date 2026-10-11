@@ -250,6 +250,21 @@ assert.deepStrictEqual(tim('chi').ds.map(k => k.TenKH), ['Chị Hoa', 'Chị Mai
 assert.strictEqual(tim('12').tong, 0); // số quá ngắn
 assert.strictEqual(tim('').tong, sheets.PS_KhachHang.rows.length - 1);
 assert.strictEqual(tim('').ds[0].muaCuoi, today);
+// Lọc, sắp xếp (app gửi o = { loc, sx })
+const khLoc = (q, o) => goi(binh, 'dsKhachMay', q, o).ds;
+const tatCa = khLoc('', {});
+assert.deepStrictEqual(khLoc('', { loc: 'no' }).map(k => k.MaKH), tatCa.filter(k => k.no > 0).map(k => k.MaKH));
+assert.ok(khLoc('', { loc: 'no' }).length > 0 && khLoc('', { loc: 'no' }).every(k => k.no > 0));
+assert.ok(khLoc('', { loc: 'chua' }).length > 0 && khLoc('', { loc: 'chua' }).every(k => !k.muaCuoi) && khLoc('', { loc: 'mua' }).every(k => !!k.muaCuoi));
+assert.strictEqual(khLoc('', { loc: 'chua' }).length + khLoc('', { loc: 'mua' }).length, tatCa.length);
+const theoTen = khLoc('', { sx: 'ten' }).map(k => k.TenKH);
+assert.deepStrictEqual(theoTen, theoTen.slice().sort((a, b) => a.localeCompare(b, 'vi')));
+const theoNo = khLoc('', { sx: 'no' }).map(k => k.no);
+assert.deepStrictEqual(theoNo, theoNo.slice().sort((a, b) => b - a));
+assert.deepStrictEqual(khLoc('chi', { sx: 'no' }).map(k => k.TenKH), ['Chị Mai', 'Chị Hoa']); // tìm + sắp xếp cùng lúc
+assert.strictEqual(khLoc('', { sx: 'moi' })[0].MaKH, tatCa.map(k => k.MaKH).sort().pop()); // khách mới thêm nhất
+assert.deepStrictEqual(khLoc('', { loc: 'la', sx: 'la' }).map(k => k.MaKH), tatCa.map(k => k.MaKH)); // giá trị lạ: như không lọc
+assert.strictEqual(goi(binh, 'dsKhachMay', 'chi', { loc: 'no' }).tong, 1); // tổng tính sau khi lọc
 
 // Hợp đồng: tìm theo số / tên / SĐT; biết hợp đồng nào đã có file để tải PDF
 const shHD = G.sheet_('HopDong');
@@ -259,6 +274,19 @@ assert.deepStrictEqual(goi(binh, 'dsHopDongMay', '').ds.map(h => [h.SoHD, h.coFi
 assert.deepStrictEqual(goi(binh, 'dsHopDongMay', 'chi mai').ds.map(h => h.SoHD), ['001-2026/HĐMB']);
 assert.deepStrictEqual(goi(binh, 'dsHopDongMay', '0977 123').ds.map(h => h.SoHD), ['001-2026/HĐMB']);
 assert.strictEqual(goi(binh, 'chiTietKhach', bn.MaKH).hopDong[0].SoHD, '001-2026/HĐMB');
+// Lọc, sắp xếp hợp đồng
+const ngayCach = n => new Date(Date.parse(today) + n * 864e5).toISOString().slice(0, 10);
+shHD.appendRow(G.toRow_(shHD, { SoHD: '003-2026/HĐMB', Ngay: ngayCach(-400), LoaiHD: 'Mua bán', TenDN: 'Công ty Hết Hạn', TrangThai: 'Đang hiệu lực', NgayHetHan: ngayCach(-3), TongCong: 50000000 }));
+shHD.appendRow(G.toRow_(shHD, { SoHD: '004-2026/HĐMB', Ngay: ngayCach(-300), LoaiHD: 'Mua bán', TenDN: 'Công ty Sắp Hết', TrangThai: 'Đang hiệu lực', NgayHetHan: ngayCach(10), TongCong: 2000000 }));
+shHD.appendRow(G.toRow_(shHD, { SoHD: '005-2026/HĐMB', Ngay: ngayCach(-5), LoaiHD: 'Mua bán', TenDN: 'Công ty Còn Dài', TrangThai: 'Đang hiệu lực', NgayHetHan: ngayCach(200), TongCong: 9000000 }));
+const hdLoc = o => goi(binh, 'dsHopDongMay', '', o).ds.map(h => h.SoHD.slice(0, 3));
+assert.deepStrictEqual(hdLoc({}), ['002', '001', '005', '004', '003']);
+assert.deepStrictEqual(hdLoc({ sx: 'cu' }), ['003', '004', '005', '001', '002']);
+assert.deepStrictEqual(hdLoc({ sx: 'giaTri' }), ['003', '001', '005', '004', '002']);
+assert.deepStrictEqual(hdLoc({ sx: 'hetHan' }), ['003', '004', '005', '002', '001']); // không có ngày hết hạn: xếp cuối
+assert.deepStrictEqual([hdLoc({ loc: 'het' }), hdLoc({ loc: 'sap' }), hdLoc({ loc: 'hieuLuc' }), hdLoc({ loc: 'coFile' })], [['003'], ['004'], ['005', '004', '003'], ['002']]);
+assert.deepStrictEqual(hdLoc({ loc: 'nhap' }), []);
+assert.strictEqual(goi(binh, 'dsHopDongMay', 'cong ty', { loc: 'het' }).tong, 1);
 assert.throws(() => goi(binh, 'taiPdfHopDong', '001-2026/HĐMB'), /chưa có file/);
 
 // Điện thoại đã đăng nhập: nhân viên thấy máy mình, quản trị thấy hết; "máy này" là máy đang gọi

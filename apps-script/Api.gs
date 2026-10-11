@@ -224,19 +224,26 @@ function noKhach_() {
   return { no: k => (mua[k] || 0) - (da[k] || 0), cuoi: k => cuoi[k] || '' };
 }
 
-/** Tìm khách theo tên (không cần dấu), số điện thoại hoặc mã. Không gõ gì: khách mua gần đây trước. Tối đa 50 khách. */
-function dsKhachMay(token, q) {
+/**
+ * Tìm khách theo tên (không cần dấu), số điện thoại hoặc mã. Tối đa 50 khách.
+ * o.loc: 'no' còn nợ, 'mua' đã mua, 'chua' chưa mua; o.sx: 'gan' mua gần đây, 'ten' tên A → Z, 'no' nợ nhiều nhất, 'moi' mới thêm.
+ * Không gửi o.sx (bản app cũ): có chữ tìm thì theo tên, không có thì mua gần đây.
+ */
+function dsKhachMay(token, q, o) {
   user_(token);
+  o = o || {};
   const raw = String(q == null ? '' : q).trim().slice(0, 60), laSo = /^[\d\s.\-+]+$/.test(raw), so = raw.replace(/\D/g, ''), chu = boDau_(raw);
   const n = noKhach_();
   let ds = readTable_('KhachHang').map(k => ({ MaKH: k.MaKH, TenKH: k.TenKH, SDT: String(k.SDT || ''), DiaChi: k.DiaChi || '', no: n.no(k.MaKH), muaCuoi: n.cuoi(k.MaKH), NgayTao: String(k.NgayTao || '') }));
-  if (raw) {
-    ds = ds.filter(k => laSo ? so.length >= 3 && k.SDT.replace(/\D/g, '').indexOf(so) >= 0
-      : boDau_(k.TenKH).indexOf(chu) >= 0 || String(k.MaKH).toLowerCase() === chu);
-    ds.sort((a, b) => String(a.TenKH).localeCompare(String(b.TenKH), 'vi'));
-  } else {
-    ds.sort((a, b) => b.muaCuoi.localeCompare(a.muaCuoi) || b.NgayTao.localeCompare(a.NgayTao));
-  }
+  if (raw) ds = ds.filter(k => laSo ? so.length >= 3 && k.SDT.replace(/\D/g, '').indexOf(so) >= 0 : boDau_(k.TenKH).indexOf(chu) >= 0 || String(k.MaKH).toLowerCase() === chu);
+  const loc = { no: k => k.no > 0, mua: k => !!k.muaCuoi, chua: k => !k.muaCuoi }[o.loc];
+  if (loc) ds = ds.filter(loc);
+  const ten = (a, b) => String(a.TenKH).localeCompare(String(b.TenKH), 'vi');
+  const SX = {
+    gan: (a, b) => b.muaCuoi.localeCompare(a.muaCuoi) || b.NgayTao.localeCompare(a.NgayTao), ten: ten,
+    no: (a, b) => b.no - a.no || ten(a, b), moi: (a, b) => b.NgayTao.localeCompare(a.NgayTao) || String(b.MaKH).localeCompare(String(a.MaKH)),
+  };
+  ds.sort(SX[o.sx] || (raw ? SX.ten : SX.gan));
   return { tong: ds.length, ds: ds.slice(0, 50) };
 }
 
@@ -338,13 +345,26 @@ function banNhanh(token, o) {
 }
 
 // ===== Hợp đồng =====
-/** Danh sách hợp đồng (mới trước), tìm theo số hợp đồng / tên bên A / số điện thoại. File PDF tải bằng taiPdfHopDong. */
-function dsHopDongMay(token, q) {
+/**
+ * Danh sách hợp đồng, tìm theo số hợp đồng / tên bên A / số điện thoại. File PDF tải bằng taiPdfHopDong.
+ * o.loc: 'hieuLuc', 'sap' sắp hết hạn, 'het' đã hết hạn, 'nhap' soạn thảo, 'coFile'; o.sx: 'moi' (mặc định), 'cu', 'giaTri' cao trước, 'hetHan' hết hạn sớm trước.
+ */
+function dsHopDongMay(token, q, o) {
   user_(token);
-  const raw = String(q == null ? '' : q).trim().slice(0, 60), chu = boDau_(raw), so = raw.replace(/\D/g, '');
+  o = o || {};
+  const raw = String(q == null ? '' : q).trim().slice(0, 60), chu = boDau_(raw), so = raw.replace(/\D/g, ''), homNay = homNay_();
   let ds = readTable_('HopDong');
   if (raw) ds = ds.filter(h => boDau_(h.SoHD + ' ' + h.TenDN).indexOf(chu) >= 0 || (so.length >= 4 && String(h.SDT || '').replace(/\D/g, '').indexOf(so) >= 0));
-  ds.sort((a, b) => String(b.Ngay + b.SoHD).localeCompare(String(a.Ngay + a.SoHD)));
+  const loc = {
+    hieuLuc: h => h.TrangThai === 'Đang hiệu lực', sap: h => !!(hanHD_(h, homNay) || {}).sap, het: h => !!(hanHD_(h, homNay) || {}).het,
+    nhap: h => h.TrangThai === 'Soạn thảo', coFile: h => !!h.FileId,
+  }[o.loc];
+  if (loc) ds = ds.filter(loc);
+  const moi = (a, b) => String(b.Ngay + b.SoHD).localeCompare(String(a.Ngay + a.SoHD));
+  ds.sort({
+    moi: moi, cu: (a, b) => moi(b, a), giaTri: (a, b) => (+b.TongCong || 0) - (+a.TongCong || 0) || moi(a, b),
+    hetHan: (a, b) => String(a.NgayHetHan || '9999').localeCompare(String(b.NgayHetHan || '9999')) || moi(a, b),
+  }[o.sx] || moi);
   return { tong: ds.length, ds: ds.slice(0, 50).map(h => ({ SoHD: h.SoHD, Ngay: h.Ngay, LoaiHD: h.LoaiHD, TenDN: h.TenDN, MaKH: h.MaKH || '', SDT: String(h.SDT || ''),
     TongCong: +h.TongCong || 0, NgayHetHan: h.NgayHetHan || '', TrangThai: h.TrangThai || '', coFile: !!h.FileId, fileCu: h.FileCu === '1' || h.FileCu === 1 })) };
 }

@@ -212,6 +212,18 @@ buoc('Khách: tìm không dấu, mở hồ sơ; thêm khách mới', async page 
   await v(page, 'ds-khach').getByText('Chị Lan').click();
   await v(page, 'the-cong-no').waitFor({ timeout: 15000 });
   await v(page, 'nut-lui').click();
+  // Lọc, sắp xếp (máy chủ làm): Chị Lan đã trả hết, Anh Minh còn nợ
+  await v(page, 'o-tim-khach').fill('');
+  await v(page, 'loc-khach-no').click();
+  await v(page, 'ds-khach').getByText('Anh Minh').waitFor({ timeout: 15000 });
+  await page.waitForFunction(() => !/Chị Lan/.test([...document.querySelectorAll('[data-testid="ds-khach"]')].map(e => e.innerText).join()), null, { timeout: 15000 });
+  await v(page, 'loc-khach-chua').click();
+  await page.getByText('Không có khách nào chưa mua.').filter({ visible: true }).waitFor({ timeout: 15000 });
+  await v(page, 'loc-khach-tat').click();
+  await v(page, 'sx-khach-ten').click();
+  await page.waitForFunction(() => { const t = [...document.querySelectorAll('[data-testid^="khach-KH"]')].filter(e => e.offsetParent).map(e => e.innerText.split('\n')[0]); return t.length >= 2 && t.every((x, i) => !i || t[i - 1].localeCompare(x, 'vi') <= 0); }, null, { timeout: 15000 });
+  await chup(page, '9a-khach-loc');
+  await v(page, 'sx-khach-gan').click();
   await v(page, 'nut-them-khach').click();
   await v(page, 'o-ten-khach').fill('Anh Phát');
   await v(page, 'o-sdt-khach').fill('0909 222 333');
@@ -233,14 +245,35 @@ buoc('Kho: tồn kho, kiểm tra IMEI, thẻ kho; Hợp đồng; Thêm: Face ID 
   await v(page, 'nut-kiem-imei').click();
   await v(page, 'tt-imei').getByText('Đã bán').waitFor({ timeout: 15000 });
   await khongTranNgang(page);
+  // Sắp theo tồn: iPhone 16 Pro Max (HH0001) nhiều máy hơn iPhone 15 (HH0002)
+  const dauKho = () => page.evaluate(() => [...document.querySelectorAll('[data-testid^="kho-HH"]')].filter(e => e.offsetParent).map(e => e.dataset.testid)[0]);
+  await v(page, 'sx-kho-tonNhieu').click();
+  assert.strictEqual(await dauKho(), 'kho-HH0001');
+  await v(page, 'sx-kho-tonIt').click();
+  assert.strictEqual(await dauKho(), 'kho-HH0002');
+  await v(page, 'loc-kho-con').getByText(/Còn hàng \(\d+\)/).waitFor();
   await chup(page, '10-kho');
+  await v(page, 'sx-kho-ten').click();
   await v(page, 'kho-HH0001').click();
   await v(page, 'the-kho').getByText('Chị Lan').waitFor({ timeout: 15000 });
   await v(page, 'the-kho').getByText('356789012345680', { exact: true }).waitFor(); // dòng xuất bán; dòng nhập có 2 IMEI
+  // Thẻ kho: chỉ nhập / chỉ xuất, sắp theo số lượng
+  await v(page, 'loc-phieu-nhap').click();
+  await v(page, 'the-kho').getByText('Tồn đầu kỳ').waitFor();
+  assert.strictEqual(await v(page, 'the-kho').getByText('Chị Lan').count(), 0);
+  await v(page, 'loc-phieu-xuat').click();
+  await v(page, 'the-kho').getByText('Chị Lan').waitFor();
+  assert.strictEqual(await v(page, 'the-kho').getByText('Tồn đầu kỳ').count(), 0);
+  await v(page, 'loc-phieu-tat').click();
+  await v(page, 'sx-phieu-slNhieu').click();
+  assert.match(await v(page, 'the-kho').innerText(), /^Tồn đầu kỳ/); // phiếu nhập 5 máy lên đầu
+  await chup(page, '10a-the-kho-loc');
   await v(page, 'nut-lui').click();
   await v(page, 'nut-lui').click();
   await v(page, 'mo-hop-dong').click();
   await page.getByText('Chưa có hợp đồng.').filter({ visible: true }).waitFor({ timeout: 15000 });
+  await v(page, 'loc-hd-het').click();
+  await page.getByText('Không có hợp đồng nào ở mục "Đã hết hạn".').filter({ visible: true }).waitFor({ timeout: 15000 });
   await v(page, 'nut-lui').click();
   await page.getByText('Chỉ có trên app điện thoại.').filter({ visible: true }).waitFor();
   assert.ok(await v(page, 'cong-tac-khoa').locator('input').isDisabled()); // bản web không có Face ID
@@ -254,6 +287,12 @@ buoc('Điện thoại đăng nhập: thấy "Máy này", đăng xuất từ xa m
   await v(page, 'ds-thiet-bi').getByText('iPad quầy').waitFor();
   await khongTranNgang(page);
   await chup(page, '11-thiet-bi');
+  await v(page, 'loc-may-tb').click(); // chưa máy nào bật thông báo
+  await page.getByText('Không có điện thoại nào phù hợp.').filter({ visible: true }).waitFor();
+  await v(page, 'loc-may-tat').click();
+  await v(page, 'sx-may-lau').click(); // thứ tự đã kiểm ở test/loc.test.ts; ở đây hai máy cùng phút nên chỉ xem còn đủ
+  assert.strictEqual(await v(page, 'ds-thiet-bi').getByTestId('thiet-bi').count(), 2);
+  await v(page, 'sx-may-gan').click();
   page.once('dialog', d => d.accept());
   await v(page, 'nut-xoa-thiet-bi').first().click();
   await page.waitForFunction(() => !document.body.innerText.includes('iPad quầy'), null, { timeout: 15000 });

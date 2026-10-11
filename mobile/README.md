@@ -6,11 +6,11 @@ App Expo (React Native) cho nhân viên đứng quầy. Dữ liệu lấy từ w
 |---|---|
 | Đăng nhập | Tài khoản của web app. Mã đăng nhập máy lưu trong Keychain / Keystore, mở lại app không phải nhập lại |
 | Tổng quan | Phím tắt (Bán nhanh, Khách, Kho, Hợp đồng), doanh số hôm nay, đơn / đã thu / khách còn nợ, 7 ngày, việc cần làm; bấm khách còn nợ mở hồ sơ |
-| Khách | Tìm khách (không cần dấu, theo SĐT, theo mã), công nợ; thêm khách mới. Hồ sơ khách: gọi / Zalo / nhắn tin, công nợ, **Thu tiền**, **Bán tiếp**, máy đã mua kèm bảo hành, đơn hàng, phiếu thu, hợp đồng (chia sẻ PDF) |
+| Khách | Tìm khách (không cần dấu, theo SĐT, theo mã), lọc còn nợ / đã mua / chưa mua, sắp xếp (mua gần đây, tên, nợ nhiều nhất, mới thêm), công nợ; thêm khách mới. Hồ sơ khách: gọi / Zalo / nhắn tin, công nợ, **Thu tiền**, **Bán tiếp**, máy đã mua kèm bảo hành, đơn hàng (lọc còn nợ / chưa giao xong), phiếu thu, hợp đồng (chia sẻ PDF) |
 | Bán | **Bán nhanh**: quét / chọn ảnh / dán / gõ IMEI → app tự biết máy nào, giá lẻ, còn trong kho hay đã bán; thêm phụ kiện, dịch vụ; chọn khách, khách mới hoặc khách lẻ; khách trả bao nhiêu, hình thức nào (mã VietQR khi chuyển khoản). Một nút: máy chủ lập đơn hàng + phiếu xuất kho + phiếu thu |
 | Thu tiền | Chọn đơn còn nợ (hoặc thu chung), số tiền, hình thức; chuyển khoản thì hiện mã VietQR cho khách quét |
 | Quét | Tra bảo hành: quét mã vạch bằng camera, **chọn ảnh có mã**, **dán IMEI đã sao chép**, hoặc gõ IMEI / SĐT / tên khách |
-| Thêm | Kho hàng (tồn kho, lọc sắp hết, kiểm tra một IMEI, thẻ kho), Hợp đồng (tìm, chia sẻ PDF), Điện thoại đăng nhập (đăng xuất máy khác từ xa), **khóa app bằng Face ID / vân tay**, **thông báo việc cần làm mỗi sáng**, đăng xuất |
+| Thêm | Kho hàng (tồn kho, lọc còn / sắp hết / hết, sắp theo tồn, bán chạy, giá; kiểm tra một IMEI; thẻ kho lọc chỉ nhập / chỉ xuất, sắp theo ngày hoặc số lượng), Hợp đồng (tìm, lọc theo trạng thái / hạn, sắp xếp, chia sẻ PDF), Điện thoại đăng nhập (lọc, sắp xếp, đăng xuất máy khác từ xa), **khóa app bằng Face ID / vân tay**, **thông báo việc cần làm mỗi sáng**, đăng xuất |
 
 Giao diện: nền màu đào, thẻ kính mờ, thanh tab nổi 5 nút (nút Bán ở giữa). Trên iPhone iOS 26 thanh tab dùng Liquid Glass thật (`expo-glass-effect`); máy khác dùng làm mờ hoặc nền trắng mờ.
 
