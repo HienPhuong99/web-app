@@ -5,7 +5,7 @@ App Expo (React Native) cho nhân viên đứng quầy. Dữ liệu lấy từ w
 | Màn hình | Làm gì |
 |---|---|
 | Đăng nhập | Tài khoản của web app. Mã đăng nhập máy lưu trong Keychain / Keystore, mở lại app không phải nhập lại |
-| Tổng quan | Phím tắt (Bán nhanh, Khách, Kho, Hợp đồng), doanh số hôm nay, đơn / đã thu / khách còn nợ, 7 ngày, việc cần làm; bấm khách còn nợ mở hồ sơ |
+| Tổng quan | Phím tắt (Bán nhanh, Khách, Kho, Hợp đồng), doanh số hôm nay, đơn / đã thu / khách còn nợ, 7 ngày, việc cần làm. **Bấm số liệu để xem chi tiết**: doanh số, đơn, đã thu, cột 7 ngày → đơn và phiếu thu của ngày đó (lật ngày trước / sau); khách còn nợ → đủ danh sách; mỗi việc cần làm → hồ sơ khách / thẻ kho |
 | Khách | Tìm khách (không cần dấu, theo SĐT, theo mã), lọc còn nợ / đã mua / chưa mua, sắp xếp (mua gần đây, tên, nợ nhiều nhất, mới thêm), công nợ; thêm khách mới. Hồ sơ khách: gọi / Zalo / nhắn tin, công nợ, **Thu tiền**, **Bán tiếp**, máy đã mua kèm bảo hành, đơn hàng (lọc còn nợ / chưa giao xong), phiếu thu, hợp đồng (chia sẻ PDF) |
 | Bán | **Bán nhanh**: quét / chọn ảnh / dán / gõ IMEI → app tự biết máy nào, giá lẻ, còn trong kho hay đã bán; thêm phụ kiện, dịch vụ; chọn khách, khách mới hoặc khách lẻ; khách trả bao nhiêu, hình thức nào (mã VietQR khi chuyển khoản). Một nút: máy chủ lập đơn hàng + phiếu xuất kho + phiếu thu |
 | Thu tiền | Chọn đơn còn nợ (hoặc thu chung), số tiền, hình thức; chuyển khoản thì hiện mã VietQR cho khách quét |

@@ -14,7 +14,7 @@ function apiHam_() {
     layChungTu: layChungTu, theKho: theKho, baoCaoHang: baoCaoHang, layHopDong: layHopDong,
     luuKhach: luuKhach, luuChungTu: luuChungTu, luuThuTien: luuThuTien, doiMatKhau: doiMatKhau,
     cauHinhMay: cauHinhMay, khoMay: khoMay, traMaKho: traMaKho, dsKhachMay: dsKhachMay, chiTietKhach: chiTietKhach, banNhanh: banNhanh,
-    dsHopDongMay: dsHopDongMay, taiPdfHopDong: taiPdfHopDong, dsThietBi: dsThietBi, xoaThietBi: xoaThietBi, thuThongBao: thuThongBao,
+    dsHopDongMay: dsHopDongMay, taiPdfHopDong: taiPdfHopDong, dsThietBi: dsThietBi, xoaThietBi: xoaThietBi, thuThongBao: thuThongBao, chiTietTongQuan: chiTietTongQuan,
   };
 }
 
@@ -134,8 +134,33 @@ function tongQuanMay(token) {
     user: { u: user.u, ten: user.ten, vaiTro: user.vaiTro }, cuaHang: { ten: ch.ten, moTa: ch.moTa },
     homNay: du.homNay, ban: du.homNayBan, thu: du.homNayThu, homQua: du.homQuaBan, ban7: du.ban7,
     hopDong: du.hopDong.slice(0, 20), dot: du.dot.slice(0, 20), donTre: du.donTre.slice(0, 20), hang: du.hang.slice(0, 20),
-    soMuc: du.soMuc, no: du.no,
+    soMuc: du.soMuc, no: { soKhach: du.no.soKhach, tong: du.no.tong, top: du.no.top },
   };
+}
+
+/**
+ * Chi tiết một số liệu trên Tổng quan của app.
+ * loai 'ngay': đơn hàng và phiếu thu của một ngày (ngay = yyyy-MM-dd, mặc định hôm nay), kèm tổng; ngày trước / sau để lật.
+ * loai 'no': mọi khách còn nợ, nhiều nhất trước.
+ */
+function chiTietTongQuan(token, loai, ngay) {
+  user_(token);
+  if (loai === 'no') {
+    const no = tongHopSang_(homNay_()).no;
+    return { tong: no.tong, ds: no.ds };
+  }
+  if (loai !== 'ngay') throw new Error('Không có số liệu này.');
+  const n = ngay == null || ngay === '' ? homNay_() : ngayHopLe_(ngay);
+  if (!n) throw new Error('Ngày không hợp lệ.');
+  const thuDon = {};
+  const thu = readTable_('ThuTien').filter(p => String(p.Ngay).slice(0, 10) === n).map(p => ({ SoPT: p.SoPT, MaKH: p.MaKH, TenKH: p.TenKH, SoDH: p.SoDH || '', SoTien: +p.SoTien || 0, HinhThuc: p.HinhThuc || '', GhiChu: p.GhiChu || '' }));
+  readTable_('ThuTien').forEach(p => { if (p.SoDH) thuDon[p.SoDH] = (thuDon[p.SoDH] || 0) + (+p.SoTien || 0); });
+  const don = readTable_('DonHang').filter(d => String(d.Ngay).slice(0, 10) === n)
+    .map(d => ({ SoDH: d.SoDH, MaKH: d.MaKH, TenKH: d.TenKH, TongCong: +d.TongCong || 0, daThu: thuDon[d.SoDH] || 0, TrangThai: d.TrangThai || 'Chờ giao', gio: String(d.NgayTao || '').slice(11, 16) }))
+    .sort((a, b) => String(b.gio + b.SoDH).localeCompare(String(a.gio + a.SoDH)));
+  const song = don.filter(d => d.TrangThai !== 'Hủy'), lech = k => Utilities.formatDate(new Date(Date.parse(n + 'T12:00:00Z') + k * 864e5), 'UTC', 'yyyy-MM-dd');
+  return { ngay: n, homNay: homNay_(), truoc: lech(-1), sau: n < homNay_() ? lech(1) : '', don: don, thu: thu,
+    tong: { don: song.length, tien: song.reduce((s, d) => s + d.TongCong, 0), thu: thu.reduce((s, p) => s + p.SoTien, 0), huy: don.length - song.length } };
 }
 
 const boDau_ = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();

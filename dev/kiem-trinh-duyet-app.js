@@ -309,6 +309,39 @@ buoc('Tổng quan: phím tắt Bán nhanh, bấm khách còn nợ mở hồ sơ'
   await v(page, 'o-imei-ban').waitFor();
 });
 
+buoc('Tổng quan động: bấm số đơn → đơn và phiếu thu hôm nay, lật ngày; bấm cột 7 ngày; khách còn nợ → hồ sơ', async page => {
+  const homNay = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  const dmy = n => n.split('-').reverse().join('/');
+  await page.getByTestId('tab-index').click();
+  await v(page, 'so-don').click({ timeout: 15000 });
+  await v(page, 'ds-don-ngay').getByText('Anh Minh').waitFor({ timeout: 15000 }); // đơn hôm nay của chay-thu --mau-app
+  await v(page, 'ds-thu-ngay').getByText('Tiền mặt', { exact: false }).first().waitFor();
+  await v(page, 'tong-ngay').getByText('Doanh số').waitFor();
+  assert.ok(await v(page, 'ngay-sau').isDisabled(), 'Hôm nay: không lật sang ngày sau');
+  await khongTranNgang(page);
+  await chup(page, '12a-so-lieu-ngay');
+  await v(page, 'ngay-truoc').click();
+  await page.waitForFunction(d => [...document.querySelectorAll('[data-testid="ngay-dang-xem"]')].some(e => e.offsetParent && e.innerText.includes(d)), dmy(new Date(Date.parse(homNay) - 864e5).toISOString().slice(0, 10)), { timeout: 15000 });
+  await page.getByText('Không có đơn hàng nào trong ngày.').filter({ visible: true }).waitFor({ timeout: 15000 });
+  await v(page, 'ngay-sau').click();
+  await v(page, 'ds-don-ngay').getByText('Anh Minh').waitFor({ timeout: 15000 });
+  await v(page, 'nut-lui').click();
+  // Cột 7 ngày: hôm qua
+  const homQua = new Date(Date.parse(homNay) - 864e5).toISOString().slice(0, 10);
+  await v(page, 'cot-' + homQua).click();
+  await page.waitForFunction(d => [...document.querySelectorAll('[data-testid="ngay-dang-xem"]')].some(e => e.offsetParent && e.innerText.includes(d)), dmy(homQua), { timeout: 15000 });
+  await v(page, 'nut-lui').click();
+  // Khách còn nợ: đủ danh sách, bấm mở hồ sơ
+  await v(page, 'so-no').click();
+  await v(page, 'ds-khach-no').getByText('Anh Minh').waitFor({ timeout: 15000 });
+  await chup(page, '12b-khach-no');
+  await v(page, 'ds-khach-no').getByTestId('no-KH00001').click();
+  await v(page, 'the-cong-no').waitFor({ timeout: 15000 });
+  await v(page, 'nut-lui').click();
+  await v(page, 'nut-lui').click();
+  await v(page, 'the-doanh-so').waitFor();
+});
+
 buoc('Tài khoản → Đăng xuất: hỏi lại, về màn hình đăng nhập, mở lại vẫn phải đăng nhập', async (page, c) => {
   await page.getByTestId('tab-tai-khoan').click();
   await page.getByTestId('tk-ten').getByText('Quản trị').waitFor();

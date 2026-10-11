@@ -98,7 +98,7 @@ module.exports = BUOC => {
     await page.evaluate(() => go('home'));
     await shot(page, 'hd-10-tong-quan');
     assert.strictEqual((await page.locator('#nav a[data-go="hdhan"] .cnt').textContent()).trim(), '2'); // 1 sắp hết hạn + 1 đã hết hạn
-    const kpi = await page.locator('.kpi[data-go="hdhan"]').textContent();
+    const kpi = await page.locator('.kpi[data-ct="hd"]').textContent();
     assert.ok(/Hợp đồng sắp hết hạn/.test(kpi) && /1 hợp đồng đã hết hạn/.test(kpi), kpi);
     const chuY = await page.locator('.card:has-text("Hợp đồng cần chú ý") tr').allTextContents();
     assert.strictEqual(chuY.length, 2);

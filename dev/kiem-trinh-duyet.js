@@ -101,6 +101,33 @@ BUOC.push(['Danh sách: sắp xếp, lọc mới, Bỏ lọc, nhớ lựa chọn
   await page.waitForFunction(() => document.querySelector('#view .count').textContent === '1 dòng');
   await page.locator('#view .bo-loc').click();
 }]);
+BUOC.push(['Tổng quan động: chọn kỳ, bấm số liệu xem chi tiết, mở chứng từ, mở danh sách có bộ lọc', async page => {
+  await page.click('#nav a[data-go="home"]');
+  await page.click('#view [data-ky="nam"]');
+  assert.match(await page.locator('#view .kpi[data-ct="ds"] .l').innerText(), /Doanh số năm nay/);
+  const soDon = +(await page.locator('#view .kpi[data-ct="ds"] .s').innerText()).match(/(\d+) đơn/)[1];
+  await page.click('#view .kpi[data-ct="ds"]');
+  await page.waitForSelector('#modal [data-chitiet] table, #modal [data-chitiet] p');
+  assert.strictEqual(await page.locator('#modal [data-chitiet] tbody tr').count(), soDon);
+  assert.match(await page.locator('#modal h3').innerText(), /Doanh số năm nay/);
+  await page.locator('#modal .btn', { hasText: 'Mở trong danh sách' }).click();
+  await page.waitForSelector('#view .toolbar [data-f="tt"]');
+  assert.deepStrictEqual([await page.inputValue('#view [data-f="tt"]'), await page.inputValue('#view [data-f="ngayFrom"]'), (await page.locator('#view .count').innerText())], ['khongHuy', new Date().getFullYear() + '-01-01', soDon + ' dòng']);
+  // Cột tháng này trên biểu đồ 12 tháng, rồi bấm một đơn để mở
+  await page.click('#nav a[data-go="home"]');
+  assert.strictEqual(await page.locator('#view [data-ky].on').getAttribute('data-ky'), 'nam'); // nhớ kỳ đã chọn
+  await page.click('#view .bars .col.now');
+  await page.waitForSelector('#modal h3:has-text("Doanh số tháng")');
+  if (await page.locator('#modal [data-chitiet] tbody tr').count()) {
+    await page.locator('#modal [data-chitiet] tbody tr').first().click();
+    await page.waitForFunction(() => /Đơn hàng \d{3}-\d{4}\/DH/.test(document.querySelector('#title').textContent), null, { timeout: 8000 });
+  } else await page.locator('#modal [data-close]').first().click();
+  await page.click('#nav a[data-go="home"]');
+  await page.click('#view [data-ky="thang"]');
+  await page.click('#view .kpi[data-ct="no"]');
+  await page.waitForSelector('#modal h3:has-text("Công nợ phải thu")');
+  await page.locator('#modal [data-close]').first().click();
+}]);
 try { require('./kiem-trinh-duyet-hopdong')(BUOC); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
 
 (async () => {

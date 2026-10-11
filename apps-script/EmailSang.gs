@@ -107,17 +107,17 @@ function tongHopSang_(homNay) {
   // Hợp đồng sắp / quá hạn, gần hạn nhất trước
   const hopDong = readTable_('HopDong').map(h => ({ h: h, x: hanHD_(h, homNay) })).filter(o => o.x)
     .sort((a, b) => String(a.h.NgayHetHan).localeCompare(String(b.h.NgayHetHan)))
-    .map(o => ({ SoHD: o.h.SoHD, TenDN: o.h.TenDN, NgayHetHan: ngay(o.h.NgayHetHan), het: !!o.x.het, n: o.x.n, bao: o.x.bao, quyetDinh: o.x.quyetDinh, tuGiaHan: o.h.TuGiaHan === '1' || o.h.TuGiaHan === 1 }));
+    .map(o => ({ SoHD: o.h.SoHD, MaKH: o.h.MaKH || '', TenDN: o.h.TenDN, NgayHetHan: ngay(o.h.NgayHetHan), het: !!o.x.het, n: o.x.n, bao: o.x.bao, quyetDinh: o.x.quyetDinh, tuGiaHan: o.h.TuGiaHan === '1' || o.h.TuGiaHan === 1 }));
   // Đợt thanh toán quá hạn hoặc đến hạn trong 7 ngày
   const hd = {};
   readTable_('HopDong').forEach(h => { hd[h.SoHD] = h; });
   const dot = readTable_('HopDongLich').filter(r => hd[r.SoHD] && ['quahan', 'sap'].includes(trangThaiDot_(r, homNay)))
     .sort((a, b) => String(a.NgayDen).localeCompare(String(b.NgayDen)))
-    .map(r => ({ SoHD: r.SoHD, TenDN: hd[r.SoHD].TenDN, Nhan: r.Nhan, NgayDen: ngay(r.NgayDen), SoTien: +r.SoTien || 0, quaHan: trangThaiDot_(r, homNay) === 'quahan', n: Math.round((Date.parse(ngay(r.NgayDen)) - Date.parse(homNay)) / 864e5) }));
+    .map(r => ({ SoHD: r.SoHD, MaKH: hd[r.SoHD].MaKH || '', TenDN: hd[r.SoHD].TenDN, Nhan: r.Nhan, NgayDen: ngay(r.NgayDen), SoTien: +r.SoTien || 0, quaHan: trangThaiDot_(r, homNay) === 'quahan', n: Math.round((Date.parse(ngay(r.NgayDen)) - Date.parse(homNay)) / 864e5) }));
   // Đơn chờ giao đã quá ngày hẹn giao
   const donTre = song.filter(d => (d.TrangThai === 'Chờ giao' || d.TrangThai === 'Giao một phần') && d.NgayGiao && ngay(d.NgayGiao) < homNay)
     .sort((a, b) => String(a.NgayGiao).localeCompare(String(b.NgayGiao)))
-    .map(d => ({ SoDH: d.SoDH, TenKH: d.TenKH, NgayGiao: ngay(d.NgayGiao), TongCong: +d.TongCong || 0 }));
+    .map(d => ({ SoDH: d.SoDH, MaKH: d.MaKH || '', TenKH: d.TenKH, NgayGiao: ngay(d.NgayGiao), TongCong: +d.TongCong || 0 }));
   // Hàng sắp hết: tồn <= mức tối thiểu (hàng có nhập xuất), hoặc có đặt mức tối thiểu mà chưa có phiếu kho nào
   const ton = tonKho_();
   const hang = readTable_('HangHoa').filter(h => ton[h.MaHH] ? ton[h.MaHH].nhap - ton[h.MaHH].xuat <= (+h.TonToiThieu || 0) : h.TonToiThieu !== '' && +h.TonToiThieu > 0)
@@ -137,7 +137,7 @@ function tongHopSang_(homNay) {
     homNayBan: ban(homNay), homNayThu: daThu(homNay), // màn hình Tổng quan của app điện thoại (Api.gs)
     ban7: [6, 5, 4, 3, 2, 1, 0].map(i => { const n = new Date(Date.parse(homNay) - i * 864e5).toISOString().slice(0, 10); return { ngay: n, tien: ban(n).tien }; }),
     hopDong: hopDong, dot: dot, donTre: donTre, hang: hang,
-    no: { soKhach: noDs.length, tong: noDs.reduce((s, x) => s + x.tien, 0), top: noDs.slice(0, 5) },
+    no: { soKhach: noDs.length, tong: noDs.reduce((s, x) => s + x.tien, 0), top: noDs.slice(0, 5), ds: noDs },
   };
   du.soMuc = hopDong.length + dot.length + donTre.length + hang.length;
   du.coViec = du.soMuc > 0; // khách còn nợ chỉ là thông tin kèm theo, không đủ để gửi thư mỗi sáng

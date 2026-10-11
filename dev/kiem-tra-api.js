@@ -89,6 +89,18 @@ assert.deepStrictEqual([tq.homNay, tq.ban.don, tq.ban.tien, tq.thu, tq.user.ten,
 assert.deepStrictEqual([tq.ban7.length, tq.ban7[6].ngay, tq.ban7[6].tien, tq.ban7[0].ngay < today], [7, today, 56500000, true]);
 assert.deepStrictEqual([tq.no.soKhach, tq.no.tong], [1, 26500000]);
 assert.ok(!('MatKhau' in tq.user) && !('shops' in tq.user));
+assert.ok(!('ds' in tq.no)); // danh sách nợ đầy đủ chỉ gửi khi bấm xem (chiTietTongQuan)
+// Bấm số liệu trên Tổng quan: đơn và phiếu thu của một ngày, lật ngày trước / sau; mọi khách còn nợ
+const ct = goi(lan, 'chiTietTongQuan', 'ngay');
+assert.deepStrictEqual([ct.ngay, ct.tong.don, ct.tong.tien, ct.tong.thu, ct.sau, ct.don.length, ct.thu.length], [today, tq.ban.don, tq.ban.tien, tq.thu, '', 1, 1]);
+assert.deepStrictEqual([ct.don[0].daThu, typeof ct.don[0].MaKH, ct.truoc < today], [30000000, 'string', true]);
+const ctTruoc = goi(lan, 'chiTietTongQuan', 'ngay', ct.truoc);
+assert.deepStrictEqual([ctTruoc.ngay, ctTruoc.sau, ctTruoc.tong.tien], [ct.truoc, today, tq.ban7[5].tien]);
+assert.deepStrictEqual(goi(lan, 'chiTietTongQuan', 'ngay', '2024-03-10').tong, { don: 0, tien: 0, thu: 0, huy: 0 });
+assert.throws(() => goi(lan, 'chiTietTongQuan', 'ngay', '2024-02-30'), /Ngày không hợp lệ/);
+assert.throws(() => goi(lan, 'chiTietTongQuan', 'la'), /Không có số liệu/);
+const ctNo = goi(lan, 'chiTietTongQuan', 'no');
+assert.deepStrictEqual([ctNo.tong, ctNo.ds.length, ctNo.ds[0].tien, ctNo.ds[0].MaKH], [tq.no.tong, tq.no.soKhach, tq.no.top[0].tien, tq.no.top[0].MaKH]);
 
 // Bộ nhớ đệm mất (sau 6 giờ không dùng): mã máy vẫn dùng được, dựng lại phiên từ Sheet và ghi lần dùng cuối
 thietBi().forEach(row => { row[5] = '2000-01-01 00:00'; });

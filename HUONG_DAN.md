@@ -37,6 +37,17 @@ Vào **Khách hàng** (hoặc **Hàng hóa**, chỉ quản trị) → **Nhập t
 
 Web hiện xem trước, bấm **Nhập** để ghi xuống Sheet. Mã (`KH00001`, `HH0001`…) tự sinh. Dòng thiếu tên, trùng số điện thoại (khách) hoặc trùng tên + model (hàng), hoặc giá không phải số sẽ được bỏ qua và báo số dòng trong file. Tối đa 2000 dòng mỗi lần. Số điện thoại trong Excel nên để định dạng văn bản, kẻo mất số 0 đầu. Chưa hỗ trợ đọc trực tiếp file .xlsx: hãy dán hoặc lưu CSV.
 
+## Tổng quan động: bấm vào số liệu để xem chi tiết
+
+**Web → Tổng quan**: chọn kỳ (*Tháng này, Tháng trước, Quý này, Năm nay, 30 ngày qua*); doanh số, đã thu, báo giá, biểu đồ trạng thái đơn và nhóm hàng, bảng bán chạy tính theo kỳ đó và so với kỳ trước cùng số ngày. **Bấm vào bất kỳ số liệu nào** để mở bảng các chứng từ tạo nên con số (có tổng cộng ở cuối):
+- 8 ô số liệu (doanh số, đã thu, công nợ, đơn chờ giao, báo giá, hàng sắp hết, hợp đồng sắp hết hạn, đợt thanh toán cần thu);
+- từng cột tháng của biểu đồ 12 tháng; từng phần (hoặc dòng chú thích) của hai biểu đồ tròn;
+- các liên kết *Xem …* ở góc mỗi thẻ, và dòng "n đơn chờ giao · n khách còn nợ" ở lời chào.
+
+Trong bảng chi tiết: bấm một dòng để mở chứng từ / khách / thẻ kho; **Mở trong danh sách** chuyển sang danh sách đầy đủ với bộ lọc đặt sẵn (ví dụ đơn hàng năm nay, trừ đơn hủy) để lọc, sắp xếp tiếp.
+
+**App → Tổng quan**: bấm doanh số, số đơn, đã thu hoặc một cột của biểu đồ 7 ngày để xem đơn hàng và phiếu thu của ngày đó (nút ‹ › lật sang ngày trước / sau); bấm *Khách còn nợ* để xem đủ danh sách nợ (gọi điện, mở hồ sơ thu tiền). Mỗi việc cần làm bấm được (mở hồ sơ khách hoặc thẻ kho); nhóm việc dài thì bấm *… và N mục khác* để xem hết.
+
 ## Tìm, lọc, sắp xếp danh sách
 
 Mọi danh sách trên web (báo giá, đơn hàng, công nợ, phiếu thu, bảo hành, hợp đồng, sắp hết hạn, lịch thanh toán, hàng hóa, tồn kho, nhập – xuất kho, khách hàng, nhật ký, tài khoản, điện thoại đăng nhập) có ô tìm kiếm, các ô lọc và ô **sắp xếp** (biểu tượng ⇅). Ô đang lọc khác mặc định được tô màu; bấm **Bỏ lọc** để về như cũ. Lựa chọn được nhớ khi chuyển sang màn hình khác rồi quay lại.
