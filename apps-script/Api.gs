@@ -191,12 +191,12 @@ const boDau_ = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]
  */
 function traBaoHanh(token, q) {
   const raw = String(q == null ? '' : q).trim().slice(0, 60);
-  const ma = raw.toUpperCase().replace(/[\s.\-]/g, '');
+  const ma = gonMa_(raw);
   if (ma.length < 3) throw new Error('Nhập ít nhất 3 ký tự: IMEI/serial, số điện thoại hoặc tên khách.');
   const ds = dsBaoHanh(token), homNay = homNay_();
   // Mã vạch serial trên hộp máy Apple thường có chữ S ở đầu
   const maThu = /^S[A-Z0-9]{10,12}$/.test(ma) ? [ma, ma.slice(1)] : [ma];
-  const laSo = /^[\d\s.\-+]+$/.test(raw), so = raw.replace(/\D/g, ''), chu = boDau_(raw);
+  const laSo = /^[\d\s.\-+]+$/.test(raw), so = sdtVN_(raw), chu = boDau_(raw);
   const kq = [];
   ds.forEach(x => {
     const imei = imeiList_(x.IMEI), khop = imei.find(i => maThu.some(m => gonMa_(i).indexOf(m) >= 0));
@@ -236,7 +236,7 @@ function khoMay(token) {
  */
 function traMaKho(token, q) {
   user_(token);
-  const ma = String(q == null ? '' : q).toUpperCase().replace(/[\s.\-]/g, '').slice(0, 40);
+  const ma = gonMa_(q).slice(0, 40);
   if (ma.length < 4) throw new Error('Nhập IMEI/serial (ít nhất 4 ký tự).');
   const maThu = /^S[A-Z0-9]{10,12}$/.test(ma) ? [ma, ma.slice(1)] : [ma]; // mã vạch serial Apple có chữ S đầu
   const pk = {}, hang = {};
@@ -294,7 +294,7 @@ function sapXep_(ds, bang, sx, chieu, phu) {
 function dsKhachMay(token, q, o) {
   user_(token);
   o = o || {};
-  const raw = String(q == null ? '' : q).trim().slice(0, 60), laSo = /^[\d\s.\-+]+$/.test(raw), so = raw.replace(/\D/g, ''), chu = boDau_(raw);
+  const raw = String(q == null ? '' : q).trim().slice(0, 60), laSo = /^[\d\s.\-+]+$/.test(raw), so = sdtVN_(raw), chu = boDau_(raw);
   const n = noKhach_();
   let ds = readTable_('KhachHang').map(k => ({ MaKH: k.MaKH, TenKH: k.TenKH, SDT: String(k.SDT || ''), DiaChi: k.DiaChi || '', no: n.no(k.MaKH), muaCuoi: n.cuoi(k.MaKH), NgayTao: String(k.NgayTao || '') }));
   if (raw) ds = ds.filter(k => laSo ? so.length >= 3 && k.SDT.replace(/\D/g, '').indexOf(so) >= 0 : boDau_(k.TenKH).indexOf(chu) >= 0 || String(k.MaKH).toLowerCase() === chu);
@@ -365,7 +365,7 @@ function banNhanh(token, o) {
     return { MaHH: h ? h.MaHH : '', TenHang: ten, Model: h ? h.Model : '', DVT: h ? h.DVT : String(l.DVT || ''), XuatXu: h ? h.XuatXu : '',
       SoLuong: sl, LoaiGia: h && gia === (+h.GiaLe || 0) ? 'Giá lẻ' : 'Giá tùy chọn', DonGia: gia, IMEI: im.join(', ') };
   });
-  const lap = imeis.find((x, i) => imeis.indexOf(x) !== i);
+  const gon = imeis.map(gonMa_), lap = imeis.find((x, i) => gon.indexOf(gon[i]) !== i);
   if (lap) throw new Error('IMEI/serial ' + lap + ' bị lặp trong đơn.');
   if (imeis.length) kiemIMEI_('Xuất', '', imeis); // máy đã bán thì báo ngay, chưa ghi gì
   const vat = Math.min(100, Math.max(0, +o.VAT || 0)), cong = lines.reduce((s, l) => s + Math.round(l.SoLuong * l.DonGia), 0);

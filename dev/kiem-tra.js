@@ -563,6 +563,11 @@ assert.strictEqual(thuD2.phieu.SoTien, 12000000);
 assert.throws(() => G.xoaThuTien(admin, thuD2.phieu.SoPT), /ghi nhận Kỳ 1\/2 của hợp đồng .*Hủy ghi nhận thu/);
 assert.throws(() => G.luuThuTien(admin, Object.assign({}, thuD2.phieu, { SoTien: 1 })), /không sửa số tiền/);
 assert.strictEqual(G.luuThuTien(admin, Object.assign({}, thuD2.phieu, { GhiChu: 'sửa ghi chú' })).GhiChu, 'sửa ghi chú');
+{ // phiếu bị xóa thẳng trên Sheet: không được ghi lại với số tiền khác
+  const sh = sheets.PS_ThuTien, i = sh.rows.findIndex(r => r[0] === thuD2.phieu.SoPT), dong = sh.rows.splice(i, 1)[0];
+  assert.throws(() => G.luuThuTien(admin, Object.assign({}, thuD2.phieu, { SoTien: 1 })), /không sửa số tiền/);
+  sh.rows.splice(i, 0, dong);
+}
 // Hủy thu (quản trị): xóa phiếu, đưa đợt về chưa thu; hợp đồng đã thu thì không xóa được
 assert.throws(() => G.huyThuDotHopDong(lan, hdTG.SoHD, 2), /quản trị/);
 assert.throws(() => G.xoaHopDong(admin, hdTG.SoHD), /đã ghi nhận thu tiền/);

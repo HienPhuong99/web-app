@@ -509,8 +509,9 @@ const NHAP_KHACH = ['TenKH', 'NguoiLienHe', 'SDT', 'DiaChi', 'MST', 'Email', 'Ng
 const NHAP_HANG = ['TenHang', 'Model', 'NhomHang', 'PhanLoai', 'DVT', 'XuatXu', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'GhiChu'];
 const NHAP_SO = ['GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh'];
 // Số điện thoại chỉ còn chữ số; +84 / 84 + 9 số đổi về 0 + 9 số để "+84 911 000 001" khớp "0911000001"
-const sdtVN_ = x => { const d = String(x == null ? '' : x).replace(/\D/g, ''); return /^84\d{9}$/.test(d) ? '0' + d.slice(2) : d; };
-const sdtList_ = s => String(s || '').split(/[\/,;]/).map(sdtVN_).filter(x => x.length >= 8);
+const sdtVN_ = x => { const d = String(x == null ? '' : x).replace(/\D/g, ''); return /^84\d{9}$/.test(d) ? '0' + d.slice(2) : /^840\d{9}$/.test(d) ? d.slice(2) : d; };
+// Nhiều số trong một ô: cách nhau bằng / , ; xuống dòng hoặc " - " (dấu gạch có khoảng trắng hai bên; "0911-000-001" vẫn là một số)
+const sdtList_ = s => String(s || '').split(/[\/,;\n]|\s[-–]\s/).map(sdtVN_).filter(x => x.length >= 8);
 
 // Ghi nhiều dòng một lần (một lệnh setValues). kiem(o) trả về lý do lỗi hoặc ''; khoa(o) trả các khóa dùng để bỏ dòng trùng
 // (daCo = khóa đã có trong Sheet); them(o) bổ sung cột tự điền. Trả { them: bản ghi đã ghi, bo: [{ dong, ly }] }.
@@ -610,7 +611,7 @@ function luuChungTu(token, loai, doc) {
       l.IMEI = im.join(', ');
       imeis = imeis.concat(im);
     });
-    const lap = imeis.find((x, i) => imeis.indexOf(x) !== i);
+    const gon = imeis.map(gonMa_), lap = imeis.find((x, i) => gon.indexOf(gon[i]) !== i);
     if (lap) throw new Error('IMEI/serial ' + lap + ' bị lặp trong phiếu.');
     if (head.SoDH && !findObj_('DonHang', head.SoDH)) throw new Error('Không tìm thấy đơn hàng ' + head.SoDH + '.');
     head.Loai = c.loai;
@@ -760,22 +761,22 @@ function theKho(token, maHH) {
 function imeiList_(v) {
   return String(v == null ? '' : v).toUpperCase().split(/[\s,;]+/).filter(Boolean);
 }
-// IMEI/serial bỏ khoảng trắng, dấu chấm, gạch ngang: mã quét / gõ được chuẩn hóa như vậy nên mã đã lưu cũng phải so theo dạng này
-const gonMa_ = v => String(v == null ? '' : v).toUpperCase().replace(/[\s.\-]/g, '');
+// IMEI/serial bỏ khoảng trắng, dấu chấm, gạch: mọi phép so mã (chặn bán trùng, tra, kiểm kho, bảo hành) dùng dạng này; mã lưu giữ như người dùng nhập
+const gonMa_ = v => String(v == null ? '' : v).toUpperCase().replace(/[\s._\/\-]/g, '');
 
 // Một máy không xuất 2 lần liền nhau (bán trùng), không nhập 2 lần liền nhau. Nhập kho không bắt buộc ghi IMEI.
 // ponytail: chỉ xét phiếu gần nhất của từng IMEI, không dựng lại cả chuỗi khi sửa phiếu cũ lùi ngày.
 function kiemIMEI_(loai, soPK, imeis) {
-  const can = new Set(imeis), pk = {}, cuoi = {};
+  const can = new Set(imeis.map(gonMa_)), pk = {}, cuoi = {}; // cùng một máy viết có / không dấu gạch vẫn là một
   readTable_('PhieuKho').forEach(p => { pk[p.SoPK] = p; });
   readTable_('PhieuKhoCT').forEach(l => {
     const p = pk[l.SoPK];
     if (!p || !l.IMEI || String(l.SoPK) === String(soPK || '')) return;
     const k = String(p.Ngay) + p.NgayTao;
-    imeiList_(l.IMEI).forEach(x => { if (can.has(x) && (!cuoi[x] || k >= cuoi[x].k)) cuoi[x] = { k: k, p: p }; });
+    imeiList_(l.IMEI).forEach(x => { const g = gonMa_(x); if (can.has(g) && (!cuoi[g] || k >= cuoi[g].k)) cuoi[g] = { k: k, p: p }; });
   });
   imeis.forEach(x => {
-    const e = cuoi[x];
+    const e = cuoi[gonMa_(x)];
     if (e && e.p.Loai === loai) {
       throw new Error(loai === 'Xuất' ? 'IMEI/serial ' + x + ' đã xuất ở phiếu ' + e.p.SoPK + (e.p.SoDH ? ' (đơn ' + e.p.SoDH + ')' : '') + '.'
         : 'IMEI/serial ' + x + ' đã nhập ở phiếu ' + e.p.SoPK + ' và chưa xuất.');
@@ -813,11 +814,11 @@ function dsBaoHanh(token) {
 function dsBaoHanh_() {
   const pk = {}, dh = {}, han = hanBaoHanh_(), cuoi = {}, tatCa = {};
   readTable_('PhieuKho').forEach(p => { tatCa[p.SoPK] = p; });
-  readTable_('PhieuKhoCT').forEach(l => { const p = tatCa[l.SoPK]; if (p && l.IMEI) imeiList_(l.IMEI).forEach(x => { const k = String(p.Ngay) + p.NgayTao; if (!cuoi[x] || k >= cuoi[x].k) cuoi[x] = { k: k, p: p }; }); });
+  readTable_('PhieuKhoCT').forEach(l => { const p = tatCa[l.SoPK]; if (p && l.IMEI) imeiList_(l.IMEI).forEach(x => { const g = gonMa_(x), k = String(p.Ngay) + p.NgayTao; if (!cuoi[g] || k >= cuoi[g].k) cuoi[g] = { k: k, p: p }; }); });
   readTable_('PhieuKho').forEach(p => { if (p.Loai === 'Xuất') pk[p.SoPK] = p; });
   readTable_('DonHang').forEach(d => { dh[d.SoDH] = d; });
   return readTable_('PhieuKhoCT').filter(l => pk[l.SoPK] && l.MaHH).map(l => {
-    const im = imeiList_(l.IMEI), con = im.filter(x => !cuoi[x] || cuoi[x].p.Loai !== 'Nhập');
+    const im = imeiList_(l.IMEI), con = im.filter(x => { const c = cuoi[gonMa_(x)]; return !c || c.p.Loai !== 'Nhập'; });
     if (im.length && !con.length) return null;
     if (con.length < im.length) l = Object.assign({}, l, { IMEI: con.join(', '), SoLuong: con.length });
     const p = pk[l.SoPK], d = dh[p.SoDH] || {};
@@ -829,17 +830,15 @@ function dsBaoHanh_() {
 // ===== Thu tiền =====
 function luuThuTien(token, pt) {
   const user = user_(token);
-  return withLock_(() => {
-    const dot = pt.SoPT && dotCuaPhieu_(pt.SoPT), cu = dot && findObj_('ThuTien', pt.SoPT);
-    if (cu && (Math.round(+pt.SoTien || 0) !== +cu.SoTien || String(pt.SoDH || '') !== String(cu.SoDH || ''))) throw new Error(phieuCuaDot_(pt.SoPT, dot, 'sửa số tiền / đơn hàng'));
-    return ghiPhieuThu_(user, pt);
-  });
+  return withLock_(() => ghiPhieuThu_(user, pt));
 }
 // Phiếu thu ghi nhận một đợt trong lịch thanh toán hợp đồng: chỉ hủy / đổi qua màn hợp đồng để lịch và phiếu luôn khớp
 function dotCuaPhieu_(soPT) { return readTable_('HopDongLich').find(r => String(r.SoPT) === String(soPT)) || null; }
 const phieuCuaDot_ = (soPT, dot, viec) => 'Phiếu ' + soPT + ' ghi nhận ' + dot.Nhan + ' của hợp đồng ' + dot.SoHD + ': không ' + viec + ' ở đây. Mở hợp đồng → Lịch thanh toán → Hủy ghi nhận thu.';
 // Kiểm tra và ghi một phiếu thu. Gọi bên trong withLock_ (khóa không lồng nhau được, nên các hàm đã giữ khóa dùng thẳng hàm này).
 function ghiPhieuThu_(user, pt) {
+  const dot = pt.SoPT && dotCuaPhieu_(pt.SoPT); // sửa phiếu đang ghi nhận một đợt hợp đồng: không đổi tiền / đơn (phiếu mất khỏi Sheet thì cũng không ghi lại)
+  if (dot) { const cu = findObj_('ThuTien', pt.SoPT); if (!cu || Math.round(+pt.SoTien || 0) !== +cu.SoTien || String(pt.SoDH || '') !== String(cu.SoDH || '')) throw new Error(phieuCuaDot_(pt.SoPT, dot, 'sửa số tiền / đơn hàng')); }
   pt.SoTien = Math.round(+pt.SoTien || 0);
   if (pt.SoTien <= 0) throw new Error('Nhập số tiền thu.');
   if (pt.SoDH) {

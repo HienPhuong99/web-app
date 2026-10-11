@@ -592,6 +592,12 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   assert.strictEqual(goi(binh4, 'traMaKho', 'F2LABC1234').trangThai, 'daBan');
   assert.strictEqual(goi(binh4, 'traBaoHanh', 'F2LABC1234').ds[0].IMEIKhop, 'F2L-ABC.1234');
   assert.match(goi(binh4, 'kiemKho', ['F2LABC1234']).la[0].lyDo, /Đã xuất ở phiếu/);
+  // cùng máy viết khác dấu: không bán lần nữa, không nhập trùng trong một phiếu
+  assert.throws(() => goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [{ MaHH: 'HH0001', SoLuong: 1, DonGia: 1, IMEI: 'f2l_abc/1234' }] }), /đã xuất ở phiếu/);
+  assert.throws(() => G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'NCC', lines: [{ MaHH: 'HH0001', TenHang: 'iPhone', SoLuong: 2, IMEI: 'AB-1234, AB1234' }] }), /bị lặp trong phiếu/);
+  const vmc = c => require('vm').runInContext(c, G);
+  assert.deepStrictEqual(JSON.parse(vmc(`JSON.stringify([sdtList_('0911000001 - 0912000002'), sdtList_('0911-000-001'), sdtVN_('+84 0911 000 001'), sdtVN_('84911000001')])`)),
+    [['0911000001', '0912000002'], ['0911000001'], '0911000001', '0911000001']);
 }
 
 // Khách trả hàng: nhập lại kho, đơn giảm (trả hết thì hủy), trả lại tiền bằng phiếu thu âm, bảo hành không còn thuộc khách

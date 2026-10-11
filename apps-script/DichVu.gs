@@ -220,13 +220,13 @@ function imeiTrongKho_() {
     const p = pk[l.SoPK];
     if (!p || !l.IMEI) return;
     const k = String(p.Ngay) + p.NgayTao;
-    imeiList_(l.IMEI).forEach(x => { if (!cuoi[x] || k >= cuoi[x].k) cuoi[x] = { k: k, p: p, l: l }; });
+    imeiList_(l.IMEI).forEach(x => { const g = gonMa_(x); if (!cuoi[g] || k >= cuoi[g].k) cuoi[g] = { k: k, p: p, l: l, ma: x }; }); // khóa: mã gọn; IMEI: mã như đã lưu
   });
   const kho = {}, daXuat = {};
   Object.keys(cuoi).forEach(x => {
     const c = cuoi[x];
-    if (c.p.Loai === 'Nhập') kho[x] = { MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay };
-    else daXuat[x] = { MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay, DoiTac: c.p.DoiTac || '' };
+    if (c.p.Loai === 'Nhập') kho[x] = { IMEI: c.ma, MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay };
+    else daXuat[x] = { IMEI: c.ma, MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay, DoiTac: c.p.DoiTac || '' };
   });
   return { kho: kho, daXuat: daXuat };
 }
@@ -239,20 +239,19 @@ function kiemKho(token, ds, o) {
   const user = user_(token);
   o = o || {};
   const quet = [];
-  (Array.isArray(ds) ? ds : []).forEach(x => { const m = String(x == null ? '' : x).toUpperCase().replace(/[\s.\-]/g, ''); if (m.length >= 4 && quet.indexOf(m) < 0) quet.push(m); });
+  (Array.isArray(ds) ? ds : []).forEach(x => { const m = gonMa_(x); if (m.length >= 4 && quet.indexOf(m) < 0) quet.push(m); });
   if (quet.length > 3000) throw new Error('Mỗi lần kiểm tối đa 3000 mã.');
   const { kho, daXuat } = imeiTrongKho_(), daThay = {};
-  // mã quét đã bỏ dấu chấm / gạch: tra theo dạng gọn của mã đã lưu, kết quả vẫn ghi mã như đã lưu
-  const theoGon = m => { const g = {}; Object.keys(m).forEach(k => { g[gonMa_(k)] = k; }); return g; }, khoGon = theoGon(kho), xuatGon = theoGon(daXuat);
-  const tim = (g, x) => g[x] || (/^S[A-Z0-9]{10,12}$/.test(x) && g[x.slice(1)]) || ''; // mã vạch serial Apple có chữ S đầu; không cắt mã khác
+  // kho / daXuat theo mã gọn (như mã quét); kết quả ghi IMEI như đã lưu
+  const tim = (g, x) => (g[x] ? x : /^S[A-Z0-9]{10,12}$/.test(x) && g[x.slice(1)] ? x.slice(1) : ''); // mã vạch serial Apple có chữ S đầu; không cắt mã khác
   const khop = [], la = [];
   quet.forEach(x => {
-    const m = tim(khoGon, x);
-    if (m && (!o.MaHH || kho[m].MaHH === o.MaHH)) { daThay[m] = 1; khop.push(Object.assign({ IMEI: m }, kho[m])); return; }
-    const xm = tim(xuatGon, x), xu = xm && daXuat[xm];
+    const m = tim(kho, x);
+    if (m && (!o.MaHH || kho[m].MaHH === o.MaHH)) { daThay[m] = 1; khop.push(Object.assign({}, kho[m])); return; }
+    const xm = tim(daXuat, x), xu = xm && daXuat[xm];
     la.push(m ? Object.assign({ IMEI: m, lyDo: 'Khác mặt hàng đang kiểm' }, kho[m]) : xu ? Object.assign({ IMEI: x, lyDo: 'Đã xuất ở phiếu ' + xu.SoPK + (xu.DoiTac ? ' (' + xu.DoiTac + ')' : '') }, xu) : { IMEI: x, MaHH: '', TenHang: '', lyDo: 'Chưa nhập kho' });
   });
-  const thieu = Object.keys(kho).filter(x => !daThay[x] && (!o.MaHH || kho[x].MaHH === o.MaHH)).map(x => Object.assign({ IMEI: x }, kho[x]))
+  const thieu = Object.keys(kho).filter(x => !daThay[x] && (!o.MaHH || kho[x].MaHH === o.MaHH)).map(x => Object.assign({}, kho[x]))
     .sort((a, b) => String(a.TenHang).localeCompare(String(b.TenHang), 'vi') || a.IMEI.localeCompare(b.IMEI));
   const hang = {};
   const dong = (r, k) => { const h = hang[r.MaHH] || (hang[r.MaHH] = { MaHH: r.MaHH, TenHang: r.TenHang, trongKho: 0, thay: 0 }); h[k]++; };
@@ -300,8 +299,8 @@ function traHang_(token, o) {
     if (!(sl > 0) || sl > l.SoLuong) throw new Error('Dòng trả ' + (i + 1) + ': số lượng trả phải từ 1 đến ' + l.SoLuong + '.');
     if (im.length && !l.MaHH) throw new Error('Dòng trả ' + (i + 1) + ': ' + l.TenHang + ' không phải hàng trong kho, không ghi IMEI/serial.');
     im.forEach(x => {
-      const c = daXuat[x];
-      if (kho[x] && pkDon[kho[x].SoPK] === -1) throw new Error('IMEI/serial ' + x + ' khách đã trả, đã nhập ở phiếu ' + kho[x].SoPK + '.');
+      const g = gonMa_(x), c = daXuat[g], k = kho[g]; // kho / daXuat theo mã gọn
+      if (k && pkDon[k.SoPK] === -1) throw new Error('IMEI/serial ' + x + ' khách đã trả, đã nhập ở phiếu ' + k.SoPK + '.');
       if (!c || pkDon[c.SoPK] !== 1) throw new Error('IMEI/serial ' + x + ' không có trong các lần giao của đơn ' + dh.SoDH + ' (hoặc máy đã về kho, đã bán cho khách khác).');
       if (c.MaHH !== l.MaHH) throw new Error('IMEI/serial ' + x + ' là máy ' + c.TenHang + ', không phải ' + l.TenHang + '.');
     });
