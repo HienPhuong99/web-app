@@ -888,7 +888,7 @@ assert.deepStrictEqual(plain(G.xoaCuaHangDaBo_()), []); // chạy lại không l
   const r = plain(G.nhapKhach(nv, [
     { _dong: 2, TenKH: ' Nhập Một ', SDT: '0922000001', NguoiDaiDien: 'Ông A' },
     { _dong: 3, TenKH: 'Nhập Hai', SDT: '0922000002 / 0922000003' },
-    { _dong: 4, TenKH: 'Trùng sẵn có', SDT: '0911.222.333' },       // trùng SĐT với khách đã có
+    { _dong: 4, TenKH: 'Trùng sẵn có', SDT: '+84 911.222.333' },    // trùng SĐT với khách đã có (dạng +84)
     { _dong: 5, TenKH: 'Trùng trong file', SDT: '0922000003' },     // trùng dòng 3
     { _dong: 6, TenKH: '', SDT: '0933000000' },                     // thiếu tên
     { _dong: 7, TenKH: '', SDT: '' },                               // dòng trống: bỏ qua im lặng

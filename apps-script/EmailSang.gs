@@ -99,6 +99,14 @@ function guiEmailSang_(id, cfg, homNay, thu) {
 /**
  * Gom các việc cần chú ý tại homNay (yyyy-MM-dd). Cách tính phải giống màn hình Tổng quan (hanHD, trangThaiDot, conNo, isLow).
  */
+// Công nợ theo khách = đã mua (đơn không hủy) trừ đã thu (mọi phiếu thu của khách), nhiều nhất trước. Màn Khách còn nợ của app cũng dùng.
+function dsNo_(song, thu, khach) {
+  const mua = {}, da = {};
+  song.forEach(d => { mua[d.MaKH] = (mua[d.MaKH] || 0) + (+d.TongCong || 0); });
+  thu.forEach(p => { da[p.MaKH] = (da[p.MaKH] || 0) + (+p.SoTien || 0); });
+  return Object.keys(Object.assign({}, mua, da)).map(k => ({ MaKH: k, tien: (mua[k] || 0) - (da[k] || 0) })).filter(x => x.tien > 0).sort((a, b) => b.tien - a.tien)
+    .map(x => ({ MaKH: x.MaKH, TenKH: x.MaKH && khach[x.MaKH] ? khach[x.MaKH].TenKH : (x.MaKH || 'Khách lẻ'), SDT: x.MaKH && khach[x.MaKH] ? khach[x.MaKH].SDT : '', tien: x.tien }));
+}
 function tongHopSang_(homNay) {
   const homQua = new Date(Date.parse(homNay) - 864e5).toISOString().slice(0, 10), ngay = v => String(v == null ? '' : v).slice(0, 10);
   const donHang = readTable_('DonHang'), thu = readTable_('ThuTien'), khach = {};
@@ -123,12 +131,7 @@ function tongHopSang_(homNay) {
   const hang = readTable_('HangHoa').filter(h => ton[h.MaHH] ? ton[h.MaHH].nhap - ton[h.MaHH].xuat <= (+h.TonToiThieu || 0) : h.TonToiThieu !== '' && +h.TonToiThieu > 0)
     .map(h => ({ MaHH: h.MaHH, TenHang: h.TenHang, ton: ton[h.MaHH] ? ton[h.MaHH].nhap - ton[h.MaHH].xuat : 0, toiThieu: +h.TonToiThieu || 0 }))
     .sort((a, b) => (a.ton - a.toiThieu) - (b.ton - b.toiThieu));
-  // Công nợ theo khách = đã mua (đơn không hủy) trừ đã thu (mọi phiếu thu của khách)
-  const mua = {}, da = {};
-  song.forEach(d => { mua[d.MaKH] = (mua[d.MaKH] || 0) + (+d.TongCong || 0); });
-  thu.forEach(p => { da[p.MaKH] = (da[p.MaKH] || 0) + (+p.SoTien || 0); });
-  const noDs = Object.keys(Object.assign({}, mua, da)).map(k => ({ MaKH: k, tien: (mua[k] || 0) - (da[k] || 0) })).filter(x => x.tien > 0).sort((a, b) => b.tien - a.tien)
-    .map(x => ({ MaKH: x.MaKH, TenKH: x.MaKH && khach[x.MaKH] ? khach[x.MaKH].TenKH : (x.MaKH || 'Khách lẻ'), SDT: x.MaKH && khach[x.MaKH] ? khach[x.MaKH].SDT : '', tien: x.tien }));
+  const noDs = dsNo_(song, thu, khach);
   const ban = n => { const ds = song.filter(d => ngay(d.Ngay) === n); return { don: ds.length, tien: ds.reduce((s, d) => s + (+d.TongCong || 0), 0) }; };
   const daThu = n => thu.filter(p => ngay(p.Ngay) === n).reduce((s, p) => s + (+p.SoTien || 0), 0);
   const du = {

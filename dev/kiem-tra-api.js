@@ -230,6 +230,8 @@ assert.strictEqual(goi(binh, 'khoMay').find(h => h.MaHH === 'HH0002').xuat, 3);
 // Khách mới trùng số điện thoại với khách đã có: dùng khách cũ, không tạo trùng. Khách chưa trả: không có phiếu thu
 const bn2 = ban({ khachMoi: { TenKH: 'Mai', SDT: '0977123456' }, lines: [{ TenHang: 'Dán màn hình', SoLuong: 1, DonGia: 100000 }] });
 assert.deepStrictEqual([bn2.MaKH, bn2.SoPT, bn2.daThu], [bn.MaKH, '', 0]);
+// Số dạng +84 vẫn là khách cũ (cách bán nhanh tìm khách), không tạo khách trùng
+assert.strictEqual(require('vm').runInContext(`readTable_('KhachHang').find(k => sdtList_(k.SDT).indexOf(sdtVN_('+84 977 123 456')) >= 0).MaKH`, G), bn.MaKH);
 assert.strictEqual(sheets.PS_KhachHang.rows.filter(r => r[3] && String(r[3]).replace(/\D/g, '') === '0977123456').length, 1);
 // "Khách lẻ" không số điện thoại: mọi lần bán lẻ dùng chung một khách; khách mới khác tên không số thì tạo mới
 const le1 = ban({ khachMoi: { TenKH: 'Khách lẻ' }, lines: [{ TenHang: 'Cáp sạc', SoLuong: 1, DonGia: 90000 }], thu: { SoTien: 90000 } });
@@ -375,6 +377,10 @@ push.loi[MA_TB] = 'DeviceNotRegistered';
 props.delete('thongBao.phone');
 G.guiEmailSang({ triggerUid: 'x' });
 assert.strictEqual(push.da.length, soLo + 2);
+assert.strictEqual(goi(binh4, 'dsThietBi')[0].thongBao, false);
+// Bấm thử thông báo đúng lúc máy chủ Expo báo máy đã gỡ đăng ký: báo rõ, không nói "đã gửi"
+goi(binh4, 'datThongBao', MA_TB);
+assert.throws(() => goi(binh4, 'thuThongBao'), /tắt thông báo hoặc cài lại app/);
 assert.strictEqual(goi(binh4, 'dsThietBi')[0].thongBao, false);
 delete push.loi[MA_TB];
 // Tắt thông báo; không còn máy nào bật và email sáng tắt: bỏ hẹn giờ
@@ -574,6 +580,18 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   assert.deepStrictEqual([motHang.khop, motHang.la[0].lyDo], [0, 'Khác mặt hàng đang kiểm']);
   assert.ok(motHang.thieu.every(x => x.MaHH === 'HH0001'));
   assert.ok(sheets.PS_NhatKy.rows.some(r => r[2] === 'Kiểm kho theo IMEI'));
+}
+
+// Serial có dấu gạch / chấm (lưu nguyên như nhập): quét hay gõ không dấu vẫn tìm thấy ở tra kho, kiểm kho, tra bảo hành
+{
+  const t = G.dangNhap('admin', adminPass).token, kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Serial Gạch', SDT: '0966000444' });
+  G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'NCC', lines: [{ MaHH: 'HH0001', TenHang: 'iPhone 16 Pro Max 256GB - Titan Đen', SoLuong: 1, IMEI: 'F2L-ABC.1234' }] });
+  assert.deepStrictEqual([goi(binh4, 'traMaKho', 'f2l abc1234').trangThai, goi(binh4, 'traMaKho', 'F2LABC1234').ma], ['trongKho', 'F2L-ABC.1234']);
+  assert.deepStrictEqual(goi(binh4, 'kiemKho', ['F2LABC1234'], { MaHH: 'HH0001' }).khop, 1);
+  goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [{ MaHH: 'HH0001', SoLuong: 1, DonGia: 28000000, IMEI: 'F2L-ABC.1234' }], thu: { SoTien: 28000000, HinhThuc: 'Tiền mặt' } });
+  assert.strictEqual(goi(binh4, 'traMaKho', 'F2LABC1234').trangThai, 'daBan');
+  assert.strictEqual(goi(binh4, 'traBaoHanh', 'F2LABC1234').ds[0].IMEIKhop, 'F2L-ABC.1234');
+  assert.match(goi(binh4, 'kiemKho', ['F2LABC1234']).la[0].lyDo, /Đã xuất ở phiếu/);
 }
 
 // Khách trả hàng: nhập lại kho, đơn giảm (trả hết thì hủy), trả lại tiền bằng phiếu thu âm, bảo hành không còn thuộc khách

@@ -122,7 +122,7 @@ function luuSuaChua(token, p) {
   let kh = null;
   if (p.MaKH) { kh = findObj_('KhachHang', p.MaKH); if (!kh) throw new Error('Không tìm thấy khách hàng ' + p.MaKH + '.'); }
   else if (p.khachMoi && String(p.khachMoi.TenKH || '').trim()) {
-    const so = String(p.khachMoi.SDT || '').replace(/\D/g, '');
+    const so = sdtVN_(p.khachMoi.SDT);
     kh = so.length >= 8 ? readTable_('KhachHang').find(k => sdtList_(k.SDT).indexOf(so) >= 0) : null;
     if (!kh) kh = luuKhach(token, { TenKH: String(p.khachMoi.TenKH).trim().slice(0, 150), SDT: String(p.khachMoi.SDT || '').trim().slice(0, 40) });
   } else if (!cu) throw new Error('Chọn khách hoặc nhập tên, số điện thoại khách.');
@@ -242,11 +242,14 @@ function kiemKho(token, ds, o) {
   (Array.isArray(ds) ? ds : []).forEach(x => { const m = String(x == null ? '' : x).toUpperCase().replace(/[\s.\-]/g, ''); if (m.length >= 4 && quet.indexOf(m) < 0) quet.push(m); });
   if (quet.length > 3000) throw new Error('Mỗi lần kiểm tối đa 3000 mã.');
   const { kho, daXuat } = imeiTrongKho_(), daThay = {};
+  // mã quét đã bỏ dấu chấm / gạch: tra theo dạng gọn của mã đã lưu, kết quả vẫn ghi mã như đã lưu
+  const theoGon = m => { const g = {}; Object.keys(m).forEach(k => { g[gonMa_(k)] = k; }); return g; }, khoGon = theoGon(kho), xuatGon = theoGon(daXuat);
+  const tim = (g, x) => g[x] || (/^S[A-Z0-9]{10,12}$/.test(x) && g[x.slice(1)]) || ''; // mã vạch serial Apple có chữ S đầu; không cắt mã khác
   const khop = [], la = [];
   quet.forEach(x => {
-    const m = kho[x] ? x : /^S[A-Z0-9]{10,12}$/.test(x) && kho[x.slice(1)] ? x.slice(1) : ''; // mã vạch serial Apple có chữ S đầu
+    const m = tim(khoGon, x);
     if (m && (!o.MaHH || kho[m].MaHH === o.MaHH)) { daThay[m] = 1; khop.push(Object.assign({ IMEI: m }, kho[m])); return; }
-    const xu = daXuat[x] || (/^S[A-Z0-9]{10,12}$/.test(x) && daXuat[x.slice(1)]); // chỉ bỏ chữ S đầu của serial Apple, không cắt mã khác
+    const xm = tim(xuatGon, x), xu = xm && daXuat[xm];
     la.push(m ? Object.assign({ IMEI: m, lyDo: 'Khác mặt hàng đang kiểm' }, kho[m]) : xu ? Object.assign({ IMEI: x, lyDo: 'Đã xuất ở phiếu ' + xu.SoPK + (xu.DoiTac ? ' (' + xu.DoiTac + ')' : '') }, xu) : { IMEI: x, MaHH: '', TenHang: '', lyDo: 'Chưa nhập kho' });
   });
   const thieu = Object.keys(kho).filter(x => !daThay[x] && (!o.MaHH || kho[x].MaHH === o.MaHH)).map(x => Object.assign({ IMEI: x }, kho[x]))
