@@ -48,7 +48,7 @@ svg.i { width: 18px; height: 18px; flex: none; }
 @media (max-width: 860px) { .login { grid-template-columns: 1fr; } .login-art { display: none; } }
 .mark { width: 42px; height: 42px; border-radius: 12px; background: var(--brand); color: #fff; display: grid; place-items: center; box-shadow: 0 6px 14px rgba(var(--brand-rgb),.3); flex: none; overflow: hidden; }
 .mark svg { width: 22px; height: 22px; }
-.mark svg.logo { width: 100%; height: 100%; padding: 0; display: block; } /* padding 0: không ăn theo .logo (khung tiêu đề thanh bên) */
+.mark svg.mark-logo { width: 100%; height: 100%; display: block; } /* không đặt class logo: trùng .logo (khung tiêu đề thanh bên, có padding) */
 .login-art .mark { background: rgba(255,255,255,.18); box-shadow: none; }
 
 /* ---- Khung: menu trái + nội dung ---- */
@@ -487,7 +487,7 @@ const IC = {
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
 };
 // Logo phuonghihi (lấy từ website cửa hàng)
-const LOGO_PHONE = '<svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="11" fill="#0B4174"/><rect x="13" y="10" width="5" height="23" rx="2.5" fill="#FF6B4A"/><rect x="15" y="13" width="15" height="15" rx="7.5" fill="#FF6B4A"/><circle cx="25" cy="20.5" r="4.3" fill="#0B4174"/></svg>';
+const LOGO_PHONE = '<svg class="mark-logo" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="11" fill="#0B4174"/><rect x="13" y="10" width="5" height="23" rx="2.5" fill="#FF6B4A"/><rect x="15" y="13" width="15" height="15" rx="7.5" fill="#FF6B4A"/><circle cx="25" cy="20.5" r="4.3" fill="#0B4174"/></svg>';
 const markHtml = ic => ic === 'phone' ? LOGO_PHONE : icon(ic || 'box');
 const icon = n => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
 
@@ -783,33 +783,28 @@ function listCard(el, cfg) {
     nutChieu.innerHTML = icon(giam ? 'arrowDown' : 'arrowUp');
     nutChieu.title = t; nutChieu.setAttribute('aria-label', t);
   };
-  let rows = [], lim = LIMIT, luot = 0;
-  // Vẽ trước DAU dòng cho màn hình hiện ngay, phần còn lại (tới lim) vẽ ở khung hình sau; lượt cũ bị bỏ nếu đã lọc lại
+  let rows = [], lim = LIMIT, daVe = 0, hen = 0;
+  // Vẽ dần: DAU dòng đầu vẽ ngay để màn hình hiện liền, phần còn lại (tới lim) vẽ ở lượt sau. daVe = số dòng đã có trong bảng,
+  // nên bấm Hiện thêm liên tiếp hay lọc lại giữa chừng cũng không sót / lặp dòng.
   const dongHtml = (a, b) => rows.slice(a, b).map((r, i) => `<tr data-i="${a + i}">${cfg.cols.map(c => `<td class="${c.cls || ''}">${c.f ? c.f(r) : esc(r[c.k])}</td>`).join('')}</tr>`).join('');
-  const veThem = () => {
-    const n = Math.min(lim, rows.length), con = rows.length - n;
-    count.textContent = con > 0 ? `Hiện ${n} / ${rows.length} dòng` : `${rows.length} dòng`;
+  const veDen = n => {
+    clearTimeout(hen);
+    n = Math.min(n, rows.length);
     $('tr.them', body)?.remove();
+    if (n > daVe) { body.insertAdjacentHTML('beforeend', dongHtml(daVe, n)); daVe = n; }
+    const can = Math.min(lim, rows.length), con = rows.length - can;
+    count.textContent = con > 0 ? `Hiện ${can} / ${rows.length} dòng` : `${rows.length} dòng`;
+    if (daVe < can) { hen = setTimeout(() => veDen(can), 16); return; }
     if (con > 0) body.insertAdjacentHTML('beforeend', `<tr class="them"><td colspan="${cfg.cols.length}"><button type="button" class="btn sm">Hiện thêm ${Math.min(LIMIT, con)} dòng (còn ${con})</button></td></tr>`);
-  };
-  const veTiep = tu => {
-    const l = luot;
-    requestAnimationFrame(() => setTimeout(() => {
-      if (l !== luot) return;
-      $('tr.them', body)?.remove();
-      body.insertAdjacentHTML('beforeend', dongHtml(tu, Math.min(lim, rows.length)));
-      veThem();
-    }));
   };
   const refresh = () => {
     const w = words(st.text), md = macDinh(), sx = tieuChi(st.f.sx);
     rows = cfg.data().filter(r => (!cfg.filter || cfg.filter(r, st.f)) && matches(w, r, cfg.text));
     if (sx) rows = sapXep(rows, sx[2], st.f.chieu);
     veChieu();
-    lim = LIMIT; luot++;
-    body.innerHTML = rows.length ? dongHtml(0, Math.min(DAU, lim)) : `<tr><td class="empty" colspan="${cfg.cols.length}">Không có dữ liệu phù hợp</td></tr>`;
-    if (rows.length > DAU) veTiep(DAU);
-    else veThem();
+    lim = LIMIT; daVe = 0;
+    body.innerHTML = rows.length ? '' : `<tr><td class="empty" colspan="${cfg.cols.length}">Không có dữ liệu phù hợp</td></tr>`;
+    veDen(DAU);
     if (cfg.foot) $('.foot', card).innerHTML = cfg.foot(rows);
     // Đang lọc / tìm / sắp xếp khác mặc định: hiện nút Bỏ lọc, tô đậm ô lọc đang dùng
     const khac = k => k === 'chieu' ? !!sx && st.f.chieu !== sx[3] : String(st.f[k] ?? '') !== String(md[k] ?? ''); // chiều: so với mặc định của tiêu chí đang chọn
@@ -837,7 +832,7 @@ function listCard(el, cfg) {
     refresh(); q.focus();
   };
   body.onclick = e => {
-    if (e.target.closest('tr.them')) { const tu = Math.min(lim, rows.length); lim += LIMIT; luot++; veTiep(tu); return; }
+    if (e.target.closest('tr.them')) { lim += LIMIT; veDen(daVe + DAU); return; }
     const tr = e.target.closest('tr[data-i]'); if (!tr) return;
     const a = e.target.closest('[data-act]'); // nút trong dòng (cfg.act) không mở chứng từ
     if (a && cfg.act) return cfg.act(rows[+tr.dataset.i], a.dataset.act);
@@ -3230,9 +3225,9 @@ function vSoQuy(el) {
 
 // Nhà cung cấp = đối tác của phiếu nhập (trừ tồn đầu kỳ, kiểm kê). Nợ = giá trị nhập (theo giá nhập) − đã trả bằng phiếu chi "Trả nhà cung cấp".
 const NGUON_KHONG_NO = /tồn đầu|đầu kỳ|kiểm kê|chuyển kho/i;
-// Phiếu nhập từ khách (thu cũ đổi mới, khách trả hàng: Đối tác là tên khách) không phải mua của nhà cung cấp
+// Phiếu nhập từ khách (thu cũ đổi mới, khách trả hàng: Đối tác là tên khách) không phải mua của nhà cung cấp; nhận theo số đơn hoặc ghi chú server tự ghi
 const NHAP_TU_KHACH = /^(Thu cũ đổi mới|Khách trả hàng)/i;
-const laNhapNCC = p => p.Loai === 'Nhập' && String(p.DoiTac || '').trim() && !NGUON_KHONG_NO.test(p.DoiTac) && !NHAP_TU_KHACH.test(String(p.GhiChu || '').trim());
+const laNhapNCC = p => p.Loai === 'Nhập' && !p.SoDH && String(p.DoiTac || '').trim() && !NGUON_KHONG_NO.test(p.DoiTac) && !NHAP_TU_KHACH.test(String(p.GhiChu || '').trim()); // phiếu nhập gắn đơn hàng (trả hàng) là từ khách
 function noNCC() {
   const m = {}, row = k => m[k] || (m[k] = { ten: k, nhap: 0, soPhieu: 0, tra: 0, cuoi: '' });
   S.phieuKho.forEach(p => { if (!laNhapNCC(p)) return; const r = row(p.DoiTac.trim()); r.nhap += +p.GiaTri || 0; r.soPhieu++; if (String(p.Ngay) > r.cuoi) r.cuoi = String(p.Ngay); });

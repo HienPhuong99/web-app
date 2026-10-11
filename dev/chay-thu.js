@@ -233,9 +233,10 @@ let dangChay = 0;
 Object.keys(ctx).filter(k => typeof ctx[k] === 'function' && /^[a-z]\w*[A-Za-z0-9]$/.test(k)).forEach(k => {
   const f = ctx[k];
   ctx[k] = function (...a) {
-    if (!dangChay) vm.runInContext('BANG_DA_DOC_ = null; TIEU_DE_DA_DOC_ = null; PHIEN_BAN_ = "";', ctx);
+    const datLai = () => vm.runInContext('BANG_DA_DOC_ = null; TIEU_DE_DA_DOC_ = null; PHIEN_BAN_ = "";', ctx);
+    if (!dangChay) datLai();
     dangChay++;
-    try { return f.apply(this, a); } finally { dangChay--; }
+    try { return f.apply(this, a); } finally { if (!--dangChay) datLai(); } // hết lần chạy: kiểm thử đọc thẳng (G.readTable_…) thấy dữ liệu mới
   };
 });
 

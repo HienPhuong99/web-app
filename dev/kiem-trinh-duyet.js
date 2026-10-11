@@ -276,8 +276,11 @@ BUOC.push(['Danh sách dài: vẽ dần, nút Hiện thêm, lọc lại về 300
   await page.evaluate(() => { const g = S.khach.slice(); for (let i = 0; S.khach.length < 700; i++) S.khach.push(Object.assign({}, g[i % g.length], { MaKH: 'KX' + String(i).padStart(5, '0'), TenKH: 'Khách dài ' + i })); S.q.khach = null; go('khach'); }); // bỏ chữ tìm bước trước còn nhớ
   await page.waitForFunction(() => document.querySelectorAll('#view tbody tr[data-i]').length === 300);
   assert.match(await page.locator('#view .count').textContent(), /Hiện 300 \/ 700 dòng/);
-  await page.locator('#view tr.them button', { hasText: 'Hiện thêm 300 dòng (còn 400)' }).click();
-  await page.waitForFunction(() => document.querySelectorAll('#view tbody tr[data-i]').length === 600);
+  await page.locator('#view tr.them button', { hasText: 'Hiện thêm 300 dòng (còn 400)' }).waitFor();
+  await page.evaluate(() => { const b = document.querySelector('#view tr.them button'); b.click(); b.click(); }); // bấm hai lần liền
+  await page.waitForFunction(() => document.querySelectorAll('#view tbody tr[data-i]').length >= 600 && document.querySelector('#view tr.them'));
+  assert.ok(await page.evaluate(() => [...document.querySelectorAll('#view tbody tr[data-i]')].every((r, i) => +r.dataset.i === i)), 'Dòng phải liền nhau, không sót khúc nào');
+  assert.strictEqual(await page.locator('#view tbody tr[data-i]').count(), 600);
   await page.locator('#view tr.them button', { hasText: 'còn 100' }).click();
   await page.waitForFunction(() => document.querySelectorAll('#view tbody tr[data-i]').length === 700);
   assert.strictEqual(await page.locator('#view tr.them').count(), 0);

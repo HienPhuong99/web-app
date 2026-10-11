@@ -145,17 +145,22 @@ function traMaySua(token, soPN, o) {
   const user = user_(token);
   o = o || {};
   // Giữ phiếu trong khóa trước khi lập đơn: bấm hai lần / hai máy cùng trả không tạo hai đơn, hai phiếu thu
-  const cache = CacheService.getScriptCache(), giu = 'traSua_' + CUR_SHOP + '_' + soPN;
+  const giu = 'traSua_' + CUR_SHOP + '_' + soPN;
   const r = withLock_(() => {
     const p = findObj_('SuaChua', soPN);
     if (!p) throw new Error('Không tìm thấy phiếu ' + soPN + '.');
     if (p.TrangThai === 'Đã trả khách') throw new Error('Phiếu ' + soPN + ' đã trả khách.');
-    if (cache.get(giu)) throw new Error('Phiếu ' + soPN + ' đang được trả ở máy khác, đợi vài giây rồi tải lại.');
-    cache.put(giu, '1', 120);
+    if (!giuCho_(giu)) throw new Error('Phiếu ' + soPN + ' đang được trả ở máy khác, đợi vài giây rồi tải lại.');
     return p;
   });
-  try { return traMaySuaDaGiu_(token, user, soPN, o, r); } finally { cache.remove(giu); }
+  try { return traMaySuaDaGiu_(token, user, soPN, o, r); } finally { boGiu_(giu); }
 }
+// Giữ chỗ một việc dài (gọi trong withLock_): false nếu lần gọi khác đang giữ. CacheService lỗi thì cho chạy như khi chưa có giữ chỗ.
+function giuCho_(khoa) {
+  try { const c = CacheService.getScriptCache(); if (c.get(khoa)) return false; c.put(khoa, '1', 120); } catch (e) {}
+  return true;
+}
+function boGiu_(khoa) { try { CacheService.getScriptCache().remove(khoa); } catch (e) {} }
 function traMaySuaDaGiu_(token, user, soPN, o, r) {
   const chiPhi = Math.max(0, Math.round(+(o.ChiPhi == null ? r.ChiPhi : o.ChiPhi) || 0));
   let don = null;
@@ -267,12 +272,9 @@ function traHang(token, o) {
   if (o.xemTruoc) return traHang_(token, o);
   user_(token);
   // Giữ đơn trong khóa trước khi kiểm tra và ghi: hai lần gửi cùng lúc không nhập kho hai lần, không trả tiền hai lần
-  const cache = CacheService.getScriptCache(), giu = 'traHang_' + CUR_SHOP + '_' + o.SoDH;
-  withLock_(() => {
-    if (cache.get(giu)) throw new Error('Đơn ' + o.SoDH + ' đang được nhận trả ở máy khác, đợi vài giây rồi tải lại.');
-    cache.put(giu, '1', 120);
-  });
-  try { return traHang_(token, o); } finally { cache.remove(giu); }
+  const giu = 'traHang_' + CUR_SHOP + '_' + o.SoDH;
+  withLock_(() => { if (!giuCho_(giu)) throw new Error('Đơn ' + o.SoDH + ' đang được nhận trả ở máy khác, đợi vài giây rồi tải lại.'); });
+  try { return traHang_(token, o); } finally { boGiu_(giu); }
 }
 function traHang_(token, o) {
   const user = user_(token);
