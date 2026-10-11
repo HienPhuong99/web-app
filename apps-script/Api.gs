@@ -33,6 +33,8 @@ function doPost(e) {
 function goiApi_(q) {
   const fn = String(q.fn || ''), args = Array.isArray(q.args) ? q.args : [];
   if (fn === 'thongTinDangNhap') return thongTinDangNhap();
+  const cache = CacheService.getScriptCache();
+  if (cache.get('schema') !== SCHEMA) nangCap_(cache); // bản mới có bảng mới (vd. ThietBi) mà app gọi trước khi có ai mở web
   if (fn === 'dangNhapMay') return dangNhapMay_(args[0], args[1], args[2]);
   if (fn === 'dangXuatMay') return dangXuatMay_(q.may);
   const ham = apiHam_();
