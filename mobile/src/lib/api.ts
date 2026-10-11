@@ -48,12 +48,22 @@ export type TraBaoHanhKQ = { q: string; tong: number; ds: MayBaoHanh[] };
 export type TongQuan = {
   user: NguoiDung; cuaHang: { ten: string; moTa: string }; homNay: string;
   ban: { don: number; tien: number }; thu: number; homQua: { don: number; tien: number }; ban7: { ngay: string; tien: number }[];
-  hopDong: { SoHD: string; TenDN: string; NgayHetHan: string; het: boolean; n: number; bao: number; quyetDinh: number; tuGiaHan: boolean }[];
-  dot: { SoHD: string; TenDN: string; Nhan: string; NgayDen: string; SoTien: number; quaHan: boolean; n: number }[];
-  donTre: { SoDH: string; TenKH: string; NgayGiao: string; TongCong: number }[];
+  hopDong: { SoHD: string; MaKH: string; TenDN: string; NgayHetHan: string; het: boolean; n: number; bao: number; quyetDinh: number; tuGiaHan: boolean }[];
+  dot: { SoHD: string; MaKH: string; TenDN: string; Nhan: string; NgayDen: string; SoTien: number; quaHan: boolean; n: number }[];
+  donTre: { SoDH: string; MaKH: string; TenKH: string; NgayGiao: string; TongCong: number }[];
   hang: { MaHH: string; TenHang: string; ton: number; toiThieu: number }[];
   soMuc: number; no: { soKhach: number; tong: number; top: { MaKH: string; TenKH: string; SDT: string; tien: number }[] };
 };
+
+/** chiTietTongQuan('ngay', ngày): đơn hàng và phiếu thu của một ngày; truoc / sau để lật ngày (sau rỗng khi là hôm nay) */
+export type ChiTietNgay = {
+  ngay: string; homNay: string; truoc: string; sau: string;
+  don: { SoDH: string; MaKH: string; TenKH: string; TongCong: number; daThu: number; TrangThai: string; gio: string }[];
+  thu: { SoPT: string; MaKH: string; TenKH: string; SoDH: string; SoTien: number; HinhThuc: string; GhiChu: string }[];
+  tong: { don: number; tien: number; thu: number; huy: number };
+};
+/** chiTietTongQuan('no'): mọi khách còn nợ, nhiều nhất trước */
+export type KhachNo = { tong: number; ds: { MaKH: string; TenKH: string; SDT: string; tien: number }[] };
 
 export type CauHinh = { hinhThuc: string[]; vat: number; quanTri: boolean; qr: { bin: string; nganHang: string; soTK: string; chuTK: string } | null };
 

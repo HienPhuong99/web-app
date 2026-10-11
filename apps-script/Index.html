@@ -154,8 +154,8 @@ table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; }
 .hello::before, .hello::after { content: ""; position: absolute; border-radius: 50%; background: rgba(255,255,255,.1); }
 .hello::before { width: 220px; height: 220px; right: -60px; top: -110px; }
 .hello::after { width: 140px; height: 140px; right: 200px; bottom: -95px; }
-.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 18px; }
-@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 18px; }
+@media (max-width: 1320px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .kpis { grid-template-columns: 1fr; } }
 .kpi { padding: 16px 18px; display: flex; gap: 14px; align-items: flex-start; cursor: pointer; transition: transform .35s var(--ease), box-shadow .35s var(--ease); }
 .kpi:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(16,24,40,.04), 0 10px 24px rgba(16,24,40,.08); }
@@ -187,6 +187,20 @@ table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; }
 .mini tr:last-child td { border-bottom: none; }
 .mini tr[data-go] { cursor: pointer; }
 .mini tr[data-go]:hover td:first-child { color: var(--brand); }
+/* Tổng quan động: kỳ thống kê, phần biểu đồ bấm được, bảng chi tiết */
+.ky-tq { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.ky-tq .seg { margin-bottom: 10px; flex-wrap: wrap; }
+.ky-tq .muted { font-size: 12.5px; margin-bottom: 10px; }
+.kpi:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.bars .col[data-ct] { cursor: pointer; border-radius: 8px; transition: background-color .2s; }
+.bars .col[data-ct]:hover { background: rgba(var(--brand-rgb), .06); }
+.donut circle[data-ct] { cursor: pointer; transition: stroke-width .2s var(--ease); }
+.donut circle[data-ct]:hover { stroke-width: 20; }
+.legend li[data-ct] { cursor: pointer; border-radius: 6px; padding: 2px 4px; margin: -2px -4px; }
+.legend li[data-ct]:hover { background: #f3f5f8; }
+.hello .hello-ct { color: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.card-h .more[data-ct] { cursor: pointer; }
+.ct-wrap { max-height: 58vh; }
 @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } .bars { gap: 4px; } }
 
 /* ---- Cài đặt ---- */
@@ -436,6 +450,7 @@ const IC = {
   chart: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
   clipboard: '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/>',
   clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
 };
 // Logo phuonghihi (lấy từ website cửa hàng)
@@ -766,95 +781,241 @@ const SX_NGAY = [['moi', 'Mới nhất trước', byDate], ['cu', 'Cũ nhất tr
 // Lọc theo một cột có ít giá trị (người lập, hình thức…): các giá trị đang có trong dữ liệu
 const locGiaTri = (id, nhan, vals) => ({ id, t: nhan, options: [['', nhan]].concat([...new Set(vals.filter(Boolean).map(String))].sort((a, b) => a.localeCompare(b, 'vi')).map(x => [x, x])) });
 
-// ===================== Tổng quan =====================
-function kpi(go, ic, bg, fg, label, value, sub) {
-  return `<div class="card kpi" data-go="${go}"><div class="ic" style="background:${bg};color:${fg}">${icon(ic)}</div>
+// key: số liệu bấm được (data-ct) để mở bảng chi tiết
+function kpi(key, ic, bg, fg, label, value, sub) {
+  return `<div class="card kpi" data-ct="${key}" role="button" tabindex="0" title="Bấm để xem chi tiết"><div class="ic" style="background:${bg};color:${fg}">${icon(ic)}</div>
     <div><div class="l">${label}</div><div class="v">${value}</div><div class="s">${sub}</div></div></div>`;
 }
-function donut(items, center, label, fmt) {
+// items: [{ label, value, color, k }]; key: tiền tố data-ct, mỗi phần và mỗi dòng chú thích bấm được (key + ':' + k)
+function donut(items, center, label, fmt, key) {
   const total = items.reduce((s, i) => s + i.value, 0), r = 46, C = 2 * Math.PI * r;
+  const ct = i => key && i.k !== undefined ? ` data-ct="${esc(key + ':' + i.k)}"` : '';
   let off = 0;
   const segs = items.filter(i => i.value > 0).map(i => {
     const len = i.value / total * C;
-    const s = `<circle r="${r}" cx="60" cy="60" fill="none" stroke="${i.color}" stroke-width="16" stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 60 60)"><title>${esc(i.label)}: ${esc(fmt(i.value))}</title></circle>`;
+    const s = `<circle r="${r}" cx="60" cy="60" fill="none" stroke="${i.color}" stroke-width="16" stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 60 60)"${ct(i)}><title>${esc(i.label)}: ${esc(fmt(i.value))}${key ? ' – bấm để xem' : ''}</title></circle>`;
     off += len; return s;
   }).join('');
   return `<div class="donut"><svg viewBox="0 0 120 120" width="150" height="150" role="img" aria-label="${esc(label)}"><circle r="${r}" cx="60" cy="60" fill="none" stroke="#f0f2f5" stroke-width="16"/>${segs}
     <text x="60" y="61" text-anchor="middle" class="d-num">${esc(center)}</text><text x="60" y="76" text-anchor="middle" class="d-lbl">${esc(label)}</text></svg>
-    <ul class="legend">${items.map(i => `<li><span style="background:${i.color}"></span>${esc(i.label)}<b>${esc(fmt(i.value))}</b></li>`).join('')}</ul></div>`;
+    <ul class="legend">${items.map(i => `<li${ct(i)}><span style="background:${i.color}"></span>${esc(i.label)}<b>${esc(fmt(i.value))}</b></li>`).join('')}</ul></div>`;
 }
 const miniTable = (rows, empty) => rows.length ? `<table class="mini">${rows.join('')}</table>` : `<p class="muted" style="margin:6px 0">${empty}</p>`;
 
+// Bảng chi tiết của một số liệu: các bản ghi tạo nên con số; bấm dòng để mở bản ghi, "Mở trong danh sách" mở danh sách đầy đủ có sẵn bộ lọc.
+// cfg: { tieuDe, moTa, cols: [{ t, f(r), cls }], rows (mảng, hoặc hàm trả Promise), foot(rows), mo(r), ds: { view, id, f, tab } }
+const CT_TOI_DA = 300;
+function xemChiTiet(cfg) {
+  const ve = rows => !rows.length ? '<p class="muted">Không có dữ liệu.</p>'
+    : `<div class="tbl-wrap ct-wrap"><table class="tbl${cfg.mo ? ' click' : ''}"><thead><tr>${cfg.cols.map(c => `<th class="${c.cls || ''}">${c.t}</th>`).join('')}</tr></thead>
+      <tbody>${rows.slice(0, CT_TOI_DA).map((r, i) => `<tr data-i="${i}">${cfg.cols.map(c => `<td class="${c.cls || ''}">${c.f(r)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
+      + (rows.length > CT_TOI_DA ? `<p class="muted">Hiện ${CT_TOI_DA} / ${rows.length} dòng; mở trong danh sách để xem hết.</p>` : '')
+      + (cfg.foot ? `<div class="foot">${cfg.foot(rows)}</div>` : '');
+  const m = modal({
+    title: cfg.tieuDe, wide: true,
+    body: (cfg.moTa ? `<p class="muted" style="margin-top:0">${cfg.moTa}</p>` : '') + '<div data-chitiet><p class="muted">Đang tải…</p></div>',
+    buttons: cfg.ds ? [{ t: 'Mở trong danh sách', ic: 'search', cls: 'primary', fn: () => { closeModal(); moDanhSach(cfg.ds); } }] : [],
+  });
+  const box = $('[data-chitiet]', m);
+  let rows = [];
+  Promise.resolve(typeof cfg.rows === 'function' ? cfg.rows() : cfg.rows)
+    .then(rs => { rows = rs || []; if (box.isConnected) box.innerHTML = ve(rows); })
+    .catch(e => { if (box.isConnected) box.innerHTML = `<p class="red">${esc(errMsg(e))}</p>`; });
+  box.onclick = run(async e => {
+    const tr = e.target.closest('tr[data-i]');
+    if (!tr || !cfg.mo) return;
+    closeModal(); await cfg.mo(rows[+tr.dataset.i]);
+  });
+}
+// Mở một danh sách với bộ lọc đặt sẵn (thay lựa chọn cũ của danh sách đó)
+function moDanhSach({ view, id, f, tab }) {
+  S.q[id] = { text: '', f: Object.assign({}, f) };
+  if (tab) S.q.congnoTab = tab;
+  go(view);
+}
+
+// ===================== Tổng quan (động: chọn kỳ, bấm số liệu nào cũng xem được chi tiết) =====================
+// Kỳ thống kê: [nhãn, () => [từ ngày, đến ngày]]. Kỳ trước để so sánh = cùng số ngày, liền trước.
+const ngayLocal = s => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
+const KY_TQ = {
+  thang: ['Tháng này', () => [today().slice(0, 8) + '01', today()]],
+  truoc: ['Tháng trước', () => { const d = new Date(); return [iso(new Date(d.getFullYear(), d.getMonth() - 1, 1)), iso(new Date(d.getFullYear(), d.getMonth(), 0))]; }],
+  quy: ['Quý này', () => { const d = new Date(); return [iso(new Date(d.getFullYear(), d.getMonth() - d.getMonth() % 3, 1)), today()]; }],
+  nam: ['Năm nay', () => [today().slice(0, 4) + '-01-01', today()]],
+  d30: ['30 ngày qua', () => { const d = new Date(); return [iso(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 29)), today()]; }],
+};
+function kyTruoc(tu, den) {
+  const a = ngayLocal(tu), n = Math.round((ngayLocal(den) - a) / 864e5) + 1;
+  return [iso(new Date(a.getFullYear(), a.getMonth(), a.getDate() - n)), iso(new Date(a.getFullYear(), a.getMonth(), a.getDate() - 1))];
+}
+const trongKy = (ds, tu, den) => ds.filter(x => { const n = String(x.Ngay).slice(0, 10); return n >= tu && n <= den; });
+const soSanh = (a, b) => b ? Math.round((a - b) / b * 100) : null;
+const tangGiam = p => p === null ? 'Kỳ trước chưa có số liệu' : `<span class="${p >= 0 ? 'green' : 'red'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p)}%</span> so với kỳ trước`;
+
+// Cột của các bảng chi tiết
+const CT_DON = [
+  { t: 'Số đơn', f: r => `<span class="code">${esc(r.SoDH)}</span>` }, { t: 'Ngày', f: r => dmy(r.Ngay) },
+  { t: 'Khách hàng', cls: 'wrap', f: r => `${esc(r.TenKH)}<span class="sub">${esc(r.SDT)}</span>` },
+  { t: 'Tổng cộng', cls: 'num', f: r => `<b>${money(r.TongCong)}</b>` }, { t: 'Đã thu', cls: 'num', f: r => money(daThu(r)) },
+  { t: 'Còn nợ', cls: 'num', f: r => conNo(r) ? `<b class="red">${money(conNo(r))}</b>` : '<span class="muted">0</span>' }, { t: 'Giao hàng', f: ttGiao },
+];
+const ctFootDon = rs => `<span>${rs.length} đơn</span><span>Doanh số <b>${money(sum(rs, r => r.TrangThai === 'Hủy' ? 0 : r.TongCong))} ₫</b></span><span>Đã thu <b class="green">${money(sum(rs, daThu))} ₫</b></span><span>Còn nợ <b class="red">${money(sum(rs, conNo))} ₫</b></span>`;
+const CT_THU = [
+  { t: 'Số phiếu', f: r => `<span class="code">${esc(r.SoPT)}</span>` }, { t: 'Ngày', f: r => dmy(r.Ngay) },
+  { t: 'Khách hàng', cls: 'wrap', f: r => `${esc(r.TenKH)}<span class="sub">${esc(r.GhiChu)}</span>` },
+  { t: 'Đơn hàng', f: r => esc(r.SoDH) || '<span class="muted">—</span>' }, { t: 'Hình thức', f: r => esc(r.HinhThuc) },
+  { t: 'Số tiền', cls: 'num', f: r => `<b class="green">${money(r.SoTien)}</b>` },
+];
+const ctFootThu = rs => { const ht = {}; rs.forEach(r => { ht[r.HinhThuc || 'Khác'] = (ht[r.HinhThuc || 'Khác'] || 0) + (+r.SoTien || 0); });
+  return `<span>${rs.length} phiếu</span>${Object.keys(ht).map(k => `<span>${esc(k)} <b>${money(ht[k])} ₫</b></span>`).join('')}<span>Tổng <b class="green">${money(sum(rs, r => r.SoTien))} ₫</b></span>`; };
+const CT_HANG = [
+  { t: 'Mặt hàng', cls: 'wrap', f: r => `<b>${esc(r.TenHang)}</b><span class="sub">${esc([r.MaHH, r.Nhom].filter(Boolean).join(' · '))}</span>` },
+  { t: 'Số lượng', cls: 'num', f: r => `${money(r.SoLuong)} ${esc(r.DVT || '')}` }, { t: 'Doanh số (chưa VAT)', cls: 'num', f: r => `<b>${money(r.ThanhTien)}</b>` },
+];
+
 function vHome(el) {
-  setTop('Tổng quan', 'Bảng điều khiển', [{ t: 'Tải lại', ic: 'refresh', fn: run(async () => { await loadAll(); render(); toast('Đã tải lại dữ liệu.'); }) }]);
-  const now = today(), m = now.slice(0, 7), d0 = new Date();
-  const prevM = iso(new Date(d0.getFullYear(), d0.getMonth() - 1, 1)).slice(0, 7);
+  setTop('Tổng quan', 'Bảng điều khiển', [{ t: 'Tải lại', ic: 'refresh', fn: run(async () => { await loadAll(); if (S.q.home) S.q.home.tk = null; render(); toast('Đã tải lại dữ liệu.'); }) }]);
+  const st = S.q.home || (S.q.home = { ky: 'thang' });
+  const [tenKy, layKy] = KY_TQ[st.ky] || KY_TQ.thang, [tu, den] = layKy(), [tu0, den0] = kyTruoc(tu, den);
+  const now = today(), d0 = new Date(), kyChu = tenKy.toLowerCase();
   const live = S.donHang.filter(d => d.TrangThai !== 'Hủy');
-  const inM = (l, mm) => l.filter(x => String(x.Ngay).startsWith(mm));
-  const dsThang = sum(inM(live, m), d => d.TongCong), dsTruoc = sum(inM(live, prevM), d => d.TongCong);
-  const thuThang = inM(S.thuTien, m);
+  const donKy = trongKy(live, tu, den), thuKy = trongKy(S.thuTien, tu, den), bgKy = trongKy(S.baoGia, tu, den);
+  const ds = sum(donKy, d => d.TongCong), dsTruoc = sum(trongKy(live, tu0, den0), d => d.TongCong);
+  const daThuKy = sum(thuKy, p => p.SoTien), thuTruoc = sum(trongKy(S.thuTien, tu0, den0), p => p.SoTien);
+  const chot = bgKy.filter(b => D.dhBG[b.SoBG]);
   const noList = Object.entries(D.noKH).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
   const choGiao = live.filter(d => d.TrangThai === 'Chờ giao' || d.TrangThai === 'Giao một phần')
     .sort((a, b) => String(a.NgayGiao || '9999').localeCompare(String(b.NgayGiao || '9999')));
   const quaHan = choGiao.filter(d => d.NgayGiao && d.NgayGiao < now);
-  const bgThang = inM(S.baoGia, m), chot = bgThang.filter(b => D.dhBG[b.SoBG]).length;
   const low = S.hang.filter(isLow);
   const hdHan = S.hopDong.map(h => ({ h, x: hanHD(h) })).filter(o => o.x).sort((a, b) => String(a.h.NgayHetHan).localeCompare(String(b.h.NgayHetHan)));
   const hdSapN = hdHan.filter(o => o.x.sap).length, hdHetN = hdHan.filter(o => o.x.het).length;
   const dotThu = dotCanThu(), hdTheoSo = {}; S.hopDong.forEach(h => { hdTheoSo[h.SoHD] = h; });
-  const pct = dsTruoc ? Math.round((dsThang - dsTruoc) / dsTruoc * 100) : null;
+  const khachCua = ma => S.khach.find(k => k.MaKH === ma) || { MaKH: ma, TenKH: ma, SDT: '' };
+
+  // Doanh số theo mặt hàng / nhóm hàng trong kỳ: hỏi máy chủ (cần dòng hàng), nhớ theo kỳ
+  const keyTK = tu + '|' + den;
+  if (!st.tk || st.tk.key !== keyTK) {
+    const tk = st.tk = { key: keyTK, data: null };
+    api('baoCaoHang', tu, den).then(r => { tk.data = r; }).catch(e => { tk.data = { topHang: [], theoNhom: [] }; toast(errMsg(e), 'err'); })
+      .then(() => { if (S.view === 'home' && st.tk === tk) render(); });
+  }
+  const tk = st.tk.data;
 
   const months = [];
   for (let i = 11; i >= 0; i--) months.push(iso(new Date(d0.getFullYear(), d0.getMonth() - i, 1)).slice(0, 7));
+  const inM = (l, mm) => l.filter(x => String(x.Ngay).startsWith(mm));
   const ds12 = months.map(mm => sum(inM(live, mm), d => d.TongCong)), thu12 = months.map(mm => sum(inM(S.thuTien, mm), p => p.SoTien));
   const max = Math.max(1, ...ds12, ...thu12);
+  const donTrongKy = trongKy(S.donHang, tu, den);
   const statuses = [['Chờ giao', '#f59e0b'], ['Giao một phần', '#3b82f6'], ['Đã giao', '#16a34a'], ['Hủy', '#cbd2dc']]
-    .map(([t, c]) => ({ label: t, value: S.donHang.filter(d => (d.TrangThai || 'Chờ giao') === t).length, color: c }));
+    .map(([t, c]) => ({ label: t, k: t, value: donTrongKy.filter(d => (d.TrangThai || 'Chờ giao') === t).length, color: c }));
   const COLORS = [S.cuaHang.mau.brand, '#f59e0b', '#3b82f6', '#16a34a', '#8b5cf6', '#0891b2', '#ec4899', '#94a3b8'];
-  const nhom = S.thongKe.theoNhom.slice(0, 7), khac = sum(S.thongKe.theoNhom.slice(7), x => x.tien);
-  if (khac) nhom.push({ ten: 'Nhóm khác', tien: khac });
+  const theoNhom = tk ? tk.theoNhom : [], nhom = theoNhom.slice(0, 7).map(x => ({ ten: x.ten, tien: x.tien, k: x.ten })), khac = sum(theoNhom.slice(7), x => x.tien);
+  if (khac) nhom.push({ ten: 'Nhóm khác', tien: khac, k: '*khac' });
   const thu = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'][d0.getDay()];
+  const tenThang = mm => `tháng ${+mm.slice(5)}/${mm.slice(0, 4)}`;
+
+  // Chi tiết từng số liệu (data-ct): [loại, tham số]
+  const CT = {
+    ds: () => ({ tieuDe: `Doanh số ${kyChu}: ${money(ds)} ₫`, moTa: `Đơn hàng từ ${dmy(tu)} đến ${dmy(den)}, không gồm đơn đã hủy. Kỳ trước (${dmy(tu0)} – ${dmy(den0)}): ${money(dsTruoc)} ₫.`,
+      cols: CT_DON, rows: donKy, foot: ctFootDon, mo: r => openDoc('DH', r), ds: { view: 'donhang', id: 'donhang', f: { tt: 'khongHuy', ngayFrom: tu, ngayTo: den } } }),
+    thu: () => ({ tieuDe: `Đã thu ${kyChu}: ${money(daThuKy)} ₫`, moTa: `Phiếu thu từ ${dmy(tu)} đến ${dmy(den)}. Kỳ trước: ${money(thuTruoc)} ₫.`,
+      cols: CT_THU, rows: thuKy, foot: ctFootThu, mo: r => openThu(r), ds: { view: 'congno', tab: 'pt', id: 'phieuthu', f: { ngayFrom: tu, ngayTo: den } } }),
+    no: () => ({ tieuDe: `Công nợ phải thu: ${money(sum(noList, x => x[1]))} ₫`, moTa: `${noList.length} khách còn nợ, nhiều nhất trước. Nợ = tổng đơn (không gồm đơn hủy) trừ tiền đã thu.`,
+      cols: [{ t: 'Khách hàng', cls: 'wrap', f: r => `<b>${esc(r.k.TenKH)}</b><span class="sub">${esc(r.k.MaKH)} · ${esc(r.k.SDT)}</span>` },
+        { t: 'Tổng mua', cls: 'num', f: r => money(D.muaKH[r.k.MaKH] || 0) }, { t: 'Đã trả', cls: 'num', f: r => money(D.thuKH[r.k.MaKH] || 0) },
+        { t: 'Còn nợ', cls: 'num', f: r => `<b class="red">${money(r.no)}</b>` }],
+      rows: noList.map(([ma, v]) => ({ k: khachCua(ma), no: v })), foot: rs => `<span>${rs.length} khách</span><span>Tổng còn nợ <b class="red">${money(sum(rs, r => r.no))} ₫</b></span>`,
+      mo: r => openKhach(S.khach.find(k => k.MaKH === r.k.MaKH)), ds: { view: 'congno', tab: 'kh', id: 'congno', f: { loc: 'no' } } }),
+    giao: () => ({ tieuDe: `Đơn chờ giao: ${choGiao.length}`, moTa: quaHan.length ? `${quaHan.length} đơn đã quá ngày hẹn giao (tô đỏ). Hẹn sớm nhất trước.` : 'Hẹn giao sớm nhất trước.',
+      cols: CT_DON.slice(0, 3).concat([{ t: 'Hẹn giao', f: r => r.NgayGiao ? `<span class="${r.NgayGiao < now ? 'red' : ''}">${dmy(r.NgayGiao)}</span>` : '<span class="muted">Chưa hẹn</span>' }], CT_DON.slice(3)),
+      rows: choGiao, foot: ctFootDon, mo: r => openDoc('DH', r), ds: { view: 'donhang', id: 'donhang', f: { tt: 'chua' } } }),
+    bg: () => ({ tieuDe: `Báo giá ${kyChu}: ${bgKy.length}`, moTa: `Đã chốt thành đơn ${chot.length}/${bgKy.length}${bgKy.length ? ` (${Math.round(chot.length / bgKy.length * 100)}%)` : ''}.`,
+      cols: [{ t: 'Số báo giá', f: r => `<span class="code">${esc(r.SoBG)}</span>` }, { t: 'Ngày', f: r => dmy(r.Ngay) },
+        { t: 'Khách hàng', cls: 'wrap', f: r => `${esc(r.TenKH)}<span class="sub">${esc(r.SDT)}</span>` }, { t: 'Tổng cộng', cls: 'num', f: r => `<b>${money(r.TongCong)}</b>` },
+        { t: 'Trạng thái', f: r => D.dhBG[r.SoBG] ? badge('Đã chốt · ' + D.dhBG[r.SoBG], 'b-green') : badge('Chưa chốt', 'b-gray') }],
+      rows: bgKy, foot: rs => `<span>${rs.length} báo giá</span><span>Giá trị <b>${money(sum(rs, r => r.TongCong))} ₫</b></span><span>Đã chốt <b class="green">${money(sum(rs.filter(r => D.dhBG[r.SoBG]), r => r.TongCong))} ₫</b></span>`,
+      mo: r => openDoc('BG', r), ds: { view: 'baogia', id: 'baogia', f: { ngayFrom: tu, ngayTo: den } } }),
+    ton: () => ({ tieuDe: `Hàng sắp hết: ${low.length}`, moTa: 'Tồn kho bằng hoặc dưới mức tối thiểu. Bấm một dòng để xem thẻ kho.',
+      cols: [{ t: 'Mặt hàng', cls: 'wrap', f: r => `<b>${esc(r.TenHang)}</b><span class="sub">${esc([r.MaHH, r.Model].filter(Boolean).join(' · '))}</span>` },
+        { t: 'Tồn', cls: 'num', f: r => `<b class="${tonOf(r.MaHH) <= 0 ? 'red' : 'warn'}">${money(tonOf(r.MaHH))}</b>` }, { t: 'Tối thiểu', cls: 'num', f: r => money(+r.TonToiThieu || 0) },
+        { t: 'Nên nhập thêm', cls: 'num', f: r => money(Math.max(0, (+r.TonToiThieu || 0) * 2 - tonOf(r.MaHH))) }, { t: 'Tình trạng', f: tonBadge }],
+      rows: low.slice().sort((a, b) => (tonOf(a.MaHH) - (+a.TonToiThieu || 0)) - (tonOf(b.MaHH) - (+b.TonToiThieu || 0))),
+      foot: rs => `<span>${rs.length} mặt hàng</span><span>Hết hàng <b class="red">${rs.filter(r => tonOf(r.MaHH) <= 0).length}</b></span>`,
+      mo: r => openTheKho(r), ds: { view: 'ton', id: 'ton', f: { loc: 'it' } } }),
+    hd: () => ({ tieuDe: `Hợp đồng cần chú ý: ${hdHan.length}`, moTa: `${hdSapN} sắp hết hạn, ${hdHetN} đã hết hạn (chỉ tính hợp đồng đang hiệu lực).`,
+      cols: [{ t: 'Số hợp đồng', f: o => `<span class="code">${esc(o.h.SoHD)}</span>` }, { t: 'Khách hàng (bên A)', cls: 'wrap', f: o => `<b>${esc(o.h.TenDN)}</b><span class="sub">${esc(o.h.LoaiHD)}</span>` },
+        { t: 'Hết hạn', f: o => dmy(o.h.NgayHetHan) }, { t: 'Còn lại', f: o => o.x.het ? `<b class="red">Quá ${o.x.n} ngày</b>` : o.x.n ? `<b class="warn">Còn ${o.x.n} ngày</b>` : '<b class="warn">Hôm nay</b>' },
+        { t: 'Giá trị', cls: 'num', f: o => money(o.h.TongCong) }],
+      rows: hdHan, mo: o => openHD(o.h), ds: { view: 'hdhan', id: 'hdhan', f: {} } }),
+    dot: () => ({ tieuDe: `Đợt thanh toán cần thu: ${dotThu.length}`, moTa: 'Quá hạn hoặc đến hạn trong 7 ngày.',
+      cols: [{ t: 'Hạn', f: r => dmy(r.NgayDen) }, { t: 'Hợp đồng', cls: 'wrap', f: r => `<span class="code">${esc(r.SoHD)}</span><span class="sub">${esc((hdTheoSo[r.SoHD] || {}).TenDN)}</span>` },
+        { t: 'Nội dung', f: r => esc(r.Nhan) }, { t: 'Số tiền', cls: 'num', f: r => `<b>${money(r.SoTien)}</b>` }, { t: 'Tình trạng', f: ttDot }],
+      rows: dotThu, foot: rs => `<span>${rs.length} đợt</span><span>Cần thu <b class="red">${money(sum(rs, r => r.SoTien))} ₫</b></span>`,
+      mo: r => openHD(hdTheoSo[r.SoHD]), ds: { view: 'hdlich', id: 'hdlich', f: { loc: 'can' } } }),
+    thang: mm => { const don = inM(live, mm), pt = inM(S.thuTien, mm), cuoi = iso(new Date(+mm.slice(0, 4), +mm.slice(5), 0));
+      return { tieuDe: `Doanh số ${tenThang(mm)}: ${money(sum(don, d => d.TongCong))} ₫`, moTa: `${don.length} đơn hàng (không gồm đơn hủy); đã thu trong tháng ${money(sum(pt, p => p.SoTien))} ₫ (${pt.length} phiếu thu).`,
+        cols: CT_DON, rows: don, foot: ctFootDon, mo: r => openDoc('DH', r), ds: { view: 'donhang', id: 'donhang', f: { tt: 'khongHuy', ngayFrom: mm + '-01', ngayTo: cuoi } } }; },
+    tt: t => { const rs = donTrongKy.filter(d => (d.TrangThai || 'Chờ giao') === t);
+      return { tieuDe: `Đơn "${t}" ${kyChu}: ${rs.length}`, moTa: `Đơn hàng từ ${dmy(tu)} đến ${dmy(den)} đang ở trạng thái ${t}.`, cols: CT_DON, rows: rs, foot: ctFootDon,
+        mo: r => openDoc('DH', r), ds: { view: 'donhang', id: 'donhang', f: { tt: t, ngayFrom: tu, ngayTo: den } } }; },
+    nhom: k => { const khacNhom = new Set(theoNhom.slice(0, 7).map(x => x.ten)), rs = (tk ? tk.topHang : []).filter(h => k === '*khac' ? !khacNhom.has(h.Nhom) : h.Nhom === k);
+      const coNhom = k !== '*khac' && S.hang.some(h => h.NhomHang === k);
+      return { tieuDe: `Doanh số nhóm "${k === '*khac' ? 'Nhóm khác' : k}" ${kyChu}: ${money(sum(rs, r => r.ThanhTien))} ₫`, moTa: `Từ ${dmy(tu)} đến ${dmy(den)}, chưa VAT, không gồm đơn hủy. Bán chạy nhất trước.`,
+        cols: CT_HANG, rows: rs, foot: r => `<span>${r.length} mặt hàng</span><span>Số lượng <b>${money(sum(r, x => x.SoLuong))}</b></span><span>Doanh số <b>${money(sum(r, x => x.ThanhTien))} ₫</b></span>`,
+        mo: r => { const h = S.hang.find(x => x.MaHH === r.MaHH); if (h) openHang(h); }, ds: coNhom ? { view: 'hang', id: 'hang', f: { nhom: k } } : null }; },
+    banChay: () => ({ tieuDe: `Bán chạy ${kyChu}`, moTa: `Từ ${dmy(tu)} đến ${dmy(den)}, theo doanh số chưa VAT, không gồm đơn hủy.`, cols: CT_HANG, rows: tk ? tk.topHang : [],
+      foot: r => `<span>${r.length} mặt hàng</span><span>Doanh số <b>${money(sum(r, x => x.ThanhTien))} ₫</b></span>`,
+      mo: r => { const h = S.hang.find(x => x.MaHH === r.MaHH); if (h) openHang(h); } }),
+  };
 
   el.innerHTML = `
-  <div class="hello"><div><h2>Xin chào, ${esc(S.user.ten)}</h2><p>${thu}, ${dmy(now)} · ${choGiao.length} đơn chờ giao · ${noList.length} khách còn nợ</p></div>
+  <div class="hello"><div><h2>Xin chào, ${esc(S.user.ten)}</h2><p>${thu}, ${dmy(now)} · <a class="hello-ct" data-ct="giao">${choGiao.length} đơn chờ giao</a> · <a class="hello-ct" data-ct="no">${noList.length} khách còn nợ</a></p></div>
     <div class="quick"><button class="btn" data-q="BG">${icon('file')}Lập báo giá</button><button class="btn" data-q="DH">${icon('cart')}Tạo đơn hàng</button>
       <button class="btn" data-q="PT">${icon('card')}Thu tiền</button><button class="btn" data-q="NK">${icon('down')}Nhập kho</button></div></div>
+  <div class="ky-tq"><div class="seg" role="tablist" aria-label="Kỳ thống kê">${Object.keys(KY_TQ).map(k => `<button data-ky="${k}" class="${st.ky === k ? 'on' : ''}" role="tab" aria-selected="${st.ky === k}">${KY_TQ[k][0]}</button>`).join('')}</div>
+    <span class="muted">${dmy(tu)} – ${dmy(den)} · bấm vào số liệu bất kỳ để xem chi tiết</span></div>
   <div class="kpis">
-    ${kpi('donhang', 'trend', S.cuaHang.mau.brand50, S.cuaHang.mau.brand, 'Doanh số tháng ' + (+m.slice(5)), money(dsThang) + ' ₫', pct === null ? 'Tháng trước chưa có đơn' : `<span class="${pct >= 0 ? 'green' : 'red'}">${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct)}%</span> so với tháng trước`)}
-    ${kpi('congno', 'card', '#e7f6ec', '#16a34a', 'Đã thu tháng này', money(sum(thuThang, p => p.SoTien)) + ' ₫', thuThang.length + ' phiếu thu')}
-    ${kpi('congno', 'alert', '#fff3df', '#d97706', 'Công nợ phải thu', money(sum(noList, x => x[1])) + ' ₫', noList.length + ' khách còn nợ')}
-    ${kpi('donhang', 'truck', '#e8f0fe', '#2563eb', 'Đơn chờ giao', choGiao.length, quaHan.length ? `<span class="red">${quaHan.length} đơn quá hẹn giao</span>` : 'Không có đơn quá hẹn')}
-    ${kpi('baogia', 'file', '#f1ebfe', '#7c3aed', 'Báo giá tháng này', bgThang.length, bgThang.length ? `Đã chốt ${chot}/${bgThang.length} (${Math.round(chot / bgThang.length * 100)}%)` : 'Chưa có báo giá')}
+    ${kpi('ds', 'trend', S.cuaHang.mau.brand50, S.cuaHang.mau.brand, 'Doanh số ' + kyChu, money(ds) + ' ₫', `${donKy.length} đơn · ${tangGiam(soSanh(ds, dsTruoc))}`)}
+    ${kpi('thu', 'card', '#e7f6ec', '#16a34a', 'Đã thu ' + kyChu, money(daThuKy) + ' ₫', `${thuKy.length} phiếu thu · ${tangGiam(soSanh(daThuKy, thuTruoc))}`)}
+    ${kpi('no', 'alert', '#fff3df', '#d97706', 'Công nợ phải thu', money(sum(noList, x => x[1])) + ' ₫', noList.length + ' khách còn nợ')}
+    ${kpi('giao', 'truck', '#e8f0fe', '#2563eb', 'Đơn chờ giao', choGiao.length, quaHan.length ? `<span class="red">${quaHan.length} đơn quá hẹn giao</span>` : 'Không có đơn quá hẹn')}
+    ${kpi('bg', 'file', '#f1ebfe', '#7c3aed', 'Báo giá ' + kyChu, bgKy.length, bgKy.length ? `Đã chốt ${chot.length}/${bgKy.length} (${Math.round(chot.length / bgKy.length * 100)}%)` : 'Chưa có báo giá')}
     ${kpi('ton', 'layers', '#e0f5f9', '#0891b2', 'Hàng sắp hết', low.length, low.length ? 'Cần nhập thêm' : 'Tồn kho ổn định')}
-    ${kpi('hdhan', 'clipboard', '#fdecea', '#b42318', 'Hợp đồng sắp hết hạn', hdSapN, hdHetN ? `<span class="red">${hdHetN} hợp đồng đã hết hạn</span>` : `Báo trước ${HD_SAP} ngày, chưa có hợp đồng quá hạn`)}
+    ${kpi('hd', 'clipboard', '#fdecea', '#b42318', 'Hợp đồng sắp hết hạn', hdSapN, hdHetN ? `<span class="red">${hdHetN} hợp đồng đã hết hạn</span>` : `Báo trước ${HD_SAP} ngày, chưa có hợp đồng quá hạn`)}
+    ${kpi('dot', 'calendar', '#eef2ff', '#4f46e5', 'Đợt thanh toán cần thu', dotThu.length, dotThu.length ? money(sum(dotThu, r => r.SoTien)) + ' ₫ · quá hạn hoặc đến hạn 7 ngày' : 'Không có đợt đến hạn')}
   </div>
   <div class="card" style="margin-bottom:16px"><div class="card-h"><h3>Doanh số và tiền thu 12 tháng</h3>
     <div class="chart-legend"><span style="--c:var(--brand)">Doanh số (gồm VAT)</span><span style="--c:#16a34a">Đã thu</span></div></div>
-    <div class="card-b"><div class="bars">${months.map((mm, i) => `<div class="col${mm === m ? ' now' : ''}" title="Tháng ${+mm.slice(5)}/${mm.slice(0, 4)} – doanh số ${money(ds12[i])} ₫, đã thu ${money(thu12[i])} ₫">
+    <div class="card-b"><div class="bars">${months.map((mm, i) => `<div class="col${mm === now.slice(0, 7) ? ' now' : ''}" data-ct="thang:${mm}" role="button" title="${tenThang(mm)} – doanh số ${money(ds12[i])} ₫, đã thu ${money(thu12[i])} ₫. Bấm để xem đơn hàng.">
       <div class="pair">${[[ds12[i], 'var(--brand)'], [thu12[i], '#16a34a']].map(([v, c]) => `<i style="height:${(v / max * 100).toFixed(1)}%;background:${c}${v ? '' : ';min-height:0'}"></i>`).join('')}</div><span>T${+mm.slice(5)}</span></div>`).join('')}</div></div></div>
   <div class="grid2">
-    <div class="card"><div class="card-h"><h3>Đơn hàng theo trạng thái</h3><a class="more" data-go="donhang">Xem đơn hàng</a></div>
-      <div class="card-b">${donut(statuses, String(S.donHang.length), 'đơn hàng', v => String(v))}</div></div>
-    <div class="card"><div class="card-h"><h3>Doanh số theo nhóm hàng</h3><span class="muted" style="margin-left:auto;font-size:12.5px">90 ngày · chưa VAT</span></div>
-      <div class="card-b">${nhom.length ? donut(nhom.map((x, i) => ({ label: x.ten, value: x.tien, color: COLORS[i % COLORS.length] })), short(sum(nhom, x => x.tien)), 'doanh số', short) : '<p class="muted">Chưa có đơn hàng trong 90 ngày.</p>'}</div></div>
+    <div class="card"><div class="card-h"><h3>Đơn hàng theo trạng thái</h3><span class="muted" style="margin-left:auto;font-size:12.5px">${esc(tenKy)}</span></div>
+      <div class="card-b">${donut(statuses, String(donTrongKy.length), 'đơn hàng', v => String(v), 'tt')}</div></div>
+    <div class="card"><div class="card-h"><h3>Doanh số theo nhóm hàng</h3><span class="muted" style="margin-left:auto;font-size:12.5px">${esc(tenKy)} · chưa VAT</span></div>
+      <div class="card-b">${!tk ? '<p class="muted">Đang tải…</p>' : nhom.length ? donut(nhom.map((x, i) => ({ label: x.ten, k: x.k, value: x.tien, color: COLORS[i % COLORS.length] })), short(sum(nhom, x => x.tien)), 'doanh số', short, 'nhom') : '<p class="muted">Chưa có đơn hàng trong kỳ.</p>'}</div></div>
   </div>
   <div class="grid2">
-    <div class="card"><div class="card-h"><h3>Đơn cần giao</h3><a class="more" data-go="donhang">Tất cả</a></div><div class="card-b">
+    <div class="card"><div class="card-h"><h3>Đơn cần giao</h3><a class="more" data-ct="giao">Xem ${choGiao.length} đơn</a></div><div class="card-b">
       ${miniTable(choGiao.slice(0, 6).map(d => `<tr data-go="dh:${esc(d.SoDH)}"><td><b>${esc(d.SoDH)}</b><span class="sub">${esc(d.TenKH)}</span></td>
         <td class="num">${d.NgayGiao ? `<span class="${d.NgayGiao < now ? 'red' : ''}">Hẹn ${dmy(d.NgayGiao)}</span>` : '<span class="muted">Chưa hẹn</span>'}<span class="sub">${ttGiao(d)}</span></td></tr>`), 'Không có đơn nào chờ giao.')}</div></div>
-    <div class="card"><div class="card-h"><h3>Khách còn nợ nhiều nhất</h3><a class="more" data-go="congno">Công nợ</a></div><div class="card-b">
-      ${miniTable(noList.slice(0, 6).map(([ma, v]) => { const k = S.khach.find(x => x.MaKH === ma) || { TenKH: ma }; return `<tr data-go="kh:${esc(ma)}"><td><b>${esc(k.TenKH)}</b><span class="sub">${esc(k.SDT || '')}</span></td><td class="num red"><b>${money(v)} ₫</b></td></tr>`; }), 'Không có khách nào còn nợ.')}</div></div>
-    <div class="card"><div class="card-h"><h3>Hàng sắp hết</h3><a class="more" data-go="ton">Tồn kho</a></div><div class="card-b">
+    <div class="card"><div class="card-h"><h3>Khách còn nợ nhiều nhất</h3><a class="more" data-ct="no">Xem ${noList.length} khách</a></div><div class="card-b">
+      ${miniTable(noList.slice(0, 6).map(([ma, v]) => { const k = khachCua(ma); return `<tr data-go="kh:${esc(ma)}"><td><b>${esc(k.TenKH)}</b><span class="sub">${esc(k.SDT || '')}</span></td><td class="num red"><b>${money(v)} ₫</b></td></tr>`; }), 'Không có khách nào còn nợ.')}</div></div>
+    <div class="card"><div class="card-h"><h3>Hàng sắp hết</h3><a class="more" data-ct="ton">Xem ${low.length} mặt hàng</a></div><div class="card-b">
       ${miniTable(low.slice(0, 6).map(h => `<tr data-go="hh:${esc(h.MaHH)}"><td><b>${esc(h.TenHang)}</b><span class="sub">${esc([h.MaHH, h.Model].filter(Boolean).join(' · '))}</span></td><td class="num">Tồn <b class="red">${money(tonOf(h.MaHH))}</b><span class="sub">tối thiểu ${money(+h.TonToiThieu || 0)}</span></td></tr>`), 'Chưa có mặt hàng nào dưới mức tồn tối thiểu.')}</div></div>
-    <div class="card"><div class="card-h"><h3>Hợp đồng cần chú ý</h3><a class="more" data-go="hdhan">Tất cả</a></div><div class="card-b">
+    <div class="card"><div class="card-h"><h3>Hợp đồng cần chú ý</h3><a class="more" data-ct="hd">Xem ${hdHan.length} hợp đồng</a></div><div class="card-b">
       ${miniTable(hdHan.slice(0, 6).map(o => `<tr data-go="hd:${esc(o.h.SoHD)}"><td><b>${esc(o.h.SoHD)}</b><span class="sub">${esc(o.h.TenDN)}</span></td><td class="num">${o.x.het ? `<span class="red">Quá ${o.x.n} ngày</span>` : o.x.n ? `Còn ${o.x.n} ngày` : 'Hết hạn hôm nay'}<span class="sub">${dmy(o.h.NgayHetHan)}</span></td></tr>`), 'Không có hợp đồng nào sắp hết hạn.')}</div></div>
-    <div class="card"><div class="card-h"><h3>Đợt thanh toán cần thu</h3><a class="more" data-go="hdlich">Tất cả</a></div><div class="card-b">
+    <div class="card"><div class="card-h"><h3>Đợt thanh toán cần thu</h3><a class="more" data-ct="dot">Xem ${dotThu.length} đợt</a></div><div class="card-b">
       ${miniTable(dotThu.slice(0, 6).map(r => `<tr data-go="hd:${esc(r.SoHD)}"><td><b>${esc(r.Nhan)} · ${esc(r.SoHD)}</b><span class="sub">${esc((hdTheoSo[r.SoHD] || {}).TenDN)}</span></td><td class="num">${money(r.SoTien)} ₫<span class="sub">${trangThaiDot(r) === 'quahan' ? `<span class="red">Quá ${-dotConLai(r)} ngày</span>` : dotConLai(r) ? `Còn ${dotConLai(r)} ngày` : 'Hôm nay'}</span></td></tr>`), 'Không có đợt nào quá hạn hoặc đến hạn trong 7 ngày.')}</div></div>
-    <div class="card"><div class="card-h"><h3>Bán chạy 90 ngày</h3><a class="more" data-go="hang">Hàng hóa</a></div><div class="card-b">
-      ${miniTable(S.thongKe.topHang.slice(0, 6).map(h => `<tr${h.MaHH ? ` data-go="hh:${esc(h.MaHH)}"` : ''}><td><b>${esc(h.TenHang)}</b><span class="sub">${money(h.SoLuong)} ${esc(h.DVT)}</span></td><td class="num">${money(h.ThanhTien)} ₫</td></tr>`), 'Chưa có đơn hàng trong 90 ngày.')}</div></div>
+    <div class="card"><div class="card-h"><h3>Bán chạy · ${esc(kyChu)}</h3><a class="more" data-ct="banChay">Xem tất cả</a></div><div class="card-b">
+      ${!tk ? '<p class="muted">Đang tải…</p>' : miniTable(tk.topHang.slice(0, 6).map(h => `<tr${h.MaHH ? ` data-go="hh:${esc(h.MaHH)}"` : ''}><td><b>${esc(h.TenHang)}</b><span class="sub">${money(h.SoLuong)} ${esc(h.DVT)}</span></td><td class="num">${money(h.ThanhTien)} ₫</td></tr>`), 'Chưa có đơn hàng trong kỳ.')}</div></div>
   </div>`;
+  const moCT = key => { const i = key.indexOf(':'), loai = i < 0 ? key : key.slice(0, i), ts = i < 0 ? undefined : key.slice(i + 1); if (CT[loai]) xemChiTiet(CT[loai](ts)); };
   el.onclick = run(async e => {
-    const q = e.target.closest('[data-q]'), g = e.target.closest('[data-go]');
+    const ky = e.target.closest('[data-ky]'), ct = e.target.closest('[data-ct]'), q = e.target.closest('[data-q]'), g = e.target.closest('[data-go]');
+    if (ky) { st.ky = ky.dataset.ky; render(); return; }
+    if (ct) return moCT(ct.dataset.ct);
     if (q) return ({ BG: () => newDoc('BG'), DH: () => newDoc('DH'), PT: () => openThu(), NK: () => newDoc('NK') })[q.dataset.q]();
     if (!g) return;
     const [kind, id] = g.dataset.go.split(':');
@@ -864,6 +1025,7 @@ function vHome(el) {
     else if (kind === 'hh') { const h = S.hang.find(x => x.MaHH === id); if (h) openHang(h); }
     else go(kind);
   });
+  el.onkeydown = e => { const ct = e.target.closest && e.target.closest('.kpi[data-ct]'); if (ct && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); moCT(ct.dataset.ct); } };
 }
 
 // ===================== Báo giá, đơn hàng =====================
@@ -896,14 +1058,14 @@ function vDonHang(el) {
   listCard(el, {
     id: 'donhang', ph: 'Tìm số đơn, khách hàng, SĐT…',
     filters: [
-      { id: 'tt', options: [['', 'Mọi trạng thái giao'], ['chua', 'Chưa giao xong'], ['quahan', 'Quá hẹn giao'], ['Chờ giao', 'Chờ giao'], ['Giao một phần', 'Giao một phần'], ['Đã giao', 'Đã giao'], ['Hủy', 'Đã hủy']] },
+      { id: 'tt', options: [['', 'Mọi trạng thái giao'], ['khongHuy', 'Trừ đơn đã hủy'], ['chua', 'Chưa giao xong'], ['quahan', 'Quá hẹn giao'], ['Chờ giao', 'Chờ giao'], ['Giao một phần', 'Giao một phần'], ['Đã giao', 'Đã giao'], ['Hủy', 'Đã hủy']] },
       { id: 'thu', options: [['', 'Mọi tình trạng thu'], ['no', 'Còn nợ'], ['chuaThu', 'Chưa thu đồng nào'], ['du', 'Đã thu đủ']] },
       locGiaTri('nguoi', 'Mọi người lập', S.donHang.map(r => r.NguoiTao)),
       { id: 'ngay', type: 'dates' },
     ],
     filter: (r, f) => {
       const chua = r.TrangThai === 'Chờ giao' || r.TrangThai === 'Giao một phần';
-      return (!f.tt || (f.tt === 'chua' ? chua : f.tt === 'quahan' ? chua && !!r.NgayGiao && r.NgayGiao < now : r.TrangThai === f.tt))
+      return (!f.tt || (f.tt === 'chua' ? chua : f.tt === 'khongHuy' ? r.TrangThai !== 'Hủy' : f.tt === 'quahan' ? chua && !!r.NgayGiao && r.NgayGiao < now : r.TrangThai === f.tt))
         && (!f.thu || (f.thu === 'no' ? conNo(r) > 0 : f.thu === 'chuaThu' ? r.TrangThai !== 'Hủy' && daThu(r) <= 0 && +r.TongCong > 0 : r.TrangThai !== 'Hủy' && conNo(r) === 0))
         && (!f.nguoi || r.NguoiTao === f.nguoi) && inRange(r.Ngay, f, 'ngay');
     },
