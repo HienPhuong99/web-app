@@ -268,6 +268,7 @@ table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; }
 .lines-wrap { overflow: auto; border-top: 1px solid var(--line); }
 table.lines { width: 100%; border-collapse: collapse; min-width: 1040px; }
 table.lines.gon { min-width: 900px; } /* chứng từ: vừa màn 1280px có thanh bên, không phải cuộn ngang */
+table.lines.hd { min-width: 980px; } /* hợp đồng */
 /* Điện thoại: mỗi dòng hàng là một thẻ (tên cả hàng, các ô khác hai cột có nhãn nhỏ), nút xóa ở góc */
 @media (max-width: 600px) {
   table.lines.gon { min-width: 0; }
@@ -1774,9 +1775,12 @@ function drawLines(el) {
       <td><input data-f="DonGia" class="num money" inputmode="numeric" value="${money(l.DonGia)}" aria-label="Đơn giá dòng ${i + 1}"></td>
       <td class="c num" data-c="ThanhTien">${l.TenHang ? money(lineTotal(l)) : ''}</td>${giao}${rm}</tr>`;
   }).join('');
-  // nhãn cột cho từng ô: điện thoại hiện mỗi dòng thành một thẻ có nhãn (CSS table.lines.gon), không phải vuốt ngang bảng rộng
-  const nhan = [...el.querySelectorAll('table.lines thead th')].map(th => th.textContent.trim());
-  el.querySelectorAll('table.lines tbody tr').forEach(tr => [...tr.children].forEach((td, j) => { if (nhan[j]) td.dataset.lb = nhan[j]; }));
+  ganNhanCot($('tbody', el));
+}
+// Nhãn cột cho từng ô: điện thoại hiện mỗi dòng thành một thẻ có nhãn (CSS table.lines.gon), không phải vuốt ngang bảng rộng
+function ganNhanCot(tbody) {
+  const nhan = [...tbody.closest('table').querySelectorAll('thead th')].map(th => th.textContent.trim());
+  tbody.querySelectorAll('tr').forEach(tr => [...tr.children].forEach((td, j) => { if (nhan[j]) td.dataset.lb = nhan[j]; }));
 }
 
 function drawTotals(el) {
@@ -2508,7 +2512,7 @@ function vHD(el) {
     <p class="muted full" style="grid-column:1/-1;margin:0;font-size:12.5px">Chỉ ghi số CCCD/CMND khi hợp đồng cần (vd. thu mua máy cũ, bán cho khách cá nhân). Hãy báo mục đích cho khách và xin sự đồng ý trước khi ghi (Nghị định 13/2023/NĐ-CP); mẫu hợp đồng đã có điều khoản đồng ý xử lý dữ liệu cá nhân.</p>
   </div></div>
   <div class="card" style="margin-top:16px"><div class="card-h"><h3>3. Bảng hàng hóa</h3>${khoa ? '<span class="muted" style="margin-left:auto;font-size:12.5px">Hợp đồng đã hiệu lực: chỉ quản trị sửa hàng và số tiền</span>' : ''}</div>
-    <div class="lines-wrap"><table class="lines" style="min-width:980px"><thead><tr><th style="width:40px">#</th><th>Hàng hóa, dịch vụ</th><th style="width:230px">IMEI / Serial</th><th style="width:90px">ĐVT</th><th class="num" style="width:90px">SL</th><th class="num" style="width:130px">Đơn giá</th><th class="num" style="width:140px">Thành tiền</th><th style="width:44px"></th></tr></thead><tbody></tbody></table></div>
+    <div class="lines-wrap"><table class="lines gon hd"><thead><tr><th style="width:40px">#</th><th>Hàng hóa, dịch vụ</th><th style="width:230px">IMEI / Serial</th><th style="width:90px">ĐVT</th><th class="num" style="width:90px">SL</th><th class="num" style="width:130px">Đơn giá</th><th class="num" style="width:140px">Thành tiền</th><th style="width:44px"></th></tr></thead><tbody></tbody></table></div>
     <div class="doc-foot">${khoa ? '' : `<button class="btn sm" data-act="addline">${icon('plus')}Thêm dòng</button>`}
       <span class="hint">Gõ tên hoặc model để chọn hàng, đơn giá tự lấy từ bảng giá (giá sỉ nếu có, không thì giá lẻ) và sửa được. Hợp đồng không có hàng (vd. hợp đồng nguyên tắc) thì để trống bảng này.</span>
       <div class="totals"><div><span>Cộng tiền hàng</span><b data-t="tien">${money(t.tien)} ₫</b></div>
@@ -2618,6 +2622,7 @@ function drawHDLines(el) {
     <td><input data-f="DonGia" class="num money" inputmode="numeric" value="${money(l.DonGia)}"${ro} aria-label="Đơn giá dòng ${i + 1}"></td>
     <td class="c num" data-c="ThanhTien">${l.TenHang ? money(lineTotal(l)) : ''}</td>
     <td>${khoa ? '' : `<button class="icon-btn" data-act="rm" data-i="${i}" title="Xóa dòng" aria-label="Xóa dòng ${i + 1}">${icon('x')}</button>`}</td></tr>`).join('');
+  ganNhanCot($('tbody', el));
 }
 function drawHDTotals(el) {
   const t = hdTotal();
