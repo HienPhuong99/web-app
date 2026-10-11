@@ -64,7 +64,7 @@ const NGAN_HANG = [['970436', 'Vietcombank'], ['970415', 'VietinBank'], ['970418
 const SHARED = ['TaiKhoan', 'CaiDat', 'ThietBi']; // trang dùng chung cho mọi cửa hàng, không có tiền tố
 const NUMBER_COLS = ['Dot', 'BaoTruocNgay', 'ThangGiaHan', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien'];
 const SESSION_TTL = 6 * 60 * 60; // giây; tối đa của CacheService, tự gia hạn khi còn dùng
-const SCHEMA = '10'; // tăng số này khi thêm bảng/cột ở TABLES (hoặc cần sửa dữ liệu một lần): app tự làm ở lần gọi đầu sau khi triển khai
+const SCHEMA = '11'; // tăng số này khi thêm bảng/cột ở TABLES (hoặc cần sửa dữ liệu một lần): app tự làm ở lần gọi đầu sau khi triển khai
 
 // Loại chứng từ có dòng hàng. Số chứng từ dạng 001-2026/DH, mỗi năm đánh lại từ 001 (riêng từng cửa hàng).
 const CT = {
@@ -168,8 +168,9 @@ function nangCap_(cache) {
         taoBang_(false);
         try { boNhanThu_(); } catch (e) { console.error('Không gỡ được dấu [THỬ] của dữ liệu thử: ' + e); } // DuLieuThu.gs, chỉ chạy một lần
         try { suaKieuO_(); } catch (e) { console.error('Không sửa được ô bị đổi kiểu: ' + e); }
+        try { suaGioLech_(); } catch (e) { console.error('Không sửa được ngày giờ bị lệch: ' + e); }
         p.setProperty('schema', SCHEMA);
-        if (!p.getProperty('boSung.' + SCHEMA)) { p.setProperty('boSung.' + SCHEMA, '1'); boSung = true; } // chỉ một lần gọi làm phần bổ sung
+        if (!p.getProperty('boSung.10')) { p.setProperty('boSung.10', '1'); boSung = true; } // phần bổ sung của bản 10: chỉ một lần gọi làm
       });
       ok = true;
     }
@@ -192,6 +193,36 @@ function boSungBanMoi_() {
   } finally { CUR_SHOP = cur; }
   console.log('Bổ sung bản mới: ' + kq.mau.length + ' mẫu hợp đồng, ' + kq.hd + ' hợp đồng mẫu.');
   return kq;
+}
+
+/**
+ * Bản SCHEMA 10 đổi các ô ngày (Sheets đã tự đổi thành ngày theo múi giờ của file Sheet) ra chữ theo giờ Việt Nam: ngày "2026-10-06" thành
+ * "2026-10-06 14:00", giờ lệch 14–15 tiếng. Sửa một lần đúng các dòng bị ảnh hưởng trên Sheet của cửa hàng (danh sách dòng đối chiếu
+ * với bản xuất Sheet trước khi sửa; Sheet khác không bị nên không làm gì). Đổi ngược: giờ Việt Nam → giờ của file Sheet.
+ */
+const GIO_LECH_ = { sheetId: '18LVeevKd0Gp9E_9-TORmBIpI-sMsEdJqz7ZofsyCOpc',
+  dong: { ThietBi: [2, 2], PS_HopDong: [2, 6], PS_MauHopDong: [2, 7], PS_NhatKy: [2, 354], PS_KhachHang: [2, 14], PS_BaoGia: [2, 13], PS_DonHang: [2, 29], PS_PhieuKho: [3, 29], PS_ThuTien: [2, 27] } };
+const COT_NGAY_ = /^(Ngay|NgayGiao|NgayTao|NgaySua|NgayHieuLuc|NgayHetHan|NgayDen|NgayThu|ThoiGian|LanCuoi|NgayFile|NgayKyDT)$/;
+function suaGioLech_() {
+  const ss = SpreadsheetApp.getActive(), p = PropertiesService.getScriptProperties();
+  if (ss.getId() !== GIO_LECH_.sheetId || p.getProperty('suaGioLech') || tzSheet_() === tz_()) return 0;
+  let sua = 0;
+  Object.keys(GIO_LECH_.dong).forEach(ten => {
+    const sh = ss.getSheetByName(ten);
+    if (!sh) return;
+    const [dau, cuoi] = GIO_LECH_.dong[ten], head = headers_(sh), n = Math.min(cuoi, sh.getLastRow()) - dau + 1;
+    if (n < 1) return;
+    const vals = sh.getRange(dau, 1, n, head.length).getValues();
+    vals.forEach(row => head.forEach((k, j) => {
+      const v = row[j];
+      if (!COT_NGAY_.test(k) || typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(v)) return;
+      const s = Utilities.formatDate(Utilities.parseDate(v, tz_(), 'yyyy-MM-dd HH:mm'), tzSheet_(), 'yyyy-MM-dd HH:mm');
+      row[j] = s.slice(11) === '00:00' ? s.slice(0, 10) : s; sua++;
+    }));
+    ghiDong_(sh, vals.map(row => row.map(v => (typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : v))), dau);
+  });
+  p.setProperty('suaGioLech', '1');
+  return sua;
 }
 
 // Cột chữ chứa số cần giữ số 0 đầu: độ dài đúng của số (thiếu đúng một chữ số thì thêm 0 đầu)
@@ -222,7 +253,7 @@ function suaKieuO_() {
           vals[r].forEach((v, j) => {
             if (!chu[j] || typeof v === 'string') return;
             let s;
-            if (v instanceof Date) { const gio = Utilities.formatDate(v, tz_(), 'HH:mm'); s = Utilities.formatDate(v, tz_(), gio === '00:00' ? 'yyyy-MM-dd' : 'yyyy-MM-dd HH:mm'); }
+            if (v instanceof Date) { const gio = Utilities.formatDate(v, tzSheet_(), 'HH:mm'); s = Utilities.formatDate(v, tzSheet_(), gio === '00:00' ? 'yyyy-MM-dd' : 'yyyy-MM-dd HH:mm'); } // đúng chữ đã ghi lúc đầu
             else s = String(v);
             if (typeof v === 'number' && SO_0_DAU[head[j]] && s.length === SO_0_DAU[head[j]] - 1) s = '0' + s;
             if (typeof v === 'number' && head[j] === 'SoTK' && cMaKH >= 0 && tkThu[vals[r][cMaKH]]) s = tkThu[vals[r][cMaKH]];
@@ -872,7 +903,10 @@ function sheet_(name) {
 function headers_(sh) { return sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String); }
 function tz_() { return 'Asia/Ho_Chi_Minh'; }
 function now_() { return Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:mm'); }
-function cell_(v) { return v instanceof Date ? Utilities.formatDate(v, tz_(), 'yyyy-MM-dd') : v; }
+// Ô Sheets tự đổi thành ngày được hiểu theo múi giờ của file Sheet (có thể khác giờ Việt Nam): đọc lại cũng theo múi giờ đó
+let TZ_SHEET_ = '';
+function tzSheet_() { return TZ_SHEET_ || (TZ_SHEET_ = SpreadsheetApp.getActive().getSpreadsheetTimeZone() || tz_()); }
+function cell_(v) { return v instanceof Date ? Utilities.formatDate(v, tzSheet_(), 'yyyy-MM-dd') : v; }
 
 function readTable_(name) {
   const values = sheet_(name).getDataRange().getValues();

@@ -19,8 +19,14 @@ function giaTriO(sh, R, C, v) {
   if (typeof v !== 'string' || giuChu || sh.laChu(R, C)) return v;
   if (/^\d{1,15}$/.test(v)) return Number(v);
   const m = /^(\d{4}-\d{2}-\d{2})(?: (\d{2}:\d{2}))?$/.exec(v);
-  if (m) { const D = NgayVM(); return new D(m[1] + 'T' + (m[2] || '00:00') + ':00+07:00'); }
+  if (m) { const D = NgayVM(); return new D(tuGioTuong(m[1] + ' ' + (m[2] || '00:00'), ss.tz)); } // hiểu theo múi giờ của file Sheet
   return v;
+}
+// 'yyyy-MM-dd HH:mm' là giờ treo tường ở múi giờ tz → mốc thời gian (ms)
+function tuGioTuong(s, tz) {
+  const [d, h] = s.split(' '), [y, mo, da] = d.split('-').map(Number), [hh, mi] = (h || '00:00').split(':').map(Number), utc = Date.UTC(y, mo - 1, da, hh, mi);
+  const lech = t => { const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(t).map(x => [x.type, x.value])); return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute) - t; };
+  return utc - lech(utc - lech(utc));
 }
 class Range {
   constructor(sh, r, c, nr, nc) { Object.assign(this, { sh, r, c, nr, nc }); }
@@ -68,7 +74,8 @@ class Sheet {
   getName() { return Object.keys(sheets).find(k => sheets[k] === this); }
 }
 const sheets = {};
-const ss = { getSheetByName: n => sheets[n] || null, insertSheet: n => (sheets[n] = new Sheet([])), getSheets: () => Object.values(sheets),
+const ss = { id: 'sheet-thu', tz: 'America/Los_Angeles', getId() { return this.id; }, getSpreadsheetTimeZone() { return this.tz; }, // Sheet thật đang để giờ Mỹ
+  getSheetByName: n => sheets[n] || null, insertSheet: n => (sheets[n] = new Sheet([])), getSheets: () => Object.values(sheets),
   deleteSheet: sh => { for (const k in sheets) if (sheets[k] === sh) delete sheets[k]; } };
 
 // ---- Giả lập DocumentApp / DriveApp (chỉ phần Code.gs dùng). Kho này nằm trong bộ nhớ; test đọc lại qua `drive`.
@@ -202,6 +209,7 @@ const ctx = vm.createContext({
   Logger: { log: (...a) => { logs.push(a.join(' ')); console.log('[Logger]', ...a); } },
   Utilities: {
     getUuid: () => crypto.randomUUID(),
+    parseDate: (s, tz) => new (vm.runInContext('Date', ctx))(tuGioTuong(String(s).slice(0, 16), tz)), // chỉ dạng 'yyyy-MM-dd HH:mm'
     DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' },
     computeDigest: (alg, s) => [...crypto.createHash(alg).update(String(s), 'utf8').digest()].map(b => (b > 127 ? b - 256 : b)),
     base64Decode: s => { if (!/^[A-Za-z0-9+\/=\s]*$/.test(s)) throw new Error('Invalid argument'); return [...Buffer.from(s, 'base64')].map(b => (b > 127 ? b - 256 : b)); },
@@ -255,7 +263,7 @@ const SHIM = `window.google = { script: { get run() {
   return make({});
 } } };`;
 
-module.exports = { ctx, sheets, logs, cache, props, Sheet, drive, docs, thuMail, push };
+module.exports = { ctx, sheets, logs, cache, props, Sheet, drive, docs, thuMail, push, ss };
 if (require.main === module) http.createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/rpc') {
     let body = '';
