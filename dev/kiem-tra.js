@@ -913,6 +913,16 @@ assert.deepStrictEqual(plain(G.xoaCuaHangDaBo_()), []); // chạy lại không l
   assert.deepStrictEqual(plain(G.taiDuLieu(admin2).hang.filter(x => x.TenHang === 'Hàng nhập 1')).map(x => x.GiaSi).sort(), ['', 25000000]);
 }
 
+// Bảng đã nhớ trong một lần gọi phải đọc lại khi vào khóa ghi: người khác ghi trong lúc chờ khóa thì kiểm tra trong khóa vẫn thấy
+{
+  const sh = sheets.PS_PhieuKho, truoc = sh.rows.length;
+  const kq = vm.runInContext(`(() => { BANG_DA_DOC_ = {}; const a = readTable_('PhieuKho').length; return { a, ngoai: () => readTable_('PhieuKho').length, trong: () => withLock_(() => readTable_('PhieuKho').length) }; })()`, G);
+  sh.rows.push(['PK-KHAC-GHI', today, 'Nhập']); // lần chạy khác ghi vào giữa chừng
+  assert.deepStrictEqual([kq.a, kq.ngoai(), kq.trong()], [truoc - 1, truoc - 1, truoc]);
+  sh.rows.pop();
+  vm.runInContext('BANG_DA_DOC_ = null; TIEU_DE_DA_DOC_ = null;', G);
+}
+
 require('./kiem-tra-html'); // giao diện: cú pháp, và các chỗ Apps Script sẽ cắt nhầm khi xóa chú thích
 // API app điện thoại: tiến trình riêng để có dữ liệu sạch
 ['kiem-tra-api.js', 'kiem-tra-du-lieu-thu.js'].forEach(f => require('child_process').execFileSync(process.execPath, [require('path').join(__dirname, f)], { stdio: ['ignore', 'pipe', 'inherit'] })

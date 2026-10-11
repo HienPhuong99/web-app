@@ -1117,5 +1117,7 @@ function nextSo_(name, suffix, ngay) {
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
+  // Có khóa rồi mới đọc lại: bản đã nhớ trước khi chờ khóa có thể thiếu phần người khác vừa ghi (kiểm tra IMEI trùng, số đã giao…)
+  if (BANG_DA_DOC_) { BANG_DA_DOC_ = {}; TIEU_DE_DA_DOC_ = null; }
   try { return fn(); } finally { lock.releaseLock(); }
 }
