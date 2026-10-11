@@ -400,7 +400,7 @@ const s = StyleSheet.create({
   dongHang: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: mau.vach },
   tenHang: { fontSize: 16, fontWeight: '700', color: mau.chu },
   imei: { fontSize: 13, color: mau.chuNhat, marginTop: 2, fontVariant: ['tabular-nums'] },
-  oGiam: { flex: 0, width: 150, textAlign: 'right', paddingVertical: 8 },
+  oGiam: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', width: 150, textAlign: 'right', paddingVertical: 8 }, // không dùng flex: 0 – bản web hiểu là rộng 0, ô co lại còn phần đệm
   oGia: { paddingVertical: 9, fontSize: 16, fontWeight: '700' },
   sl: { fontSize: 16, fontWeight: '800', color: mau.chu, minWidth: 28, textAlign: 'center' },
   buoc: { flexDirection: 'row', alignItems: 'center', gap: 6 },

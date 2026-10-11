@@ -444,6 +444,7 @@ buoc('Kiểm kho theo IMEI; bán có giảm giá, gửi phiếu PDF; khách tr�
   await v(page, 'o-imei-ban').fill('356789012345698');
   await v(page, 'nut-them-imei').click();
   await v(page, 'dong-gio').getByText('iPhone 16 Pro Max', { exact: false }).waitFor({ timeout: 15000 });
+  assert.ok((await v(page, 'o-giam-gia').boundingBox()).width >= 120, 'Ô giảm giá phải đủ rộng (từng co lại còn phần đệm)');
   await v(page, 'o-giam-gia').fill('200000');
   await v(page, 'tong-cong').getByText('28.000.000 đ').waitFor();
   await v(page, 'o-tim-khach-ban').fill('Khách Trả Máy');
