@@ -309,6 +309,9 @@ BUOC.push(['Màn soạn chứng từ: bảng dòng hàng vừa màn 1280px; trê
     const top = await page.evaluate(() => { const a = document.querySelector('#topActions'); return [a.children.length, a.getBoundingClientRect().height, a.scrollWidth > a.clientWidth, document.documentElement.scrollWidth - document.documentElement.clientWidth]; });
     assert.ok(top[0] >= 3 && top[1] < 60 && top[2], 'Điện thoại: nút một hàng vuốt được ' + top);
     assert.strictEqual(top[3], 0, 'Trang không được tràn ngang');
+    // dòng hàng thành thẻ có nhãn, không phải vuốt ngang bảng rộng
+    const the = await page.evaluate(() => { const w = document.querySelector('.lines-wrap'), td = document.querySelector('table.lines tbody tr td:nth-child(3)'); return [w.scrollWidth - w.clientWidth, getComputedStyle(td, '::before').content]; });
+    assert.ok(the[0] <= 1 && /Model/i.test(the[1]), 'Điện thoại: dòng hàng dạng thẻ có nhãn ' + the);
     await page.evaluate(() => { S.dirty = false; go('donhang'); });
     const mot = await page.evaluate(() => document.querySelector('#topActions').scrollWidth <= document.querySelector('#topActions').clientWidth + 1);
     assert.ok(mot, 'Màn danh sách (1 nút) vẫn như cũ');
