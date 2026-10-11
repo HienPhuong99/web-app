@@ -35,9 +35,11 @@ const khTay = G.luuKhach(admin, { TenKH: '[THỬ] Khách nhập tay', SDT: '0909
 vm.runInContext('HD_LOAI_MOI_', G).forEach(l => G.xoaMauHopDong(admin, l));
 const shKH = sheets.PS_KhachHang, cKH = k => shKH.rows[0].indexOf(k), D = vm.runInContext('Date', G);
 const hongKH = r => /Ánh Dương/.test(r[cKH('TenKH')]);
-shKH.rows.filter(hongKH).forEach(r => { r[cKH('SDT')] = Number(r[cKH('SDT')]); r[cKH('MST')] = Number(r[cKH('MST')]); r[cKH('SoTK')] = Number(r[cKH('SoTK')]); r[cKH('NgayTao')] = new D('2026-10-06T14:51:00+07:00'); });
+shKH.rows.filter(hongKH).forEach(r => { r[cKH('SDT')] = Number(r[cKH('SDT')]); r[cKH('MST')] = Number(r[cKH('MST')]); r[cKH('SoTK')] = Number(r[cKH('SoTK')]); r[cKH('NgayTao')] = new D('2026-10-06T14:51:00-07:00'); }); // ngày: Sheets hiểu chữ đã ghi theo múi giờ của file (giờ Mỹ)
 const shDH = sheets.PS_DonHang, cDH = shDH.rows[0].indexOf('SDT');
 shDH.rows.slice(1).forEach(r => { if (/^0\d+$/.test(r[cDH])) r[cDH] = Number(r[cDH]); });
+const cNgayDH = shDH.rows[0].indexOf('Ngay'), soDH1 = shDH.rows[1][0];
+shDH.rows[1][cNgayDH] = new D('2026-10-06T00:00:00-07:00'); // ô ngày (không giờ) bị Sheets đổi thành ngày lúc 0 giờ theo múi giờ của file
 Object.values(sheets).forEach(sh => { sh.dinhDang = []; }); // định dạng "Tự động"
 // Nâng cấp: lần gọi đầu sau khi triển khai (SCHEMA mới) tự gỡ dấu, sửa kiểu ô, thêm 4 mẫu và 4 hợp đồng mẫu mới
 props.set('schema', '8'); cache.delete('schema');
@@ -45,6 +47,7 @@ G.taiDuLieu(admin);
 const anhDuong = G.readTable_('KhachHang').find(k => k.TenKH === 'Công ty TNHH Ánh Dương');
 assert.deepStrictEqual([anhDuong.SDT, anhDuong.MST, anhDuong.SoTK, anhDuong.NgayTao], ['0281000003', '0312345678', '007100012342', '2026-10-06 14:51']);
 assert.ok(G.readTable_('DonHang').every(d => typeof d.SDT === 'string' && /^0/.test(d.SDT)), 'SĐT trong đơn có số 0 đầu');
+assert.strictEqual(G.findObj_('DonHang', soDH1).Ngay, '2026-10-06'); // không thành "2026-10-06 14:00"
 assert.strictEqual(G.readTable_('MauHopDong').length, 10);
 // Sau khi sửa, ghi tiếp vào cuối trang (lưới đã hết dòng định dạng) vẫn giữ chữ
 const khMoi = G.luuKhach(admin, { TenKH: 'Khách sau nâng cấp', SDT: '0977000111' });
@@ -110,9 +113,20 @@ assert.strictEqual(PS().filter(k => k !== 'PS_NhatKy').map(k => sheets[k].rows.l
 // Đã xóa bớt dữ liệu thử (một mặt hàng mẫu, một hợp đồng mẫu): lần nâng cấp sau không tự tạo lại
 const soTruoc = soThu(), hdTruoc = dem('HopDong'), hhTruoc = dem('HangHoa');
 G.xoaHang(admin, soTruoc['h:11']); G.xoaHopDong(admin, soTruoc['hd:ctv']);
-props.set('schema', '9'); props.set('boSung.' + vm.runInContext('SCHEMA', G), ''); cache.delete('schema');
+props.set('schema', '9'); props.set('boSung.10', ''); cache.delete('schema');
 G.taiDuLieu(admin);
 assert.deepStrictEqual([dem('HangHoa'), dem('HopDong')], [hhTruoc - 1, hdTruoc - 1]);
+// Sửa giờ lệch (chỉ trên Sheet của cửa hàng, đúng các dòng trong danh sách): chuỗi giờ Việt Nam sai → giờ của file Sheet
+const { ss } = require('./chay-thu'), GL = vm.runInContext('GIO_LECH_', G), idCu = ss.id;
+const o = (t, r, c) => sheets[t].rows[r - 1][sheets[t].rows[0].indexOf(c)], dat = (t, r, c, v) => { sheets[t].rows[r - 1][sheets[t].rows[0].indexOf(c)] = v; };
+dat('PS_KhachHang', 2, 'NgayTao', '2026-10-07 04:51'); dat('PS_DonHang', 2, 'Ngay', '2026-10-06 14:00'); dat('PS_DonHang', 2, 'NgayGiao', '2027-02-23 15:00'); dat('PS_PhieuKho', 2, 'NgayTao', '2026-09-30 12:00');
+props.set('suaGioLech', '');
+assert.strictEqual(G.suaGioLech_(), 0); // Sheet khác: không làm gì
+ss.id = GL.sheetId;
+assert.ok(G.suaGioLech_() > 0);
+assert.deepStrictEqual([o('PS_KhachHang', 2, 'NgayTao'), o('PS_DonHang', 2, 'Ngay'), o('PS_DonHang', 2, 'NgayGiao'), o('PS_PhieuKho', 2, 'NgayTao')], ['2026-10-06 14:51', '2026-10-06', '2027-02-23', '2026-09-30 12:00']); // dòng 2 phiếu kho không thuộc danh sách
+assert.strictEqual(G.suaGioLech_(), 0); // chỉ một lần
+ss.id = idCu;
 G.xoaDuLieuThu();
 assert.deepStrictEqual([dem('HangHoa'), dem('KhachHang'), dem('DonHang'), dem('PhieuKho'), dem('HopDong')], [truoc.HangHoa, truoc.KhachHang, 0, 0, 0]);
 
