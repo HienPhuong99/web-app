@@ -263,8 +263,19 @@ function kiemKho(token, ds, o) {
  * tiền trả lại khách ghi thành phiếu thu âm (sổ quỹ giảm). xemTruoc: chỉ tính tổng mới và số tiền trả lại tối đa, chưa ghi gì.
  */
 function traHang(token, o) {
-  const user = user_(token);
   o = o || {};
+  if (o.xemTruoc) return traHang_(token, o);
+  user_(token);
+  // Giữ đơn trong khóa trước khi kiểm tra và ghi: hai lần gửi cùng lúc không nhập kho hai lần, không trả tiền hai lần
+  const cache = CacheService.getScriptCache(), giu = 'traHang_' + CUR_SHOP + '_' + o.SoDH;
+  withLock_(() => {
+    if (cache.get(giu)) throw new Error('Đơn ' + o.SoDH + ' đang được nhận trả ở máy khác, đợi vài giây rồi tải lại.');
+    cache.put(giu, '1', 120);
+  });
+  try { return traHang_(token, o); } finally { cache.remove(giu); }
+}
+function traHang_(token, o) {
+  const user = user_(token);
   const dh = findObj_('DonHang', o.SoDH);
   if (!dh) throw new Error('Không tìm thấy đơn hàng ' + o.SoDH + '.');
   if (dh.TrangThai === 'Hủy') throw new Error('Đơn đã hủy.');

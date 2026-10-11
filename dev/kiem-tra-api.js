@@ -584,6 +584,11 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
     thu: { SoTien: 56100000, HinhThuc: 'Tiền mặt' } });
   assert.throws(() => goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0001', IMEI: '357000000000099' }] }), /không có trong các lần giao/);
   assert.throws(() => goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [] }), /Chọn hàng/);
+  // đang có máy khác nhận trả đơn này: từ chối; lỗi kiểm tra ở trên không để lại giữ đơn
+  assert.ok(![...cache.keys()].some(k => k.startsWith('traHang_')));
+  cache.set('traHang_phone_' + b.SoDH, '1');
+  assert.throws(() => goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0001', IMEI: '357000000000011' }] }), /đang được nhận trả ở máy khác/);
+  cache.delete('traHang_phone_' + b.SoDH);
   const xem = goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0001', IMEI: '357000000000011' }], xemTruoc: true });
   assert.deepStrictEqual([xem.tongCu, xem.tongMoi, xem.daThu, xem.hoanToiDa, xem.huy], [56100000, 28100000, 56100000, 28000000, false]);
   assert.throws(() => goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0001', IMEI: '357000000000011' }], hoan: { SoTien: 30000000 } }), /tối đa 28000000/);
