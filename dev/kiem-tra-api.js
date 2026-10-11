@@ -1,7 +1,7 @@
 // Kiểm tra API JSON của app điện thoại (Api.gs → doPost) trên dữ liệu mẫu:  node dev/kiem-tra-api.js
 // Chạy trong tiến trình riêng (kiem-tra.js gọi ở cuối) để có dữ liệu sạch, không lẫn với các bài test khác.
 const assert = require('assert');
-const { ctx: G, sheets, logs, cache } = require('./chay-thu');
+const { ctx: G, sheets, logs, cache, props } = require('./chay-thu');
 const adminPass = logs.join('\n').match(/mật khẩu: (\S+)/)[1];
 const today = G.now_().slice(0, 10);
 
@@ -26,6 +26,12 @@ assert.strictEqual(goi(null, 'thongTinDangNhap').ten, 'phuonghihi'); // trang đ
   assert.strictEqual(api({ fn, may: 'x'.repeat(64) }).error, 'HET_PHIEN');
   assert.strictEqual(api({ fn, may: { a: 1 } }).error, 'HET_PHIEN');
 });
+
+// Vừa triển khai bản có bảng ThietBi lên Sheet cũ, chưa ai mở web: lần gọi đầu từ app tự tạo bảng trước khi ghi
+delete sheets.ThietBi; props.delete('schema'); cache.delete('schema');
+assert.strictEqual(goi(null, 'dangNhapMay', 'admin', adminPass, 'Máy đầu tiên').user.u, 'admin');
+assert.ok(props.get('schema'));
+sheets.ThietBi.rows.length = 1;
 
 // Đăng nhập trên máy: mã máy dài, Sheet chỉ lưu mã băm; sai mật khẩu báo như web
 assert.match(api({ fn: 'dangNhapMay', args: ['admin', 'sai'] }).error, /Sai tên đăng nhập/);
