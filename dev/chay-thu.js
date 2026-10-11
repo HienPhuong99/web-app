@@ -10,6 +10,18 @@ const PORT = +process.env.PORT || 5178;
 // ---- Giả lập SpreadsheetApp (chỉ những hàm Code.gs dùng)
 // Sheets bỏ dấu ' đầu chuỗi; chuỗi bắt đầu bằng "=" mà không có dấu ' thì Sheets hiểu là công thức (ở đây ghi lại để test thấy)
 const strip = v => (typeof v === 'string' && v[0] === "'" ? v.slice(1) : typeof v === 'string' && v[0] === '=' ? '#CÔNG THỨC ' + v : v);
+// Ô chưa đặt định dạng văn bản ("Tự động"): Sheets tự đổi chuỗi toàn chữ số thành số (mất số 0 đầu) và chuỗi ngày giờ thành ngày, như Google thật.
+// Dấu ' đầu chuỗi giữ nguyên là chữ.
+const NgayVM = () => vm.runInContext('Date', ctx); // ngày phải thuộc phạm vi của script để instanceof Date đúng
+function giaTriO(sh, R, C, v) {
+  const giuChu = typeof v === 'string' && v[0] === "'";
+  v = strip(v);
+  if (typeof v !== 'string' || giuChu || sh.laChu(R, C)) return v;
+  if (/^\d{1,15}$/.test(v)) return Number(v);
+  const m = /^(\d{4}-\d{2}-\d{2})(?: (\d{2}:\d{2}))?$/.exec(v);
+  if (m) { const D = NgayVM(); return new D(m[1] + 'T' + (m[2] || '00:00') + ':00+07:00'); }
+  return v;
+}
 class Range {
   constructor(sh, r, c, nr, nc) { Object.assign(this, { sh, r, c, nr, nc }); }
   getValues() {
@@ -19,26 +31,37 @@ class Range {
   }
   setValues(vals) {
     if (vals.length !== this.nr || vals.some(r => r.length !== this.nc)) throw new Error('Kích thước dữ liệu không khớp vùng ô');
-    vals.forEach((row, i) => { const R = this.r - 1 + i; while (this.sh.rows.length <= R) this.sh.rows.push([]); row.forEach((v, j) => { this.sh.rows[R][this.c - 1 + j] = strip(v); }); });
+    vals.forEach((row, i) => { const R = this.r - 1 + i; while (this.sh.rows.length <= R) this.sh.rows.push([]); row.forEach((v, j) => { this.sh.rows[R][this.c - 1 + j] = giaTriO(this.sh, R, this.c - 1 + j, v); }); });
     return this;
   }
-  setNumberFormat() { return this; }
+  setNumberFormat(f) { // chỉ ghi nhận định dạng văn bản '@'
+    for (let i = 0; i < this.nr; i++) { const R = this.r - 1 + i, d = this.sh.dinhDang[R] || (this.sh.dinhDang[R] = []); for (let j = 0; j < this.nc; j++) d[this.c - 1 + j] = f === '@'; }
+    return this;
+  }
 }
 class Sheet {
-  constructor(rows) { this.rows = rows; }
+  // maxR: số dòng của lưới. Trang tạo mới có 1000 dòng; trang nhập từ file Excel chỉ vừa đủ dữ liệu (dòng thêm sau đó chưa có định dạng)
+  constructor(rows, maxR) { this.rows = rows; this.maxR = maxR || 1000; this.dinhDang = []; }
+  laChu(R, C) { return !!(this.dinhDang[R] && this.dinhDang[R][C]); }
   getLastRow() { return this.rows.length; }
   getLastColumn() { return this.rows.reduce((m, r) => Math.max(m, r.length), 0); }
-  getMaxRows() { return Math.max(1000, this.rows.length); }
+  getMaxRows() { return Math.max(this.maxR, this.rows.length); }
   getMaxColumns() { return this.maxCols || Math.max(26, this.getLastColumn()); }
   insertColumnsAfter(after, n) { this.maxCols = this.getMaxColumns() + n; }
+  insertRowsAfter(after, n) { this.maxR = this.getMaxRows() + n; this.dinhDang.splice(after, 0, ...Array.from({ length: n }, () => [])); } // dòng chèn thêm: coi như chưa có định dạng (trường hợp xấu nhất)
   getRange(r, c, nr = 1, nc = 1) {
     if (r < 1 || c < 1 || nr < 1 || nc < 1) throw new Error('Vùng ô không hợp lệ');
     if (c + nc - 1 > this.getMaxColumns()) throw new Error('Cột nằm ngoài lưới của trang tính');
+    if (r + nr - 1 > this.getMaxRows()) throw new Error('Tọa độ vùng ô nằm ngoài kích thước trang tính');
     return new Range(this, r, c, nr, nc);
   }
+  getRangeList(a1s) { // "C5:C7" → đặt định dạng cho từng vùng
+    const rs = a1s.map(a => { const m = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(a), col = s => [...s].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0); return this.getRange(+m[2], col(m[1]), +m[4] - +m[2] + 1, col(m[3]) - col(m[1]) + 1); });
+    return { setNumberFormat: f => { rs.forEach(r => r.setNumberFormat(f)); } };
+  }
   getDataRange() { return this.getRange(1, 1, Math.max(1, this.getLastRow()), Math.max(1, this.getLastColumn())); }
-  appendRow(v) { this.rows.push(v.map(strip)); return this; }
-  deleteRows(start, n) { this.rows.splice(start - 1, n); }
+  appendRow(v) { const R = this.rows.length; if (R >= this.maxR) this.maxR = R + 1; this.rows.push(v.map((x, j) => giaTriO(this, R, j, x))); return this; }
+  deleteRows(start, n) { this.rows.splice(start - 1, n); this.dinhDang.splice(start - 1, n); this.maxR = Math.max(this.rows.length, this.maxR - n); }
   setFrozenRows() {}
   setName(n) { for (const k in sheets) if (sheets[k] === this) delete sheets[k]; sheets[n] = this; return this; }
   hideSheet() { this.hidden = true; return this; }
@@ -206,7 +229,7 @@ const seed = file ? JSON.parse(fs.readFileSync(file, 'utf8')) : {
     ['HH0002', 'iPhone 15 128GB - Đen', 'IPHONE-15-DEN-128GB', 'iPhone 15 Series', 'iPhone 15', 'Máy', 'Apple - chính hãng', '', 11300000, '', ''],
   ],
 };
-for (const [name, rows] of Object.entries(seed)) sheets[name] = new Sheet(rows.map(r => r.slice()));
+for (const [name, rows] of Object.entries(seed)) sheets[name] = new Sheet(rows.map(r => r.slice()), rows.length); // như nhập từ file Excel: lưới vừa đủ dữ liệu
 ctx.caiDat();
 if (MAU_APP) {
   const t = ctx.dangNhap('admin', logs.join('\n').match(/mật khẩu: (\S+)/)[1]).token, homNay = ctx.now_().slice(0, 10);

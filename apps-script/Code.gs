@@ -64,7 +64,7 @@ const NGAN_HANG = [['970436', 'Vietcombank'], ['970415', 'VietinBank'], ['970418
 const SHARED = ['TaiKhoan', 'CaiDat', 'ThietBi']; // trang dùng chung cho mọi cửa hàng, không có tiền tố
 const NUMBER_COLS = ['Dot', 'BaoTruocNgay', 'ThangGiaHan', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien'];
 const SESSION_TTL = 6 * 60 * 60; // giây; tối đa của CacheService, tự gia hạn khi còn dùng
-const SCHEMA = '9'; // tăng số này khi thêm bảng/cột ở TABLES (hoặc cần sửa dữ liệu một lần): app tự làm ở lần gọi đầu sau khi triển khai
+const SCHEMA = '10'; // tăng số này khi thêm bảng/cột ở TABLES (hoặc cần sửa dữ liệu một lần): app tự làm ở lần gọi đầu sau khi triển khai
 
 // Loại chứng từ có dòng hàng. Số chứng từ dạng 001-2026/DH, mỗi năm đánh lại từ 001 (riêng từng cửa hàng).
 const CT = {
@@ -89,13 +89,15 @@ function caiDat() {
   xoaCuaHangDaBo_();
   const go = boNhanThu_();
   if (go) Logger.log('Đã bỏ dấu [THỬ] ở ' + go + ' ô dữ liệu thử.');
+  const kieu = suaKieuO_();
+  if (kieu) Logger.log('Đã sửa ' + kieu + ' ô bị Sheets đổi thành số / ngày (SĐT, MST, ngày giờ…).');
   try { Logger.log('Đã tạo ' + taoMauMacDinh_().length + ' file mẫu hợp đồng trong Google Drive.'); } // cũng là bước xin quyền Google Docs/Drive lần đầu
   catch (e) { Logger.log('Chưa tạo được mẫu hợp đồng (cấp quyền Google Docs/Drive rồi chạy lại caiDat): ' + e); }
   PropertiesService.getScriptProperties().setProperty('schema', SCHEMA);
   if (readTable_('TaiKhoan').some(u => u.VaiTro === 'admin')) return Logger.log('Đã có tài khoản admin, không tạo thêm.');
   const pass = Utilities.getUuid().slice(0, 8);
-  sheet_('TaiKhoan').appendRow(toRow_(sheet_('TaiKhoan'), Object.assign({ TenDangNhap: 'admin', HoTen: 'Quản trị', VaiTro: 'admin',
-    TrangThai: 'Hoạt động', CuaHang: Object.keys(SHOPS).join(','), NgayTao: now_() }, hashPass_(pass))));
+  ghiDong_(sheet_('TaiKhoan'), [toRow_(sheet_('TaiKhoan'), Object.assign({ TenDangNhap: 'admin', HoTen: 'Quản trị', VaiTro: 'admin',
+    TrangThai: 'Hoạt động', CuaHang: Object.keys(SHOPS).join(','), NgayTao: now_() }, hashPass_(pass)))]);
   Logger.log('Tài khoản quản trị: admin / mật khẩu: ' + pass + '  -> đăng nhập xong hãy đổi mật khẩu.');
 }
 
@@ -160,17 +162,85 @@ function nangCap_(cache) {
   const p = PropertiesService.getScriptProperties();
   let ok = p.getProperty('schema') === SCHEMA;
   if (!ok) {
+    let boSung = false;
     try {
       withLock_(() => {
         taoBang_(false);
         try { boNhanThu_(); } catch (e) { console.error('Không gỡ được dấu [THỬ] của dữ liệu thử: ' + e); } // DuLieuThu.gs, chỉ chạy một lần
+        try { suaKieuO_(); } catch (e) { console.error('Không sửa được ô bị đổi kiểu: ' + e); }
         p.setProperty('schema', SCHEMA);
+        if (!p.getProperty('boSung.' + SCHEMA)) { p.setProperty('boSung.' + SCHEMA, '1'); boSung = true; } // chỉ một lần gọi làm phần bổ sung
       });
       ok = true;
     }
     catch (e) { console.error('Không tự nâng cấp được Sheet: ' + e); }
+    // Ngoài khóa (các hàm bên trong tự giữ khóa): thêm mẫu hợp đồng mặc định mới, hợp đồng mẫu mới cho Sheet đang có dữ liệu thử
+    if (boSung) { try { boSungBanMoi_(); } catch (e) { console.error('Không bổ sung được mẫu / dữ liệu thử của bản mới: ' + e); } }
   }
   cache.put('schema', SCHEMA, ok ? SESSION_TTL : 600);
+}
+
+/** Phần bổ sung một lần của bản mới: thêm mẫu hợp đồng mặc định mới (Sheet đã có mẫu), thêm hợp đồng mẫu mới vào dữ liệu thử. */
+function boSungBanMoi_() {
+  const cur = CUR_SHOP, kq = { mau: [], hd: 0 };
+  try {
+    Object.keys(SHOPS).forEach(shop => {
+      CUR_SHOP = shop;
+      if (readTable_('MauHopDong').length) kq.mau = kq.mau.concat(taoMauMacDinh_(HD_LOAI_MOI_)); // trước, để hợp đồng mẫu mới có đúng loại
+      kq.hd += boSungDuLieuThu_();
+    });
+  } finally { CUR_SHOP = cur; }
+  console.log('Bổ sung bản mới: ' + kq.mau.length + ' mẫu hợp đồng, ' + kq.hd + ' hợp đồng mẫu.');
+  return kq;
+}
+
+// Cột chữ chứa số cần giữ số 0 đầu: độ dài đúng của số (thiếu đúng một chữ số thì thêm 0 đầu)
+const SO_0_DAU = { SDT: 10, MST: 10, SoCCCD: 12 };
+/**
+ * Bản cũ ghi vào ô định dạng "Tự động": Sheets đã đổi "0911000001" thành số 911000001, "2026-10-07 14:52" thành ngày.
+ * Chạy một lần (cờ suaKieuO.<cửa hàng>): đặt định dạng văn bản cho cả cột chữ, đổi số về chữ (thêm lại số 0 đầu cho SĐT, MST, CCCD;
+ * số tài khoản của khách mẫu lấy lại từ dữ liệu thử), đổi ngày về "yyyy-MM-dd HH:mm" (hoặc "yyyy-MM-dd" khi không có giờ). Trả về số ô đã sửa.
+ */
+function suaKieuO_() {
+  const p = PropertiesService.getScriptProperties(), cur = CUR_SHOP;
+  let sua = 0;
+  try {
+    Object.keys(SHOPS).forEach(shop => {
+      CUR_SHOP = shop;
+      const co = 'suaKieuO.' + shop;
+      if (p.getProperty(co)) return;
+      const tkThu = soTKThu_(); // MaKH → số tài khoản gốc của khách mẫu
+      Object.keys(TABLES).filter(t => shop === SHOP_MAC_DINH || !SHARED.includes(t)).forEach(t => {
+        const sh = SpreadsheetApp.getActive().getSheetByName(tableName_(t));
+        if (!sh || sh.getLastRow() < 2) return;
+        const vals = sh.getDataRange().getValues(), head = vals[0].map(String), cMaKH = head.indexOf('MaKH');
+        const chu = head.map(c => !!c && !NUMBER_COLS.includes(c));
+        head.forEach((c, i) => { if (chu[i]) sh.getRange(1, i + 1, sh.getMaxRows(), 1).setNumberFormat('@'); }); // dòng thêm sau này cũng là chữ
+        const dongSua = [];
+        for (let r = 1; r < vals.length; r++) {
+          let doi = false;
+          vals[r].forEach((v, j) => {
+            if (!chu[j] || typeof v === 'string') return;
+            let s;
+            if (v instanceof Date) { const gio = Utilities.formatDate(v, tz_(), 'HH:mm'); s = Utilities.formatDate(v, tz_(), gio === '00:00' ? 'yyyy-MM-dd' : 'yyyy-MM-dd HH:mm'); }
+            else s = String(v);
+            if (typeof v === 'number' && SO_0_DAU[head[j]] && s.length === SO_0_DAU[head[j]] - 1) s = '0' + s;
+            if (typeof v === 'number' && head[j] === 'SoTK' && cMaKH >= 0 && tkThu[vals[r][cMaKH]]) s = tkThu[vals[r][cMaKH]];
+            vals[r][j] = s; doi = true; sua++;
+          });
+          if (doi) dongSua.push(r);
+        }
+        for (let i = 0; i < dongSua.length;) { // ghi từng cụm dòng liền nhau đã sửa
+          let j = i;
+          while (j + 1 < dongSua.length && dongSua[j + 1] === dongSua[j] + 1) j++;
+          ghiDong_(sh, vals.slice(dongSua[i], dongSua[j] + 1).map(row => row.map(v => (typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : v))), dongSua[i] + 1);
+          i = j + 1;
+        }
+      });
+      p.setProperty(co, '1');
+    });
+  } finally { CUR_SHOP = cur; }
+  return sua;
 }
 
 // Cửa hàng tài khoản được vào; để trống thì quản trị vào tất cả, nhân viên chỉ cửa hàng mặc định
@@ -220,7 +290,7 @@ function luuCuaHang(token, o) {
   const giaTri = JSON.stringify({ ten: str(o.tenNgan, 60), moTa: str(o.moTa, 100), congTy: c });
   return withLock_(() => {
     const sh = sheet_('CaiDat'), khoa = 'cuaHang.' + CUR_SHOP, r = findRow_(sh, khoa), row = toRow_(sh, { Khoa: khoa, GiaTri: giaTri });
-    if (r) sh.getRange(r, 1, 1, row.length).setValues([row]); else sh.appendRow(row);
+    ghiDong_(sh, [row], r);
     log_(user, 'Sửa thông tin cửa hàng', str(o.tenNgan, 60) || SHOPS[CUR_SHOP].ten, c.ten);
     return cuaHang_(CUR_SHOP);
   });
@@ -425,7 +495,7 @@ function nhapBang_(name, prefix, width, rows, cols, kiem, khoa, daCo, them) {
   const ma = nhapMa_(name, prefix, width, ok.length), key = TABLES[name][0];
   ok.forEach((o, i) => { o[key] = ma[i]; them(o); });
   const sh = sheet_(name), mang = ok.map(o => toRow_(sh, o));
-  sh.getRange(sh.getLastRow() + 1, 1, mang.length, mang[0].length).setValues(mang);
+  ghiDong_(sh, mang);
   return { them: ok, bo: bo };
 }
 // Mã liên tiếp: tính số lớn nhất một lần rồi tăng dần
@@ -528,7 +598,7 @@ function luuChungTu(token, loai, doc) {
     deleteWhere_(c.lines, head[key]);
     const sh = sheet_(c.lines);
     const rows = lines.map(l => toRow_(sh, Object.assign({}, l, { [TABLES[c.lines][0]]: head[key] })));
-    sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+    ghiDong_(sh, rows);
     const huy = loai === 'DH' && head.TrangThai === 'Hủy' && old && old.TrangThai !== 'Hủy';
     if (loai === 'DH') head.TrangThai = capNhatDH_(head[key]);
     const donHang = loai === 'XK' ? capNhatNhieuDH_([old && old.SoDH, head.SoDH]) : null;
@@ -750,7 +820,7 @@ function luuTaiKhoan(token, tk) {
     if (tk.MatKhau) Object.assign(o, hashPass_(String(tk.MatKhau)));
     const others = readTable_('TaiKhoan').filter(x => String(x.TenDangNhap) !== u);
     if (!others.concat([o]).some(x => x.VaiTro === 'admin' && x.TrangThai !== 'Khóa')) throw new Error('Phải còn ít nhất 1 tài khoản quản trị đang hoạt động.');
-    if (r) writeRow_(sh, r, o); else sh.appendRow(toRow_(sh, o));
+    ghiDong_(sh, [toRow_(sh, o)], r);
     // Khóa, đổi quyền, đổi cửa hàng hoặc đặt lại mật khẩu: các phiên đang đăng nhập của tài khoản đó hết hiệu lực ngay
     const doiQuyen = cu && (cu.VaiTro !== o.VaiTro || cu.TrangThai !== o.TrangThai || shopsOf_(cu).join(',') !== o.CuaHang);
     if (doiQuyen || (cu && tk.MatKhau)) {
@@ -782,7 +852,7 @@ function doiMatKhau(token, cu, moi) {
 function log_(user, hanhDong, doiTuong, chiTiet) {
   try {
     const sh = sheet_('NhatKy');
-    sh.appendRow(toRow_(sh, { ThoiGian: now_(), NguoiDung: user.ten + ' (' + user.u + ')', HanhDong: hanhDong, DoiTuong: doiTuong, ChiTiet: chiTiet || '' }));
+    ghiDong_(sh, [toRow_(sh, { ThoiGian: now_(), NguoiDung: user.ten + ' (' + user.u + ')', HanhDong: hanhDong, DoiTuong: doiTuong, ChiTiet: chiTiet || '' })]);
   } catch (e) {} // ghi nhật ký lỗi không được làm hỏng thao tác chính
 }
 
@@ -832,9 +902,22 @@ function rowObj_(sh, r) {
 }
 
 function writeRow_(sh, r, o) {
-  const row = toRow_(sh, o);
-  sh.getRange(r, 1, 1, row.length).setValues([row]);
+  ghiDong_(sh, [toRow_(sh, o)], r);
 }
+
+// Ghi các dòng (đã qua toRow_) từ dòng r, mặc định sau dòng cuối. Trước khi ghi, đặt định dạng văn bản cho cột chữ của các dòng đó:
+// ô định dạng "Tự động" thì Sheets tự đổi "0911000001" thành số 911000001 và "2026-10-07 14:52" thành ngày (mất số 0 đầu, mất giờ).
+// Lưới hết dòng (trang nhập từ Excel chỉ vừa đủ dữ liệu, hoặc sau khi xóa nhiều dòng) thì thêm dòng trước.
+function ghiDong_(sh, rows, r) {
+  if (!rows.length) return;
+  r = r || sh.getLastRow() + 1;
+  const cuoi = r + rows.length - 1;
+  if (cuoi > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), cuoi - sh.getMaxRows());
+  const chu = headers_(sh).map((c, i) => (c && !NUMBER_COLS.includes(c) ? cot_(i + 1) : '')).filter(Boolean);
+  if (chu.length) sh.getRangeList(chu.map(c => c + r + ':' + c + cuoi)).setNumberFormat('@');
+  sh.getRange(r, 1, rows.length, rows[0].length).setValues(rows);
+}
+const cot_ = n => { let s = ''; for (; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; }; // 1 → A, 27 → AA
 
 // Dòng (1-based) có cột A = key, 0 nếu không có
 function findRow_(sh, key) {
@@ -863,7 +946,7 @@ function upsert_(name, obj, newKey, keep) {
     writeRow_(sh, r, obj);
   } else {
     obj[key] = newKey();
-    sh.appendRow(toRow_(sh, obj));
+    ghiDong_(sh, [toRow_(sh, obj)]);
   }
   return obj;
 }

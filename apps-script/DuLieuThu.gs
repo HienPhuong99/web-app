@@ -48,14 +48,43 @@ function soThu_() {
 }
 function luuSoThu_(so) { PropertiesService.getScriptProperties().setProperty(soThuKhoa_(), JSON.stringify(so)); }
 
+const soTKMau_ = i => '00710001234' + i; // số tài khoản của khách mẫu thứ i (khách doanh nghiệp)
+/** Số tài khoản gốc của khách mẫu (MaKH → số), để sửa ô Sheets đã đổi thành số (mất số 0 đầu) */
+function soTKThu_() {
+  const so = soThu_(), m = {};
+  DLT_KHACH_.forEach((x, i) => { if (x[4] && so['k:' + i]) m[so['k:' + i]] = soTKMau_(i); });
+  return m;
+}
+
+// Phiên quản trị dùng trong script (không qua đăng nhập): nạp dữ liệu thử
+function phienNoiBo_() {
+  const token = Utilities.getUuid();
+  CacheService.getScriptCache().put('ss_' + token, JSON.stringify({ u: 'quanly', ten: NGUOI_THU_, vaiTro: 'admin', shops: [SHOP_MAC_DINH], shop: SHOP_MAC_DINH, t: Date.now() }), 1800);
+  return token;
+}
 // Chỉ chủ script chạy được (trong trình soạn thảo). Qua web app, người khác gọi thì getActiveUser trả về rỗng.
 function phienThu_() {
   const toi = Session.getActiveUser().getEmail();
   if (!toi || toi !== Session.getEffectiveUser().getEmail()) throw new Error('Chỉ chạy trong trình soạn thảo Apps Script.');
-  const token = Utilities.getUuid();
-  CacheService.getScriptCache().put('ss_' + token, JSON.stringify({ u: 'quanly', ten: NGUOI_THU_, vaiTro: 'admin', shops: [SHOP_MAC_DINH], shop: SHOP_MAC_DINH, t: Date.now() }), 1800);
+  const token = phienNoiBo_();
   boNhanThu_();
   return token;
+}
+
+/**
+ * Bản mới thêm hợp đồng mẫu vào bộ dữ liệu thử: khi nâng cấp, Sheet đang có đủ dữ liệu thử (chưa ai xóa bớt) thì tự nạp phần còn thiếu.
+ * Ai đã xóa bớt dữ liệu thử thì không tự thêm lại (chạy napDuLieuThu nếu muốn). Trả về số hợp đồng đã thêm.
+ */
+function boSungDuLieuThu_() {
+  const so = soThu_(), NHOM = { h: 'HangHoa', k: 'KhachHang', pk: 'PhieuKho', dh: 'DonHang', bg: 'BaoGia' };
+  const ma = Object.keys(so).filter(k => NHOM[k.split(':')[0]]);
+  if (!ma.length) return 0;
+  const co = {};
+  Object.keys(NHOM).forEach(n => { co[n] = new Set(readTable_(NHOM[n]).map(r => String(r[TABLES[NHOM[n]][0]]))); });
+  if (!ma.every(k => co[k.split(':')[0]].has(String(so[k])))) return 0;
+  const truoc = readTable_('HopDong').length;
+  try { napDuLieuThu_(phienNoiBo_(), henGio_('napDuLieuThu'), so); } finally { luuSoThu_(so); }
+  return readTable_('HopDong').length - truoc;
 }
 // Ném lỗi khi gần hết 6 phút để lần chạy sau làm tiếp
 function henGio_(ten) {
@@ -87,7 +116,7 @@ function napDuLieuThu_(tk, gio, so) {
 
   const hang = H.map((x, i) => co('HangHoa', 'h:' + i) || (gio(), ghi('h:' + i, luuHang(tk, { TenHang: x[0], Model: x[1], NhomHang: x[2], DVT: x[3], XuatXu: x[4], GiaSi: x[5], GiaLe: x[6], TonToiThieu: x[7], BaoHanh: x[8] }), 'HangHoa')));
   const khach = DLT_KHACH_.map((x, i) => co('KhachHang', 'k:' + i) || (gio(), ghi('k:' + i, luuKhach(tk, { TenKH: x[0], NguoiLienHe: x[1], SDT: x[2], DiaChi: x[3], MST: x[4] || '',
-    NguoiDaiDien: x[1], ChucVu: x[4] ? 'Giám đốc' : '', SoTK: x[4] ? '00710001234' + i : '', NganHang: x[5] || '', GhiChu: x[4] ? 'Khách doanh nghiệp' : 'Khách lẻ' }), 'KhachHang')));
+    NguoiDaiDien: x[1], ChucVu: x[4] ? 'Giám đốc' : '', SoTK: x[4] ? soTKMau_(i) : '', NganHang: x[5] || '', GhiChu: x[4] ? 'Khách doanh nghiệp' : 'Khách lẻ' }), 'KhachHang')));
 
   // Nhập kho 3 đợt; máy có IMEI thì giữ vào kho để phiếu giao lấy ra theo thứ tự
   const kho = {}, cuaHang = {};
@@ -258,7 +287,7 @@ function boNhanThu_() {
           let j = i;
           while (j + 1 < dongSua.length && dongSua[j + 1] === dongSua[j] + 1) j++;
           const khoi = vals.slice(dongSua[i], dongSua[j] + 1).map(row => row.map(v => (typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : v)));
-          sh.getRange(dongSua[i] + 1, 1, khoi.length, head.length).setValues(khoi);
+          ghiDong_(sh, khoi, dongSua[i] + 1);
           i = j + 1;
         }
       });
