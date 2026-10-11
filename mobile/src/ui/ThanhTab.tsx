@@ -10,8 +10,10 @@ import { bong, mau } from './theme';
 
 const BIEU_TUONG: Record<string, [keyof typeof Ionicons.glyphMap, keyof typeof Ionicons.glyphMap]> = {
   index: ['home-outline', 'home'],
+  khach: ['people-outline', 'people'],
+  ban: ['bag-add-outline', 'bag-add'],
   quet: ['scan-outline', 'scan'],
-  'tai-khoan': ['person-circle-outline', 'person-circle'],
+  'tai-khoan': ['grid-outline', 'grid'],
 };
 
 const coKinhThat = Platform.OS === 'ios' && (() => { try { return isLiquidGlassAvailable() && isGlassEffectAPIAvailable(); } catch { return false; } })();
@@ -42,8 +44,10 @@ export function ThanhTab({ state, descriptors, navigation }: BottomTabBarProps) 
             return (
               <Pressable key={route.key} onPress={bam} accessibilityRole="tab" accessibilityState={{ selected: chon }}
                 accessibilityLabel={nhan} testID={'tab-' + route.name} style={[s.nut, chon && s.nutChon]}>
-                <Ionicons name={chon ? btChon : bt} size={route.name === 'quet' ? 26 : 23} color={chon ? mau.camDam : mau.chuPhu} />
-                <Text style={[s.chu, chon && { color: mau.camDam }]}>{nhan}</Text>
+                {route.name === 'ban' ? (
+                  <View style={[s.nutBan, chon && { backgroundColor: mau.camDam }]}><Ionicons name={chon ? btChon : bt} size={21} color="#fff" /></View>
+                ) : <Ionicons name={chon ? btChon : bt} size={23} color={chon ? mau.camDam : mau.chuPhu} />}
+                <Text style={[s.chu, chon && { color: mau.camDam }]} numberOfLines={1}>{nhan}</Text>
               </Pressable>
             );
           })}
@@ -55,9 +59,10 @@ export function ThanhTab({ state, descriptors, navigation }: BottomTabBarProps) 
 
 const s = StyleSheet.create({
   boc: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  bong: { borderRadius: 999, width: '88%', maxWidth: 420 },
+  bong: { borderRadius: 999, width: '94%', maxWidth: 460 },
   vien: { flexDirection: 'row', borderRadius: 999, padding: 6, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.9)' },
-  nut: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 999, minHeight: 56 },
+  nut: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 6, borderRadius: 999, minHeight: 56, minWidth: 0 },
   nutChon: { backgroundColor: 'rgba(255,107,74,0.14)' },
-  chu: { fontSize: 12, marginTop: 2, color: mau.chuPhu, fontWeight: '600' },
+  nutBan: { width: 38, height: 28, borderRadius: 14, backgroundColor: mau.cam, alignItems: 'center', justifyContent: 'center' },
+  chu: { fontSize: 11, marginTop: 2, color: mau.chuPhu, fontWeight: '600' },
 });

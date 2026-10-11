@@ -43,9 +43,13 @@ function ghiCaiDat_(khoa, giaTri) {
   if (r) sh.getRange(r, 1, 1, row.length).setValues([row]); else sh.appendRow(row);
 }
 
-/** Một bộ hẹn giờ hằng ngày gọi guiEmailSang; xóa hết bộ hẹn giờ cũ của hàm này rồi tạo lại nếu còn cửa hàng bật. Hiện chỉ có 1 cửa hàng. */
+/**
+ * Một bộ hẹn giờ hằng ngày gọi guiEmailSang; xóa hết bộ hẹn giờ cũ của hàm này rồi tạo lại nếu còn cửa hàng bật email
+ * hoặc có điện thoại bật thông báo (thông báo gửi cùng giờ với email sáng, mặc định 7 giờ). Hiện chỉ có 1 cửa hàng.
+ */
 function datHenGioEmailSang_() {
-  const cd = caiDatMap_(), gio = Object.keys(SHOPS).map(id => cauHinhEmailSang_(id, cd)).filter(c => c.bat).map(c => c.gio);
+  const cd = caiDatMap_(), cfg = Object.keys(SHOPS).map(id => cauHinhEmailSang_(id, cd));
+  const gio = (coThongBao_() ? cfg : cfg.filter(c => c.bat)).map(c => c.gio);
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === EMAIL_HAM).forEach(t => ScriptApp.deleteTrigger(t));
   if (!gio.length) return 0;
   ScriptApp.newTrigger(EMAIL_HAM).timeBased().everyDays(1).atHour(Math.min.apply(null, gio)).inTimezone(tz_()).create();
@@ -58,16 +62,23 @@ function guiThuEmailSang(token) {
   return guiEmailSang_(CUR_SHOP, cauHinhEmailSang_(CUR_SHOP), homNay_(), true);
 }
 
-/** Bộ hẹn giờ gọi mỗi sáng. Chỉ chạy khi do bộ hẹn giờ gọi (người lạ gọi từ trình duyệt thì bỏ qua); mỗi cửa hàng tối đa một thư mỗi ngày. Không trả dữ liệu. */
+/**
+ * Bộ hẹn giờ gọi mỗi sáng. Chỉ chạy khi do bộ hẹn giờ gọi (người lạ gọi từ trình duyệt thì bỏ qua). Không trả dữ liệu.
+ * Mỗi cửa hàng tối đa một thư và một lượt thông báo đẩy (Api.gs) mỗi ngày.
+ */
 function guiEmailSang(e) {
   if (!e || typeof e !== 'object' || !(e.triggerUid || e.year)) return;
   const homNay = homNay_(), cd = caiDatMap_(), props = PropertiesService.getScriptProperties();
   Object.keys(SHOPS).forEach(id => {
-    if (!cauHinhEmailSang_(id, cd).bat || props.getProperty('emailSang.' + id) === homNay) return;
-    try {
-      CUR_SHOP = id;
-      if (guiEmailSang_(id, cauHinhEmailSang_(id, cd), homNay, false).daGui) props.setProperty('emailSang.' + id, homNay);
-    } catch (err) { Logger.log('Không gửi được email sáng của ' + id + ': ' + err); }
+    CUR_SHOP = id;
+    if (cauHinhEmailSang_(id, cd).bat && props.getProperty('emailSang.' + id) !== homNay) {
+      try { if (guiEmailSang_(id, cauHinhEmailSang_(id, cd), homNay, false).daGui) props.setProperty('emailSang.' + id, homNay); }
+      catch (err) { Logger.log('Không gửi được email sáng của ' + id + ': ' + err); }
+    }
+    if (props.getProperty('thongBao.' + id) !== homNay) {
+      try { guiThongBaoSang_(id, homNay); props.setProperty('thongBao.' + id, homNay); }
+      catch (err) { Logger.log('Không gửi được thông báo sáng của ' + id + ': ' + err); }
+    }
   });
 }
 

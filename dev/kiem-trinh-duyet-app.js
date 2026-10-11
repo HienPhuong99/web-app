@@ -104,6 +104,172 @@ buoc('Tra bảo hành: còn hạn, hết hạn, theo SĐT, không thấy, mã EA
   await page.getByTestId('loi-tra').getByText(/ít nhất 3 ký tự/).waitFor();
 });
 
+// Tab ẩn và màn hình phía sau vẫn nằm trong trang: chỉ lấy phần tử đang hiện
+const v = (page, id) => page.getByTestId(id).filter({ visible: true });
+const rpc = async (c, fn, ...args) => {
+  const r = await (await fetch(`http://127.0.0.1:${c.portApi}/rpc`, { method: 'POST', body: JSON.stringify({ fn, args }) })).json();
+  if (!r.ok) throw new Error(fn + ': ' + r.error);
+  return r.result;
+};
+const api = async (c, body) => (await fetch(`http://127.0.0.1:${c.portApi}/api`, { method: 'POST', body: JSON.stringify(body) })).json();
+
+buoc('Quét: dán IMEI đã sao chép, bộ nhớ tạm trống thì báo; chọn ảnh có mã QR', async page => {
+  await v(page, 'quet-tiep').click(); // bước trước còn để kết quả tra
+  await page.evaluate(() => navigator.clipboard.writeText('IMEI: 356789012345672'));
+  await v(page, 'nut-dan').click();
+  await v(page, 'so-ket-qua').getByText('1 máy khớp "356789012345672"').waitFor({ timeout: 15000 });
+  await v(page, 'quet-tiep').click();
+  await page.evaluate(() => navigator.clipboard.writeText(''));
+  await v(page, 'nut-dan').click();
+  await v(page, 'loi-tra').getByText(/Chưa có gì để dán/).waitFor();
+  const [fc] = await Promise.all([page.waitForEvent('filechooser'), v(page, 'nut-anh').click()]);
+  await fc.setFiles(path.join(__dirname, 'mau', 'imei-qr.png')); // ảnh mã QR chứa IMEI 356789012345672
+  await v(page, 'so-ket-qua').getByText('1 máy khớp "356789012345672"').waitFor({ timeout: 30000 });
+  await chup(page, '5-quet-anh');
+  await v(page, 'quet-tiep').click();
+});
+
+buoc('Bán nhanh: máy trong kho, quét trùng, máy đã bán, IMEI chưa nhập kho, dịch vụ, khách mới, trả một phần bằng chuyển khoản (mã QR)', async (page, c) => {
+  // Khai tài khoản nhận chuyển khoản (như quản trị làm trên web) để app có mã VietQR
+  const t = (await rpc(c, 'dangNhap', 'admin', c.matKhau)).token;
+  await rpc(c, 'luuCuaHang', t, { ...(await rpc(c, 'taiDuLieu', t)).congTy, tenNgan: 'phuonghihi', qrNganHang: '970436', qrSoTK: '0123456789', qrChuTK: 'NGUYEN VAN A' });
+  await page.getByTestId('tab-ban').click();
+  await v(page, 'tieu-de-ban').waitFor();
+  const them = async ma => { await v(page, 'o-imei-ban').fill(ma); await v(page, 'nut-them-imei').click(); };
+  await them('356789012345680');
+  await v(page, 'dong-gio').getByText('iPhone 16 Pro Max 256GB - Titan Đen').waitFor({ timeout: 15000 });
+  assert.strictEqual(await v(page, 'o-gia').first().inputValue(), '28.200.000'); // giá lẻ lấy từ danh mục
+  await them('356789012345680');
+  await v(page, 'loi-imei').getByText(/đã có trong đơn/).waitFor();
+  await them('356789012345672');
+  await v(page, 'loi-imei').getByText(/đã bán ngày .* cho Anh Minh/).waitFor({ timeout: 15000 });
+  await them('353333333333336'); // chưa từng nhập kho: chọn mặt hàng cho máy này
+  await v(page, 'ma-chua-co').waitFor({ timeout: 15000 });
+  await v(page, 'hang-HH0002').click();
+  await page.getByText('IMEI 353333333333336').waitFor();
+  assert.strictEqual(await v(page, 'dong-gio').count(), 2);
+  await v(page, 'nut-bo-dong').nth(1).click();
+  assert.strictEqual(await v(page, 'dong-gio').count(), 1);
+  await v(page, 'nut-them-hang').click();
+  await v(page, 'o-tim-hang').fill('Ốp lưng MagSafe');
+  await v(page, 'o-gia-dv').fill('150000');
+  await v(page, 'nut-them-dv').click();
+  await v(page, 'nut-tang').click();
+  assert.strictEqual(await v(page, 'so-luong').textContent(), '2');
+  await v(page, 'tong-cong').getByText('28.500.000 đ').waitFor();
+  await v(page, 'o-tim-khach-ban').fill('Chị Lan');
+  await v(page, 'o-sdt-khach-moi').fill('0988 111 222');
+  await v(page, 'nut-khach-moi').click();
+  await v(page, 'khach-da-chon').getByText('Chị Lan').waitFor();
+  await v(page, 'o-khach-tra').fill('20000000');
+  await v(page, 'con-no').getByText('Khách còn nợ 8.500.000 đ').waitFor();
+  await v(page, 'ht-chuyen-khoan').click();
+  const qr = page.locator('img[src*="img.vietqr.io"]').filter({ visible: true });
+  await qr.waitFor({ timeout: 10000 });
+  assert.match(await qr.getAttribute('src'), /970436-0123456789-compact2\.png\?amount=20000000&addInfo=CHI%20LAN%20MUA%20HANG&accountName=NGUYEN%20VAN%20A$/);
+  await khongTranNgang(page);
+  await chup(page, '6-ban-nhanh');
+  page.once('dialog', d => d.accept());
+  await v(page, 'nut-ban').click();
+  await v(page, 'da-ban').waitFor({ timeout: 20000 });
+  const kq = await v(page, 'ket-qua-ban').textContent();
+  assert.match(kq, /Còn nợ8\.500\.000 đ/);
+  c.soDH = /\d+-\d{4}\/DH/.exec(kq)[0];
+  await page.getByText('BH đến').first().waitFor(); // máy có hạn bảo hành
+  await chup(page, '7-da-ban');
+  // Máy chủ: máy đã ra khỏi kho
+  const may = await page.evaluate(() => localStorage.getItem('may'));
+  assert.strictEqual((await api(c, { may, fn: 'traMaKho', args: ['356789012345680'] })).result.trangThai, 'daBan');
+});
+
+buoc('Thu nốt tiền còn nợ của đơn vừa bán → hồ sơ khách hết nợ, có máy vừa mua', async (page, c) => {
+  await v(page, 'nut-thu-sau-ban').click();
+  await v(page, 'o-so-tien').waitFor({ timeout: 15000 });
+  assert.strictEqual(await v(page, 'o-so-tien').inputValue(), '8.500.000');
+  await v(page, 'tt-ht-tien-mat').click();
+  await khongTranNgang(page);
+  await v(page, 'nut-luu-thu').click();
+  const xong = v(page, 'phieu-thu-xong');
+  await xong.waitFor({ timeout: 15000 });
+  assert.match(await xong.textContent(), new RegExp('8\\.500\\.000 đ.*Tiền mặt.*' + c.soDH.replace('/', '\\/')));
+  await v(page, 'nut-xong-thu').click();
+  await v(page, 'nut-xem-khach').click();
+  await v(page, 'cong-no').getByText('Không còn nợ').waitFor({ timeout: 15000 });
+  await v(page, 'the-may').getByText('356789012345680').waitFor();
+  await v(page, 'ds-don').getByText(c.soDH).waitFor();
+  await v(page, 'nut-zalo').waitFor();
+  await khongTranNgang(page);
+  await chup(page, '8-ho-so-khach');
+  await v(page, 'nut-lui').click();
+  await v(page, 'nut-ban-moi').click();
+  await v(page, 'o-imei-ban').waitFor();
+});
+
+buoc('Khách: tìm không dấu, mở hồ sơ; thêm khách mới', async page => {
+  await page.getByTestId('tab-khach').click();
+  await v(page, 'o-tim-khach').fill('chi lan');
+  await v(page, 'ds-khach').getByText('Chị Lan').waitFor({ timeout: 15000 });
+  await v(page, 'ds-khach').getByText('Chị Lan').click();
+  await v(page, 'the-cong-no').waitFor({ timeout: 15000 });
+  await v(page, 'nut-lui').click();
+  await v(page, 'nut-them-khach').click();
+  await v(page, 'o-ten-khach').fill('Anh Phát');
+  await v(page, 'o-sdt-khach').fill('0909 222 333');
+  await v(page, 'nut-luu-khach').click();
+  await page.getByText('Anh Phát').filter({ visible: true }).first().waitFor({ timeout: 15000 });
+  await v(page, 'cong-no').getByText('Không còn nợ').waitFor({ timeout: 15000 });
+  await chup(page, '9-khach-moi');
+  await v(page, 'nut-lui').click();
+});
+
+buoc('Kho: tồn kho, kiểm tra IMEI, thẻ kho; Hợp đồng; Thêm: Face ID / thông báo chỉ có trên điện thoại', async page => {
+  await page.getByTestId('tab-tai-khoan').click();
+  await v(page, 'mo-kho').click();
+  await v(page, 'ds-kho').getByText(/Tồn \d+/).first().waitFor({ timeout: 15000 });
+  await v(page, 'o-kiem-imei').fill('356789012345698');
+  await v(page, 'nut-kiem-imei').click();
+  await v(page, 'tt-imei').getByText('Còn trong kho').waitFor({ timeout: 15000 });
+  await v(page, 'o-kiem-imei').fill('356789012345680');
+  await v(page, 'nut-kiem-imei').click();
+  await v(page, 'tt-imei').getByText('Đã bán').waitFor({ timeout: 15000 });
+  await khongTranNgang(page);
+  await chup(page, '10-kho');
+  await v(page, 'kho-HH0001').click();
+  await v(page, 'the-kho').getByText('Chị Lan').waitFor({ timeout: 15000 });
+  await v(page, 'the-kho').getByText('356789012345680', { exact: true }).waitFor(); // dòng xuất bán; dòng nhập có 2 IMEI
+  await v(page, 'nut-lui').click();
+  await v(page, 'nut-lui').click();
+  await v(page, 'mo-hop-dong').click();
+  await page.getByText('Chưa có hợp đồng.').filter({ visible: true }).waitFor({ timeout: 15000 });
+  await v(page, 'nut-lui').click();
+  await page.getByText('Chỉ có trên app điện thoại.').filter({ visible: true }).waitFor();
+  assert.ok(await v(page, 'cong-tac-khoa').locator('input').isDisabled()); // bản web không có Face ID
+  assert.ok(await v(page, 'cong-tac-thong-bao').locator('input').isDisabled());
+});
+
+buoc('Điện thoại đăng nhập: thấy "Máy này", đăng xuất từ xa một máy khác', async (page, c) => {
+  const khac = (await api(c, { fn: 'dangNhapMay', args: ['admin', c.matKhau, 'iPad quầy'] })).result.may;
+  await v(page, 'mo-thiet-bi').click();
+  await v(page, 'may-nay').waitFor({ timeout: 15000 });
+  await v(page, 'ds-thiet-bi').getByText('iPad quầy').waitFor();
+  await khongTranNgang(page);
+  await chup(page, '11-thiet-bi');
+  page.once('dialog', d => d.accept());
+  await v(page, 'nut-xoa-thiet-bi').first().click();
+  await page.waitForFunction(() => !document.body.innerText.includes('iPad quầy'), null, { timeout: 15000 });
+  assert.strictEqual((await api(c, { fn: 'tongQuanMay', may: khac })).error, 'HET_PHIEN');
+  await v(page, 'nut-lui').click();
+});
+
+buoc('Tổng quan: phím tắt Bán nhanh, bấm khách còn nợ mở hồ sơ', async page => {
+  await page.getByTestId('tab-index').click();
+  await v(page, 'no-KH00001').click({ timeout: 15000 });
+  await v(page, 'the-cong-no').waitFor({ timeout: 15000 });
+  await v(page, 'nut-lui').click();
+  await v(page, 'pt-ban').click();
+  await v(page, 'o-imei-ban').waitFor();
+});
+
 buoc('Tài khoản → Đăng xuất: hỏi lại, về màn hình đăng nhập, mở lại vẫn phải đăng nhập', async (page, c) => {
   await page.getByTestId('tab-tai-khoan').click();
   await page.getByTestId('tk-ten').getByText('Quản trị').waitFor();
@@ -136,6 +302,29 @@ buoc('Máy chủ thu hồi phiên (đặt lại mật khẩu…) → app tự v�
   await page.getByTestId('nut-dang-nhap').waitFor({ timeout: 15000 });
 });
 
+buoc('Trang web quản lý → Điện thoại đăng nhập: thấy máy, đăng xuất từ xa', async (page, c) => {
+  const may = (await api(c, { fn: 'dangNhapMay', args: ['admin', c.matKhau, 'Điện thoại bị mất'] })).result.may;
+  await api(c, { may, fn: 'datThongBao', args: ['ExponentPushToken[thu-nghiem-1234567890]'] });
+  const w = await page.context().newPage();
+  await w.setViewportSize({ width: 1280, height: 860 });
+  try {
+    await w.goto(`http://127.0.0.1:${c.portApi}/`);
+    await w.fill('#lgUser', 'admin');
+    await w.fill('#lgPass', c.matKhau);
+    await w.click('#loginForm button[type=submit]');
+    await w.click('#nav a[data-go="thietbi"]', { timeout: 15000 });
+    const dong = w.locator('tr', { hasText: 'Điện thoại bị mất' });
+    await dong.waitFor({ timeout: 15000 });
+    assert.match(await dong.textContent(), /admin.*Đang bật/);
+    await w.screenshot({ path: path.join(ANH, '12-web-thiet-bi.png') });
+    w.once('dialog', d => d.accept());
+    await dong.getByText('Đăng xuất máy này').click();
+    await w.getByText('Đã đăng xuất Điện thoại bị mất.').waitFor({ timeout: 15000 });
+    assert.strictEqual(await w.locator('tr', { hasText: 'Điện thoại bị mất' }).count(), 0);
+    assert.strictEqual((await api(c, { fn: 'tongQuanMay', may })).error, 'HET_PHIEN');
+  } finally { await w.close(); }
+});
+
 (async () => {
   let api, web, browser, loi = 0;
   try {
@@ -144,7 +333,9 @@ buoc('Máy chủ thu hồi phiên (đặt lại mật khẩu…) → app tự v�
     buildWeb();
     web = await phucVu();
     browser = await chromium.launch();
-    const page = await (await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true })).newPage();
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true, permissions: ['clipboard-read', 'clipboard-write'] });
+    await ctx.route('https://img.vietqr.io/**', r => r.fulfill({ path: path.join(__dirname, 'mau', 'imei-qr.png') })); // không gọi dịch vụ ngoài khi test
+    const page = await ctx.newPage();
     const loiTrang = [];
     page.on('pageerror', e => loiTrang.push(e.message));
     page.on('console', m => { if (m.type() === 'error') loiTrang.push(m.text()); });

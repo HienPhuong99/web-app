@@ -145,6 +145,7 @@ const DriveApp = {
 
 const cache = new Map(), props = new Map();
 const thuMail = { da: [], henGio: [], chu: 'chu@example.com', thieuQuyen: false };
+const push = { da: [], loi: {}, http: 0, thieuQuyen: false };
 const logs = [];
 const ctx = vm.createContext({
   console,
@@ -162,6 +163,14 @@ const ctx = vm.createContext({
       create: () => { if (thuMail.thieuQuyen) throw new Error('Bạn không có quyền gọi ScriptApp.newTrigger.'); thuMail.henGio.push(t); return t; } }; return b; },
   },
   Session: { getEffectiveUser: () => ({ getEmail: () => thuMail.chu }) },
+  // Máy chủ thông báo Expo giả: ghi lại các lô đã gửi. push.loi[token] = mã lỗi trả về cho máy đó; push.http = mã HTTP khác 200.
+  UrlFetchApp: { fetch: (url, o) => {
+    if (push.thieuQuyen) throw new Error('Bạn không có quyền gọi UrlFetchApp.fetch. Quyền cần thiết: https://www.googleapis.com/auth/script.external_request');
+    const msgs = JSON.parse(o.payload);
+    push.da.push({ url, msgs });
+    const data = msgs.map(m => push.loi[m.to] ? { status: 'error', message: push.loi[m.to], details: { error: push.loi[m.to] } } : { status: 'ok', id: 'id-' + push.da.length });
+    return { getResponseCode: () => push.http || 200, getContentText: () => JSON.stringify(push.http ? { errors: [{ message: 'lỗi' }] } : { data }) };
+  } },
   ContentService: { MimeType: { JSON: 'application/json' }, createTextOutput: s => ({ text: String(s), mime: 'text/plain',
     setMimeType(m) { this.mime = m; return this; }, getContent() { return this.text; }, getMimeType() { return this.mime; } }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
@@ -201,11 +210,14 @@ if (MAU_APP) {
   const t = ctx.dangNhap('admin', logs.join('\n').match(/mật khẩu: (\S+)/)[1]).token, homNay = ctx.now_().slice(0, 10);
   const may16 = { MaHH: 'HH0001', TenHang: 'iPhone 16 Pro Max 256GB - Titan Đen', DVT: 'Máy' }, may15 = { MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', DVT: 'Máy' };
   ctx.luuChungTu(t, 'NK', { Ngay: homNay, DoiTac: 'Tồn đầu kỳ', lines: [Object.assign({ SoLuong: 5 }, may16), Object.assign({ SoLuong: 1 }, may15)] });
+  ctx.luuChungTu(t, 'NK', { Ngay: homNay, DoiTac: 'Nhà cung cấp', lines: [Object.assign({ SoLuong: 2, IMEI: '356789012345680, 356789012345698' }, may16),
+    Object.assign({ SoLuong: 1, IMEI: '351234567890132' }, may15)] });
   const dh = ctx.luuChungTu(t, 'DH', { Ngay: homNay, MaKH: 'KH00001', TenKH: 'Anh Minh', SDT: '0911000001', VAT: 0, lines: [Object.assign({ SoLuong: 1, DonGia: 28200000 }, may16)] }).doc;
   ctx.luuChungTu(t, 'XK', { Ngay: homNay, SoDH: dh.SoDH, DoiTac: 'Anh Minh', lines: [Object.assign({ SoLuong: 1, IMEI: '356789012345672' }, may16)] });
   ctx.luuChungTu(t, 'XK', { Ngay: '2024-03-10', DoiTac: 'Khách lẻ', lines: [Object.assign({ SoLuong: 1, IMEI: '351234567890124' }, may15)] });
   ctx.luuThuTien(t, { Ngay: homNay, SoDH: dh.SoDH, SoTien: 20000000, HinhThuc: 'Tiền mặt' });
   console.log('Mẫu tra bảo hành trên app: IMEI 356789012345672 (còn hạn), 351234567890124 (hết hạn), SĐT 0911000001');
+  console.log('Máy còn trong kho để thử bán nhanh: 356789012345680, 356789012345698 (iPhone 16 Pro Max), 351234567890132 (iPhone 15)');
 }
 
 // ---- google.script.run giả: gọi hàm trong Code.gs qua /rpc (hàm kết thúc bằng _ là hàm riêng, không gọi được)
@@ -217,7 +229,7 @@ const SHIM = `window.google = { script: { get run() {
   return make({});
 } } };`;
 
-module.exports = { ctx, sheets, logs, cache, props, Sheet, drive, docs, thuMail };
+module.exports = { ctx, sheets, logs, cache, props, Sheet, drive, docs, thuMail, push };
 if (require.main === module) http.createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/rpc') {
     let body = '';
