@@ -7,7 +7,8 @@ export class LoiPhien extends Error {
 }
 
 /** moi = true: máy chủ bỏ qua kết quả đã ghi nhớ, lấy số mới nhất (kéo xuống để làm mới) */
-export type YeuCau = { fn: string; args?: unknown[]; may?: string | null; moi?: boolean };
+/** maGhi: mã lần gửi của lệnh ghi; gửi lại cùng mã (sau khi mạng lỗi) thì máy chủ trả kết quả lần trước, không ghi thêm */
+export type YeuCau = { fn: string; args?: unknown[]; may?: string | null; moi?: boolean; maGhi?: string };
 
 export async function goiApi<T = unknown>(url: string, yc: YeuCau, choToiDa = 30000): Promise<T> {
   if (!/^https?:\/\/\S+$/.test(url)) throw new Error('Địa chỉ máy chủ không hợp lệ.');
@@ -16,7 +17,7 @@ export async function goiApi<T = unknown>(url: string, yc: YeuCau, choToiDa = 30
   try {
     res = await fetch(url, {
       method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ fn: yc.fn, args: yc.args ?? [], may: yc.may ?? undefined, moi: yc.moi || undefined }), signal: ctrl.signal,
+      body: JSON.stringify({ fn: yc.fn, args: yc.args ?? [], may: yc.may ?? undefined, moi: yc.moi || undefined, maGhi: yc.maGhi || undefined }), signal: ctrl.signal,
     });
   } catch {
     throw new Error(ctrl.signal.aborted ? 'Máy chủ phản hồi quá lâu. Thử lại sau.' : 'Không kết nối được máy chủ. Kiểm tra mạng.');

@@ -13,6 +13,7 @@ import { docTien, doiSoLuong, dongGui, soTienNhap, suaGia, themHang, themMay, to
 import { boDau } from '../../lib/lienHe';
 import { chuanHoaMa, goiYMa } from '../../lib/maQuet';
 import { useGuiPhieu } from '../../lib/pdf';
+import { daThuThem, taoMaGhi } from '../../lib/ghiMotLan';
 import { dsKhachDoiNo, hoSoSauBan, khoSauBan, tongQuanSauBan } from '../../lib/sauGhi';
 import { useDuLieu, useSuaBoNho } from '../../lib/useDuLieu';
 import { ChuLoi, ChuNhat, Dong, DongTT, KhungTrang, Nhan, OTim, TieuDeMuc, Vach } from '../../ui/DanhSach';
@@ -27,7 +28,8 @@ import { mau } from '../../ui/theme';
 type Khach = { MaKH: string; TenKH: string; SDT?: string } | { moi: true; TenKH: string; SDT: string };
 
 export default function BanMan() {
-  const { goi } = useAuth();
+  const { goi, goiGhi } = useAuth();
+  const maGhi = useRef(''); // mã lần gửi của đơn đang bán
   const p = useLocalSearchParams<{ ma?: string; ten?: string }>();
   const [gio, setGio] = useState<DongGio[]>([]);
   const [khach, setKhach] = useState<Khach | null>(null);
@@ -105,11 +107,13 @@ export default function BanMan() {
     setDangLuu(true);
     try {
       const lines = dongGui(gio);
-      const r = await goi<BanNhanhKQ>('banNhanh', {
+      if (!maGhi.current) maGhi.current = taoMaGhi(); // thử lại sau lỗi mạng giữ mã cũ: máy chủ không lập đơn thứ hai
+      const r = await goiGhi<BanNhanhKQ>(maGhi.current, 'banNhanh', {
         ...('moi' in khach ? { khachMoi: { TenKH: khach.TenKH, SDT: khach.SDT } } : { MaKH: khach.MaKH }),
         lines, VAT: vat, GiamGia: tong.giam, GhiChu: ghiChu.trim(), thu: { SoTien: thu, HinhThuc: hinhThuc },
         thuCu: mayCu.map(m => ({ TenHang: m.TenHang, IMEI: m.IMEI, GiaThu: m.GiaThu })),
       });
+      maGhi.current = '';
       setKq(r);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       // Máy chủ đã ghi xong: sửa luôn số trên Tổng quan, kho, công nợ, hồ sơ khách; lần mở sau vẫn lấy số máy chủ làm chuẩn
@@ -122,6 +126,7 @@ export default function BanMan() {
   };
 
   const donMoi = () => {
+    maGhi.current = '';
     setGio([]); setKhach(null); setSoThu(null); setMayCu([]); setGiamGia(0); setGhiChu(''); setKq(null); setLoi(''); setLoiMa(''); setMaGo(''); setMaChuaCo('');
     setVat(ch?.vat ?? 0); router.setParams({ ma: undefined, ten: undefined });
   };
@@ -354,7 +359,9 @@ function ChonKhach({ khach, setKhach }: { khach: Khach | null; setKhach: (k: Kha
 function KetQua({ kq, qr, hinhThuc, onMoi }: { kq: BanNhanhKQ; qr: CauHinh['qr']; hinhThuc: string; onMoi: () => void }) {
   const phieu = useGuiPhieu();
   const cu = kq.thuCu ?? [], tienCu = cu.reduce((s, m) => s + m.GiaThu, 0), tienMat = kq.daThu - tienCu; // daThu gồm cả giá máy cũ
-  const no = kq.TongCong - kq.daThu;
+  const [them, setThem] = useState(() => daThuThem(kq.SoDH));
+  useFocusEffect(useCallback(() => { setThem(daThuThem(kq.SoDH)); }, [kq.SoDH])); // quay về từ Thu tiền: còn nợ theo số vừa thu
+  const no = Math.max(0, kq.TongCong - kq.daThu - them);
   return (
     <KhungTrang>
       <View style={s.xong}><Ionicons name="checkmark-circle" size={64} color={mau.xanh} /></View>

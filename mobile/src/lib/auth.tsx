@@ -22,6 +22,8 @@ type Auth = TrangThai & {
   goi: <T>(fn: string, ...args: unknown[]) => Promise<T>;
   /** Như goi nhưng máy chủ không dùng kết quả đã ghi nhớ (kéo xuống để làm mới) */
   goiMoi: <T>(fn: string, ...args: unknown[]) => Promise<T>;
+  /** Lệnh ghi kèm mã lần gửi (taoMaGhi): giữ nguyên mã khi thử lại để không ghi trùng */
+  goiGhi: <T>(maGhi: string, fn: string, ...args: unknown[]) => Promise<T>;
 };
 
 const Ctx = createContext<Auth | null>(null);
@@ -65,14 +67,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setTt(t => ({ ...t, mayChu: v }));
   }, []);
 
-  const goiVoi = useCallback(async <T,>(moi: boolean, fn: string, args: unknown[]): Promise<T> => {
-    try { return await goiApi<T>(tt.mayChu, { fn, args, may: tt.may, moi }); }
+  const goiVoi = useCallback(async <T,>(moi: boolean, fn: string, args: unknown[], maGhi?: string): Promise<T> => {
+    try { return await goiApi<T>(tt.mayChu, { fn, args, may: tt.may, moi, maGhi }); }
     catch (e) { if (e instanceof LoiPhien) await xoaPhien(); throw e; }
   }, [tt.mayChu, tt.may, xoaPhien]);
   const goi = useCallback(<T,>(fn: string, ...args: unknown[]) => goiVoi<T>(false, fn, args), [goiVoi]);
   const goiMoi = useCallback(<T,>(fn: string, ...args: unknown[]) => goiVoi<T>(true, fn, args), [goiVoi]);
+  const goiGhi = useCallback(<T,>(maGhi: string, fn: string, ...args: unknown[]) => goiVoi<T>(false, fn, args, maGhi), [goiVoi]);
 
-  const gt = useMemo<Auth>(() => ({ ...tt, dangNhap, dangXuat, doiMayChu, goi, goiMoi }), [tt, dangNhap, dangXuat, doiMayChu, goi, goiMoi]);
+  const gt = useMemo<Auth>(() => ({ ...tt, dangNhap, dangXuat, doiMayChu, goi, goiMoi, goiGhi }), [tt, dangNhap, dangXuat, doiMayChu, goi, goiMoi, goiGhi]);
   return <Ctx.Provider value={gt}>{children}</Ctx.Provider>;
 }
 

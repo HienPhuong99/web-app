@@ -193,6 +193,9 @@ buoc('Thu nốt tiền còn nợ của đơn vừa bán → hồ sơ khách hế
   await xong.waitFor({ timeout: 15000 });
   assert.match(await xong.textContent(), new RegExp('8\\.500\\.000 đ.*Tiền mặt.*' + c.soDH.replace('/', '\\/')));
   await v(page, 'nut-xong-thu').click();
+  await v(page, 'nut-xem-khach').waitFor();
+  // về màn Đã bán: không còn "Còn nợ" và nút Thu tiền (trước đây vẫn hiện số cũ, bấm lại là thu trùng)
+  await page.waitForFunction(() => ![...document.querySelectorAll('[data-testid="nut-thu-sau-ban"]')].some(e => e.offsetParent), null, { timeout: 15000 });
   await v(page, 'nut-xem-khach').click();
   await v(page, 'cong-no').getByText('Không còn nợ').waitFor({ timeout: 15000 });
   await v(page, 'the-may').getByText('356789012345680').waitFor();

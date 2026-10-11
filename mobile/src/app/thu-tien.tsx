@@ -10,6 +10,7 @@ import type { CauHinh, DsKhach, HoSoKhach, KhachNo, PhieuThu, TongQuan } from '.
 import { homNay, ngay, tien } from '../lib/dinhDang';
 import { docTien, soTienNhap } from '../lib/gioHang';
 import { boDau } from '../lib/lienHe';
+import { ghiThuThem, taoMaGhi } from '../lib/ghiMotLan';
 import { dsKhachDoiNo, hoSoSauThu, khachNoSauThu, tongQuanSauThu } from '../lib/sauGhi';
 import { useDuLieu, useSuaBoNho } from '../lib/useDuLieu';
 import { Chip } from '../ui/Chip';
@@ -23,7 +24,8 @@ import { mau } from '../ui/theme';
 
 export default function ThuTienMan() {
   const { ma, don } = useLocalSearchParams<{ ma: string; don?: string }>();
-  const { goi } = useAuth();
+  const { goiGhi } = useAuth();
+  const maGhi = useRef(''); // mã lần gửi: thử lại sau lỗi mạng không ghi phiếu thứ hai
   // Hồ sơ khách thường đã có sẵn (vừa mở từ hồ sơ): hiện ngay, cập nhật ở nền
   const dlHs = useDuLieu<HoSoKhach>('chiTietKhach', [ma]), hs = dlHs.du, ch = useDuLieu<CauHinh>('cauHinhMay', []).du;
   const boNho = useSuaBoNho();
@@ -44,7 +46,10 @@ export default function ThuTienMan() {
     if (tienThu <= 0) return setLoi('Nhập số tiền thu.');
     setDang(true);
     try {
-      const pt = await goi<PhieuThu>('luuThuTien', { Ngay: homNay(), MaKH: ma, SoDH: soDH, SoTien: tienThu, HinhThuc: hinhThuc, GhiChu: ghiChu.trim() });
+      if (!maGhi.current) maGhi.current = taoMaGhi();
+      const pt = await goiGhi<PhieuThu>(maGhi.current, 'luuThuTien', { Ngay: homNay(), MaKH: ma, SoDH: soDH, SoTien: tienThu, HinhThuc: hinhThuc, GhiChu: ghiChu.trim() });
+      maGhi.current = '';
+      ghiThuThem(pt.SoDH, pt.SoTien);
       setXong(pt);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       // Máy chủ đã ghi: công nợ trên hồ sơ, Tổng quan, danh sách khách đổi ngay

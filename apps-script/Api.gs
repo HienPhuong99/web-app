@@ -50,6 +50,13 @@ function goiApi_(q) {
   if (fn !== 'datThongBao' && !Object.prototype.hasOwnProperty.call(ham, fn)) throw new Error('Không có chức năng "' + fn.slice(0, 40) + '".');
   const token = phienMay_(q.may);
   MAY_HIEN_TAI_ = bamMay_(q.may);
+  // Lệnh ghi kèm mã lần gửi (maGhi): mạng chậm, app báo lỗi mà máy chủ đã ghi rồi thì lần gửi lại cùng mã nhận kết quả cũ, không ghi thêm đơn / phiếu
+  const maGhi = GHI_MOT_LAN_.indexOf(fn) >= 0 && typeof q.maGhi === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(q.maGhi) ? 'ghi_' + MAY_HIEN_TAI_.slice(0, 20) + '_' + q.maGhi : '';
+  if (maGhi) {
+    const daCo = withLock_(() => { const c = CacheService.getScriptCache(), v = c.get(maGhi); if (!v) c.put(maGhi, DANG_GHI_, 300); return v; });
+    if (daCo === DANG_GHI_) throw new Error('Lần gửi trước đang được máy chủ xử lý. Đợi vài giây rồi xem lại đơn / phiếu thu trước khi gửi lại.');
+    if (daCo) { MAY_HIEN_TAI_ = ''; return JSON.parse(daCo); }
+  }
   let r;
   try {
     r = docMotLan_(() => {
@@ -61,6 +68,7 @@ function goiApi_(q) {
     });
   }
   catch (e) { // phiên bị thu hồi (khóa tài khoản, đặt lại mật khẩu…): xóa luôn máy này khỏi danh sách
+    if (maGhi) boGiu_(maGhi); // lỗi thật (chưa ghi): cho gửi lại
     if (e && e.message === 'HET_PHIEN') withLock_(() => xoaMay_(bamMay_(q.may)));
     throw e;
   } finally { MAY_HIEN_TAI_ = ''; }
@@ -68,8 +76,10 @@ function goiApi_(q) {
     const s = CacheService.getScriptCache().get('ss_' + token);
     if (s) capNhatMay_(bamMay_(q.may), { CapLuc: String(JSON.parse(s).t) });
   }
+  if (maGhi) { try { CacheService.getScriptCache().put(maGhi, JSON.stringify(r === undefined ? null : r), 600); } catch (e) { boGiu_(maGhi); } }
   return r;
 }
+const GHI_MOT_LAN_ = ['banNhanh', 'luuThuTien', 'luuPhieuChi', 'traHang', 'traMaySua', 'luuSuaChua'], DANG_GHI_ = '…đang ghi';
 
 function bamMay_(may) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(may), Utilities.Charset.UTF_8)

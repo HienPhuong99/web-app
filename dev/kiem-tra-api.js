@@ -582,6 +582,24 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   assert.ok(sheets.PS_NhatKy.rows.some(r => r[2] === 'Kiểm kho theo IMEI'));
 }
 
+// Lệnh ghi kèm mã lần gửi: gửi lại cùng mã (app báo lỗi mạng mà máy chủ đã ghi) nhận kết quả cũ, không ghi thêm phiếu
+{
+  const kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Gửi Lại', SDT: '0966000555' }), so0 = sheets.PS_ThuTien.rows.length;
+  const gui = ma => api({ may: binh4, fn: 'luuThuTien', args: [{ Ngay: today, MaKH: kh.MaKH, SoTien: 120000, HinhThuc: 'Tiền mặt' }], maGhi: ma });
+  const a = gui('lan-gui-0001'), b = gui('lan-gui-0001');
+  assert.ok(a.ok && b.ok && a.result.SoPT === b.result.SoPT, JSON.stringify([a, b]));
+  assert.strictEqual(sheets.PS_ThuTien.rows.length, so0 + 1);
+  assert.strictEqual(gui('lan-gui-0002').ok && sheets.PS_ThuTien.rows.length, so0 + 2); // mã mới: phiếu mới
+  const khoa = 'ghi_' + G.bamMay_(binh4).slice(0, 20) + '_lan-gui-0003';
+  cache.set(khoa, '…đang ghi');
+  assert.match(gui('lan-gui-0003').error, /đang được máy chủ xử lý/);
+  cache.delete(khoa);
+  const loi = api({ may: binh4, fn: 'luuThuTien', args: [{ Ngay: today, MaKH: kh.MaKH, SoTien: 0 }], maGhi: 'lan-gui-0004' });
+  assert.match(loi.error, /Nhập số tiền thu/);
+  assert.ok(!cache.has('ghi_' + G.bamMay_(binh4).slice(0, 20) + '_lan-gui-0004'), 'Lỗi thật thì bỏ giữ để gửi lại được');
+  assert.strictEqual(api({ may: binh4, fn: 'luuThuTien', args: [{ Ngay: today, MaKH: kh.MaKH, SoTien: 1000 }], maGhi: 'bad' }).ok, true); // mã sai dạng: bỏ qua, ghi bình thường
+}
+
 // Serial có dấu gạch / chấm (lưu nguyên như nhập): quét hay gõ không dấu vẫn tìm thấy ở tra kho, kiểm kho, tra bảo hành
 {
   const t = G.dangNhap('admin', adminPass).token, kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Serial Gạch', SDT: '0966000444' });
