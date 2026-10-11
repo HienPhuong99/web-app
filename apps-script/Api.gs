@@ -417,7 +417,7 @@ function banNhanh(token, o) {
 function dsHopDongMay(token, q, o) {
   user_(token);
   o = o || {};
-  const raw = String(q == null ? '' : q).trim().slice(0, 60), chu = boDau_(raw), so = raw.replace(/\D/g, ''), homNay = homNay_();
+  const raw = String(q == null ? '' : q).trim().slice(0, 60), chu = boDau_(raw), so = sdtVN_(raw), homNay = homNay_();
   let ds = readTable_('HopDong');
   if (raw) ds = ds.filter(h => boDau_(h.SoHD + ' ' + h.TenDN).indexOf(chu) >= 0 || (so.length >= 4 && String(h.SDT || '').replace(/\D/g, '').indexOf(so) >= 0));
   const loc = {
