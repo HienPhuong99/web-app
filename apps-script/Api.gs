@@ -384,7 +384,7 @@ function banNhanh(token, o) {
   const mayCu = chuanMayCu_(o.thuCu), tongCu = mayCu.reduce((s, m) => s + m.GiaThu, 0); // thu cũ đổi mới: trừ vào đơn (DichVu.gs)
   if (soThu < 0 || soThu + tongCu > tong) throw new Error(tongCu ? 'Tiền khách trả cộng giá máy cũ (' + (soThu + tongCu) + ' đ) lớn hơn tổng đơn (' + tong + ' đ).' : 'Số tiền khách trả phải từ 0 đến ' + tong + ' đ.');
   // Khách: chọn sẵn, hoặc khách mới (trùng số điện thoại với khách cũ thì dùng khách cũ)
-  let kh;
+  let kh, khMoi = false;
   if (o.MaKH) {
     kh = findObj_('KhachHang', o.MaKH);
     if (!kh) throw new Error('Không tìm thấy khách hàng ' + o.MaKH + '.');
@@ -394,17 +394,22 @@ function banNhanh(token, o) {
     const so = sdtVN_(sdt), le = !so && boDau_(ten) === 'khach le'; // "Khách lẻ": mọi lần bán lẻ dùng chung một khách
     kh = so.length >= 8 ? readTable_('KhachHang').find(k => sdtList_(k.SDT).indexOf(so) >= 0)
       : le ? readTable_('KhachHang').find(k => boDau_(k.TenKH) === 'khach le') : null;
-    if (!kh) kh = luuKhach(token, { TenKH: ten, SDT: sdt });
+    if (!kh) { kh = luuKhach(token, { TenKH: ten, SDT: sdt }); khMoi = true; }
   }
+  // Lập đơn / xuất kho lỗi: bỏ đơn vừa lập và khách vừa tạo trong lần này (chưa có giao dịch nào), thử lại không sinh khách trùng
+  const boKhachMoi = () => { if (khMoi) deleteWhere_('KhachHang', kh.MaKH); };
   const ghiChu = String(o.GhiChu || '').trim().slice(0, 500);
-  const dh = luuChungTu(token, 'DH', { Ngay: ngay, MaKH: kh.MaKH, TenKH: kh.TenKH, SDT: kh.SDT || '', DiaChi: kh.DiaChi || '', NgayGiao: ngay, VAT: vat, GiamGia: giam, GhiChu: ghiChu,
-    lines: lines.map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, Model: l.Model, DVT: l.DVT, XuatXu: l.XuatXu, SoLuong: l.SoLuong, LoaiGia: l.LoaiGia, DonGia: l.DonGia })) }).doc;
+  let dh;
+  try {
+    dh = luuChungTu(token, 'DH', { Ngay: ngay, MaKH: kh.MaKH, TenKH: kh.TenKH, SDT: kh.SDT || '', DiaChi: kh.DiaChi || '', NgayGiao: ngay, VAT: vat, GiamGia: giam, GhiChu: ghiChu,
+      lines: lines.map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, Model: l.Model, DVT: l.DVT, XuatXu: l.XuatXu, SoLuong: l.SoLuong, LoaiGia: l.LoaiGia, DonGia: l.DonGia })) }).doc;
+  } catch (e) { withLock_(boKhachMoi); throw e; }
   let pk;
   try {
     pk = luuChungTu(token, 'XK', { Ngay: ngay, SoDH: dh.SoDH, DoiTac: kh.TenKH, GhiChu: 'Bán nhanh trên app',
       lines: lines.map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, Model: l.Model, DVT: l.DVT, SoLuong: l.SoLuong, IMEI: l.IMEI })) }).doc;
   } catch (e) {
-    withLock_(() => { deleteWhere_('DonHang', dh.SoDH); deleteWhere_('DonHangCT', dh.SoDH); });
+    withLock_(() => { deleteWhere_('DonHang', dh.SoDH); deleteWhere_('DonHangCT', dh.SoDH); boKhachMoi(); });
     throw e;
   }
   let pt = null, loiThu = '';

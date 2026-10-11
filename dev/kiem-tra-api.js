@@ -593,6 +593,30 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   assert.ok(sap.includes(moi.MaHH) && !sap.includes(cu.MaHH), JSON.stringify(sap));
 }
 
+// Thu máy cũ: phiếu thu lỗi thì bỏ phiếu nhập vừa ghi (máy không nằm lại trong kho), thử lại được; mặt hàng máy cũ không tạo trùng
+{
+  const t = G.dangNhap('admin', adminPass).token, kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Thu Cũ Lỗi', SDT: '0966000777' });
+  const don = goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [{ TenHang: 'Dịch vụ thử', SoLuong: 1, DonGia: 5000000 }] });
+  const pk0 = sheets.PS_PhieuKho.rows.length, may = { SoDH: don.SoDH, TenHang: 'iPhone 11 64GB', IMEI: '356000555444333', GiaThu: 2000000 };
+  const goc = G.luuThuTien;
+  G.luuThuTien = () => { throw new Error('giả lập lỗi ghi phiếu thu'); };
+  try { assert.throws(() => G.thuMayCu(t, may), /giả lập lỗi/); } finally { G.luuThuTien = goc; }
+  assert.strictEqual(sheets.PS_PhieuKho.rows.length, pk0);
+  assert.strictEqual(goi(binh4, 'traMaKho', '356000555444333').trangThai, 'chuaCo');
+  const lai = G.thuMayCu(t, may); // thử lại được
+  assert.ok(lai.SoPK && lai.SoPT);
+  assert.strictEqual(G.readTable_('HangHoa').filter(h => h.TenHang === 'iPhone 11 64GB (máy cũ)').length, 1);
+}
+
+// Bán nhanh cho khách mới mà xuất kho lỗi: bỏ cả đơn và khách vừa tạo
+{
+  const kh0 = sheets.PS_KhachHang.rows.length, dh0 = sheets.PS_DonHang.rows.length, goc = G.luuChungTu;
+  G.luuChungTu = function (tk, loai, doc) { if (loai === 'XK') throw new Error('giả lập lỗi xuất kho'); return goc.apply(this, arguments); };
+  try { assert.throws(() => goi(binh4, 'banNhanh', { khachMoi: { TenKH: 'Khách Lỗi Xuất Kho', SDT: '0966000888' }, lines: [{ TenHang: 'Dán màn hình', SoLuong: 1, DonGia: 100000 }] }), /giả lập lỗi xuất kho/); }
+  finally { G.luuChungTu = goc; }
+  assert.deepStrictEqual([sheets.PS_KhachHang.rows.length, sheets.PS_DonHang.rows.length], [kh0, dh0]);
+}
+
 // Lệnh ghi kèm mã lần gửi: gửi lại cùng mã (app báo lỗi mạng mà máy chủ đã ghi) nhận kết quả cũ, không ghi thêm phiếu
 {
   const kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Gửi Lại', SDT: '0966000555' }), so0 = sheets.PS_ThuTien.rows.length;

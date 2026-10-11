@@ -17,7 +17,7 @@ function chuanMayCu_(ds) {
   if (ds.length > 5) throw new Error('Mỗi đơn thu tối đa 5 máy cũ.');
   const kq = ds.map((m, i) => {
     m = m || {};
-    const ten = String(m.TenHang || '').trim().slice(0, 150), imei = String(m.IMEI || '').toUpperCase().replace(/[\s.\-]/g, '');
+    const ten = String(m.TenHang || '').trim().slice(0, 150), imei = gonMa_(m.IMEI);
     const gia = Math.round(+m.GiaThu || 0), giaLe = Math.round(+m.GiaLe || 0);
     if (!ten) throw new Error('Máy cũ ' + (i + 1) + ': nhập tên máy (vd: iPhone 13 128GB).');
     if (!/^[A-Z0-9][A-Z0-9._/-]{3,39}$/.test(imei)) throw new Error('Máy cũ ' + (i + 1) + ': nhập IMEI/serial của máy cũ (4–40 chữ, số).');
@@ -33,9 +33,12 @@ function chuanMayCu_(ds) {
 /** Ghi một máy cũ đã kiểm tra: mặt hàng "… (máy cũ)", phiếu nhập kho, phiếu thu "Thu máy cũ" gắn đơn */
 function ghiMayCu_(token, user, kh, soDH, m, ngay) {
   const ten = /máy cũ/i.test(m.TenHang) ? m.TenHang : m.TenHang + ' (máy cũ)';
-  let h = readTable_('HangHoa').find(x => x.NhomHang === NHOM_MAY_CU && boDau_(x.TenHang) === boDau_(ten));
+  const timHang = () => readTable_('HangHoa').find(x => x.NhomHang === NHOM_MAY_CU && boDau_(x.TenHang) === boDau_(ten));
+  let h = timHang();
   if (!h) {
-    h = withLock_(() => {
+    h = withLock_(() => { // tìm lại trong khóa: hai quầy cùng thu một mẫu máy thì chỉ tạo một mặt hàng
+      const co = timHang();
+      if (co) return co;
       const moi = upsert_('HangHoa', { TenHang: ten, NhomHang: NHOM_MAY_CU, PhanLoai: NHOM_MAY_CU, DVT: 'Máy', GiaLe: m.GiaLe, GhiChu: 'Tạo khi thu cũ đổi mới' }, () => nextCode_('HangHoa', 'HH', 4), []);
       log_(user, 'Thêm mặt hàng', moi.MaHH, ten + ' · máy cũ thu về');
       return moi;
@@ -43,7 +46,12 @@ function ghiMayCu_(token, user, kh, soDH, m, ngay) {
   }
   const nk = luuChungTu(token, 'NK', { Ngay: ngay, DoiTac: kh.TenKH, GhiChu: 'Thu cũ đổi mới' + (soDH ? ' · đơn ' + soDH : '') + (m.GhiChu ? ' · ' + m.GhiChu : ''),
     lines: [{ MaHH: h.MaHH, TenHang: h.TenHang, Model: h.Model || '', DVT: h.DVT || 'Máy', SoLuong: 1, IMEI: m.IMEI, GiaVon: m.GiaThu }] }).doc;
-  const pt = luuThuTien(token, { Ngay: ngay, SoDH: soDH, MaKH: kh.MaKH, TenKH: kh.TenKH, SoTien: m.GiaThu, HinhThuc: HT_MAY_CU, GhiChu: 'Máy cũ ' + h.TenHang + ' · IMEI ' + m.IMEI });
+  let pt;
+  try { pt = luuThuTien(token, { Ngay: ngay, SoDH: soDH, MaKH: kh.MaKH, TenKH: kh.TenKH, SoTien: m.GiaThu, HinhThuc: HT_MAY_CU, GhiChu: 'Máy cũ ' + h.TenHang + ' · IMEI ' + m.IMEI }); }
+  catch (e) { // phiếu thu lỗi: bỏ phiếu nhập vừa ghi, kẻo máy nằm trong kho mà nợ khách không giảm và không thu lại được (IMEI đã có trong kho)
+    withLock_(() => { deleteWhere_('PhieuKhoCT', nk.SoPK); deleteWhere_('PhieuKho', nk.SoPK); log_(user, 'Bỏ phiếu nhập máy cũ (thu tiền lỗi)', nk.SoPK, m.IMEI); });
+    throw e;
+  }
   return { MaHH: h.MaHH, TenHang: h.TenHang, IMEI: m.IMEI, GiaThu: m.GiaThu, SoPK: nk.SoPK, SoPT: pt.SoPT };
 }
 
