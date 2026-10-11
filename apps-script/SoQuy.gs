@@ -92,7 +92,7 @@ function soQuyMay(token, ngay) {
   const cong = (ht, tien) => { if (laTienMat_(ht)) ton.tienMat += tien; else ton.nganHang += tien; };
   readTable_('ThuTien').forEach(p => {
     const d = ngay10(p.Ngay), tien = +p.SoTien || 0;
-    if ((dau.ngay && d < dau.ngay) || d > n) return;
+    if ((dau.ngay && d < dau.ngay) || d > n || p.HinhThuc === HT_MAY_CU) return; // máy cũ thu về không phải tiền
     cong(p.HinhThuc, tien);
     if (d !== n) return;
     trong.thu += tien;

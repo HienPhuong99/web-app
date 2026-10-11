@@ -375,6 +375,53 @@ buoc('Sổ quỹ: tồn tiền mặt / ngân hàng, ghi phiếu chi; lãi gộp 
   await v(page, 'nut-lui').click();
 });
 
+buoc('Thu cũ đổi mới khi bán nhanh; nhận bảo hành từ kết quả tra, đổi trạng thái, trả máy', async (page, c) => {
+  await page.getByTestId('tab-ban').click();
+  await v(page, 'tieu-de-ban').waitFor();
+  await v(page, 'nut-them-hang').click();
+  await v(page, 'o-tim-hang').fill('Dán cường lực');
+  await v(page, 'o-gia-dv').fill('500000');
+  await v(page, 'nut-them-dv').click();
+  await v(page, 'o-tim-khach-ban').fill('Khách Đổi Máy');
+  await v(page, 'o-sdt-khach-moi').fill('0988 333 444');
+  await v(page, 'nut-khach-moi').click();
+  await v(page, 'nut-may-cu').click();
+  await v(page, 'o-ten-may-cu').fill('iPhone 8 64GB');
+  await v(page, 'o-imei-may-cu').fill('356000999888111');
+  await v(page, 'o-gia-may-cu').fill('300000');
+  await v(page, 'nut-them-may-cu').click();
+  await v(page, 'phai-tra').getByText('200.000 đ').waitFor();
+  assert.strictEqual(await v(page, 'o-khach-tra').inputValue(), '200.000');
+  page.once('dialog', d => d.accept());
+  await v(page, 'nut-ban').click();
+  await v(page, 'da-ban').waitFor({ timeout: 20000 });
+  const kq = await v(page, 'ket-qua-ban').textContent();
+  assert.match(kq, /Máy cũ thu về.*iPhone 8 64GB \(máy cũ\).*300\.000/);
+  assert.ok(!/Còn nợ/.test(kq), 'Trả đủ sau khi trừ máy cũ: ' + kq);
+  const may = await page.evaluate(() => localStorage.getItem('may'));
+  assert.strictEqual((await api(c, { may, fn: 'traMaKho', args: ['356000999888111'] })).result.trangThai, 'trongKho');
+  await chup(page, '13a-thu-may-cu');
+  await v(page, 'nut-ban-moi').click();
+  // Tra bảo hành → Nhận bảo hành: điền sẵn khách, máy, IMEI
+  await page.getByTestId('tab-quet').click();
+  await v(page, 'o-tra').fill('356789012345672');
+  await v(page, 'nut-tra').click();
+  await v(page, 'nut-nhan-bh').first().click({ timeout: 15000 });
+  await v(page, 'o-tinh-trang').fill('Loa rè');
+  assert.strictEqual(await v(page, 'o-imei-sua').inputValue(), '356789012345672');
+  await v(page, 'nut-luu-nhan-may').click();
+  await v(page, 'the-phieu-sua').waitFor({ timeout: 15000 });
+  assert.match(await v(page, 'the-phieu-sua').innerText(), /ĐÃ NHẬN.*Anh Minh.*Loa rè/s);
+  await v(page, 'tt-sua-3').click(); // Đã sửa xong
+  await v(page, 'the-phieu-sua').getByText('ĐÃ SỬA XONG').waitFor({ timeout: 15000 });
+  await khongTranNgang(page);
+  await chup(page, '14-phieu-sua');
+  await v(page, 'nut-tra-may').click();
+  await v(page, 'nut-xac-nhan-tra').click(); // bảo hành: chi phí 0
+  await v(page, 'the-phieu-sua').getByText('ĐÃ TRẢ KHÁCH').waitFor({ timeout: 15000 });
+  await v(page, 'nut-lui').click();
+});
+
 buoc('Tài khoản → Đăng xuất: hỏi lại, về màn hình đăng nhập, mở lại vẫn phải đăng nhập', async (page, c) => {
   await page.getByTestId('tab-tai-khoan').click();
   await page.getByTestId('tk-ten').getByText('Quản trị').waitFor();

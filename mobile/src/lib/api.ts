@@ -56,7 +56,16 @@ export type TongQuan = {
   soMuc: number; no: { soKhach: number; tong: number; top: { MaKH: string; TenKH: string; SDT: string; tien: number }[] };
   /** lãi gộp hôm nay (doanh thu chưa VAT − giá vốn); null khi không phải quản trị, không có ở máy chủ bản cũ */
   lai?: LaiGop | null;
+  /** máy sửa đến / quá hẹn trả hoặc đã xong chờ khách lấy (máy chủ bản cũ không có) */
+  suaChua?: { SoPN: string; MaKH: string; TenKH: string; SDT: string; TenMay: string; TrangThai: string; NgayHen: string; n: number | null }[];
 };
+/** Phiếu nhận bảo hành – sửa chữa (DichVu.gs) */
+export type PhieuSua = {
+  SoPN: string; NgayNhan: string; Loai: 'Bảo hành' | 'Sửa chữa' | string; MaKH: string; TenKH: string; SDT: string; TenMay: string; IMEI: string;
+  TinhTrang: string; PhuKien: string; MatKhauMay: string; NgayHen: string; TrangThai: string; ChiPhi: number; KetQua: string; NgayTra: string; SoDH: string;
+  Anh: string[]; conNgay: number | null; NguoiTao: string;
+};
+export const TT_SUA = ['Đã nhận', 'Đang sửa', 'Chờ linh kiện', 'Đã sửa xong', 'Không sửa được', 'Đã trả khách'] as const;
 export type LaiGop = { doanhThu: number; giaVon: number; lai: number };
 
 /** soQuyMay(ngày): tồn quỹ cuối ngày (tiền mặt / ngân hàng), thu – chi trong ngày và từng phiếu */
@@ -97,6 +106,8 @@ export type HoSoKhach = {
 export type BanNhanhKQ = {
   SoDH: string; SoPK: string; SoPT: string; TongCong: number; daThu: number; MaKH: string; TenKH: string; loiThu: string;
   lines: { TenHang: string; SoLuong: number; IMEI: string; HetHan: string }[];
+  /** máy cũ thu về trừ vào đơn (daThu đã gồm giá các máy này) */
+  thuCu?: { MaHH: string; TenHang: string; IMEI: string; GiaThu: number; SoPK: string; SoPT: string }[];
 };
 export type PhieuThu = { SoPT: string; Ngay: string; MaKH: string; TenKH: string; SoDH: string; SoTien: number; HinhThuc: string };
 

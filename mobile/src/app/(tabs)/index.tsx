@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/auth';
 import type { TongQuan } from '../../lib/api';
 import { loiChao, ngay, tien, tienGon } from '../../lib/dinhDang';
+import { maDuongDan } from '../../lib/phieuSua';
 import { useDuLieu } from '../../lib/useDuLieu';
 import { BieuDo7Ngay } from '../../ui/BieuDo7Ngay';
 import { Nen } from '../../ui/Nen';
@@ -87,9 +88,14 @@ export default function TongQuanMan() {
               <Text style={s.tieuDeMuc}>Cần làm{du.soMuc ? ` (${du.soMuc})` : ''}</Text>
               {!du.soMuc ? (
                 <The nhan="Ổn cả" mauNhan={mau.xanh} tieuDe="Chưa có việc cần chú ý" style={s.muc} testID="khong-co-viec">
-                  <Text style={s.chuThuong}>Không có hợp đồng sắp hết hạn, đợt thu đến hạn, đơn trễ giao hay hàng sắp hết.</Text>
+                  <Text style={s.chuThuong}>Không có máy sửa cần trả, hợp đồng sắp hết hạn, đợt thu đến hạn, đơn trễ giao hay hàng sắp hết.</Text>
                 </The>
               ) : null}
+              <NhomViec nhan="Máy sửa · cần trả khách" mauNhan={mau.xanh} bieuTuong="construct-outline" ds={(du.suaChua ?? []).map(x => ({
+                k: x.SoPN, chinh: `${x.TenKH} · ${x.TenMay}`, phu: x.SoPN + (x.SDT ? ' · ' + x.SDT : ''),
+                ben: x.TrangThai === 'Đã sửa xong' || x.TrangThai === 'Không sửa được' ? 'Chờ khách lấy' : x.n !== null && x.n < 0 ? `Quá ${-x.n} ngày` : 'Hẹn hôm nay',
+                gap: x.n !== null && x.n < 0, mo: () => router.push({ pathname: '/sua-chua/[so]', params: { so: maDuongDan(x.SoPN) } }),
+              }))} />
               <NhomViec nhan="Trả góp · cần thu" mauNhan={mau.cam} bieuTuong="calendar-outline" ds={du.dot.map(x => ({
                 k: x.SoHD + x.Nhan, chinh: x.TenDN, phu: `${x.Nhan} · ${tien(x.SoTien)}`,
                 ben: x.quaHan ? `Quá ${-x.n} ngày` : x.n === 0 ? 'Hôm nay' : `Còn ${x.n} ngày`, gap: x.quaHan, mo: x.MaKH ? () => moKhach(x.MaKH) : undefined,

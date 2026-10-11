@@ -136,10 +136,10 @@ function tongHopSang_(homNay) {
     homQuaBan: ban(homQua), homQuaThu: daThu(homQua),
     homNayBan: ban(homNay), homNayThu: daThu(homNay), // màn hình Tổng quan của app điện thoại (Api.gs)
     ban7: [6, 5, 4, 3, 2, 1, 0].map(i => { const n = new Date(Date.parse(homNay) - i * 864e5).toISOString().slice(0, 10); return { ngay: n, tien: ban(n).tien }; }),
-    hopDong: hopDong, dot: dot, donTre: donTre, hang: hang,
+    hopDong: hopDong, dot: dot, donTre: donTre, hang: hang, suaChua: suaCanLam_(homNay), // máy sửa đến hẹn / đã xong chờ trả (DichVu.gs)
     no: { soKhach: noDs.length, tong: noDs.reduce((s, x) => s + x.tien, 0), top: noDs.slice(0, 5), ds: noDs },
   };
-  du.soMuc = hopDong.length + dot.length + donTre.length + hang.length;
+  du.soMuc = hopDong.length + dot.length + donTre.length + hang.length + du.suaChua.length;
   du.coViec = du.soMuc > 0; // khách còn nợ chỉ là thông tin kèm theo, không đủ để gửi thư mỗi sáng
   return du;
 }
@@ -158,6 +158,7 @@ function dungEmailSang_(tenCH, du, thu) {
     return x.SoHD + ' · ' + x.TenDN + ' · hết hạn ' + ngayEmail_(x.NgayHetHan) + ' (' + han + qd + ')' + (x.tuGiaHan && !x.het ? ' · tự gia hạn' : '');
   });
   them('Đợt thanh toán cần thu', du.dot, x => x.SoHD + ' · ' + x.TenDN + ' · ' + x.Nhan + ' · ' + tienEmail_(x.SoTien) + ' · ' + (x.quaHan ? 'quá hạn ' + (-x.n) + ' ngày' : x.n === 0 ? 'đến hạn hôm nay' : 'còn ' + x.n + ' ngày'));
+  them('Máy bảo hành – sửa chữa cần trả khách', du.suaChua, x => x.SoPN + ' · ' + x.TenKH + ' · ' + x.TenMay + ' · ' + (x.TrangThai === 'Đã sửa xong' || x.TrangThai === 'Không sửa được' ? x.TrangThai.toLowerCase() + ', chờ khách lấy' : x.n < 0 ? 'quá hẹn ' + (-x.n) + ' ngày' : 'hẹn trả hôm nay'));
   them('Đơn hàng quá hạn giao', du.donTre, x => x.SoDH + ' · ' + (x.TenKH || 'Khách lẻ') + ' · hẹn giao ' + ngayEmail_(x.NgayGiao) + ' · ' + tienEmail_(x.TongCong));
   them('Hàng sắp hết', du.hang, x => x.TenHang + ' · tồn ' + x.ton + (x.toiThieu ? ' (tối thiểu ' + x.toiThieu + ')' : ''));
   if (du.no.soKhach) muc.push(['Khách còn nợ: ' + tienEmail_(du.no.tong) + ' (' + du.no.soKhach + ' khách)', du.no.top.map(x => x.TenKH + (x.SDT ? ' · ' + x.SDT : '') + ' · ' + tienEmail_(x.tien))]);

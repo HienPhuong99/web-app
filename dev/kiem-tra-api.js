@@ -473,6 +473,70 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   assert.strictEqual(dAd.phieuKho.find(p => p.DoiTac === 'NCC Minh Phát').GiaTri, 20000000); // giá trị nhập: để tính nợ nhà cung cấp
 }
 
+// Thu cũ đổi mới: máy cũ vào kho (giá nhập = giá thu), trừ vào đơn bằng phiếu thu "Thu máy cũ", sổ quỹ không tính
+{
+  const t = G.dangNhap('admin', adminPass).token;
+  const iphone15 = { MaHH: 'HH0002', SoLuong: 1, DonGia: 12000000 };
+  const kh = goi(binh4, 'luuKhach', { TenKH: 'Anh Đổi Máy', SDT: '0966000222' });
+  const cu1 = { TenHang: 'iPhone 12 64GB', IMEI: '359999000000017', GiaThu: 5000000, GiaLe: 6500000, GhiChu: 'trầy nhẹ' };
+  assert.throws(() => goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [iphone15], thuCu: [cu1], thu: { SoTien: 8000000, HinhThuc: 'Tiền mặt' } }), /cộng giá máy cũ/);
+  assert.throws(() => goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [iphone15], thuCu: [Object.assign({}, cu1, { GiaThu: 0 })] }), /giá thu/);
+  assert.throws(() => goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [iphone15], thuCu: [Object.assign({}, cu1, { IMEI: '' })] }), /IMEI/);
+  const tmTruoc = goi(binh4, 'soQuyMay', '').ton.tienMat;
+  const r = goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [iphone15], thuCu: [cu1], thu: { SoTien: 7000000, HinhThuc: 'Tiền mặt' } });
+  assert.deepStrictEqual([r.TongCong, r.daThu, r.thuCu.length, r.loiThu], [12000000, 12000000, 1, '']);
+  const hCu = G.readTable_('HangHoa').find(h => h.MaHH === r.thuCu[0].MaHH);
+  assert.deepStrictEqual([hCu.TenHang, hCu.NhomHang, hCu.GiaLe], ['iPhone 12 64GB (máy cũ)', 'Máy cũ', 6500000]);
+  assert.strictEqual(goi(binh4, 'traMaKho', '359999000000017').trangThai, 'trongKho');
+  assert.strictEqual(G.giaVonBQ_()[hCu.MaHH], 5000000);
+  assert.strictEqual(goi(binh4, 'chiTietKhach', kh.MaKH).no, 0);
+  assert.ok(G.readTable_('ThuTien').some(p => p.SoDH === r.SoDH && p.HinhThuc === 'Thu máy cũ' && p.SoTien === 5000000));
+  assert.strictEqual(goi(binh4, 'soQuyMay', '').ton.tienMat, tmTruoc + 7000000); // 5 triệu máy cũ không phải tiền mặt
+  assert.throws(() => goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [iphone15], thuCu: [cu1] }), /đã nhập ở phiếu/); // máy đang trong kho
+  // Web: thu máy cũ cho đơn đã lập; cùng tên máy dùng lại mặt hàng
+  const dh = G.luuChungTu(t, 'DH', { Ngay: today, MaKH: kh.MaKH, TenKH: kh.TenKH, VAT: 0, lines: [{ MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', SoLuong: 1, DonGia: 12000000 }] }).doc;
+  assert.throws(() => G.thuMayCu(t, { SoDH: dh.SoDH, TenHang: 'iPhone 12 64GB', IMEI: '359999000000025', GiaThu: 13000000 }), /còn nợ của đơn/);
+  const m2 = G.thuMayCu(t, { SoDH: dh.SoDH, TenHang: 'iPhone 12 64GB', IMEI: '359999000000025', GiaThu: 4000000 });
+  assert.strictEqual(m2.MaHH, hCu.MaHH);
+  assert.strictEqual(goi(binh4, 'chiTietKhach', kh.MaKH).no, 8000000);
+  assert.strictEqual(G.giaVonBQ_()[hCu.MaHH], 4500000);
+}
+
+// Bảo hành – sửa chữa: nhận máy, đổi trạng thái, việc cần làm, trả máy có tính phí (lập đơn dịch vụ), ảnh
+{
+  assert.throws(() => goi(binh4, 'luuSuaChua', { khachMoi: { TenKH: 'Chị Hoa Sửa', SDT: '0977000111' }, TenMay: 'iPhone 14' }), /tình trạng/);
+  assert.throws(() => goi(binh4, 'luuSuaChua', { TenMay: 'iPhone 14', TinhTrang: 'Hỏng' }), /Chọn khách/);
+  const p = goi(binh4, 'luuSuaChua', { Loai: 'Sửa chữa', khachMoi: { TenKH: 'Chị Hoa Sửa', SDT: '0977000111' }, TenMay: 'iPhone 14', IMEI: '35 1111 2222 3333 4', TinhTrang: 'Không lên nguồn', PhuKien: 'Ốp lưng', MatKhauMay: '1234' });
+  assert.deepStrictEqual([p.SoPN, p.TrangThai, p.IMEI, p.NgayNhan, p.conNgay, p.SDT], ['001-' + today.slice(0, 4) + '/PN', 'Đã nhận', '351111222233334', today, 3, '0977000111']);
+  assert.strictEqual(goi(binh4, 'luuSuaChua', { Loai: 'Bảo hành', khachMoi: { TenKH: 'Trùng số', SDT: '0977 000 111' }, TenMay: 'AirPods', TinhTrang: 'Rè' }).MaKH, p.MaKH); // trùng SĐT: dùng khách cũ
+  assert.throws(() => goi(binh4, 'luuSuaChua', { SoPN: p.SoPN, TrangThai: 'Đã trả khách' }), /Trả máy/);
+  assert.throws(() => goi(binh4, 'luuSuaChua', { SoPN: p.SoPN, TrangThai: 'Mất máy' }), /không hợp lệ/);
+  const sua = goi(binh4, 'luuSuaChua', { SoPN: p.SoPN, TrangThai: 'Đã sửa xong', KetQua: 'Thay IC nguồn', ChiPhi: 300000 });
+  assert.deepStrictEqual([sua.TrangThai, sua.ChiPhi, sua.TenMay, sua.MatKhauMay, sua.NgayNhan], ['Đã sửa xong', 300000, 'iPhone 14', '1234', today]);
+  assert.ok(goiMoi(binh4, 'tongQuanMay').suaChua.some(x => x.SoPN === p.SoPN)); // xong chờ khách lấy: vào việc cần làm
+  assert.deepStrictEqual(goi(binh4, 'dsSuaChua', 'iphone 14', {}).ds.map(x => x.SoPN), [p.SoPN]);
+  assert.strictEqual(goi(binh4, 'dsSuaChua', '3333', { loc: 'xong' }).tong, 1);
+  // Ảnh lưu vào Google Drive
+  const anh = goi(binh4, 'luuAnhSuaChua', p.SoPN, Buffer.from('anh-thu').toString('base64'));
+  assert.strictEqual(anh.Anh.length, 1);
+  // Trả máy: lập đơn dịch vụ 300.000, khách trả ngay → không còn nợ
+  const no0 = goi(binh4, 'chiTietKhach', p.MaKH).no;
+  const tra = goi(binh4, 'traMaySua', p.SoPN, { thu: { SoTien: 300000, HinhThuc: 'Tiền mặt' } });
+  assert.deepStrictEqual([tra.TrangThai, tra.ChiPhi, !!tra.SoDH, tra.don.TongCong, tra.don.daThu], ['Đã trả khách', 300000, true, 300000, 300000]);
+  assert.strictEqual(G.findObj_('DonHang', tra.SoDH).TrangThai, 'Đã giao');
+  assert.strictEqual(goi(binh4, 'chiTietKhach', p.MaKH).no, no0);
+  assert.throws(() => goi(binh4, 'traMaySua', p.SoPN, {}), /đã trả khách/);
+  assert.throws(() => goi(binh4, 'luuSuaChua', { SoPN: p.SoPN, KetQua: 'sửa lại' }), /chỉ quản trị/);
+  assert.strictEqual(goi(binh4, 'dsSuaChua', '', { loc: 'tra' }).ds[0].SoPN, p.SoPN);
+  assert.ok(!goi(binh4, 'dsSuaChua', '', {}).ds.some(x => x.SoPN === p.SoPN));
+  assert.ok(!goiMoi(binh4, 'tongQuanMay').suaChua.some(x => x.SoPN === p.SoPN));
+  // Bảo hành miễn phí: trả máy không lập đơn
+  const bh = goi(binh4, 'dsSuaChua', 'airpods', {}).ds[0];
+  const traBH = goi(binh4, 'traMaySua', bh.SoPN, { ChiPhi: 0, KetQua: 'Đổi mới' });
+  assert.deepStrictEqual([traBH.SoDH, traBH.don, traBH.KetQua], ['', null, 'Đổi mới']);
+  assert.strictEqual(G.taiDuLieu(G.dangNhap('admin', adminPass).token).suaChua.length, 2);
+}
+
 // Sai mật khẩu 5 lần: chặn 10 phút như web
 for (let i = 0; i < 5; i++) api({ fn: 'dangNhapMay', args: ['admin', 'sai'] });
 assert.match(api({ fn: 'dangNhapMay', args: ['admin', adminPass] }).error, /quá 5 lần/);

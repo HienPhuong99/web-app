@@ -40,6 +40,7 @@ export default function BanMan() {
   const [maChuaCo, setMaChuaCo] = useState(''); // IMEI chưa từng nhập kho: chờ chọn mặt hàng
   const [chonHang, setChonHang] = useState(false);
   const [loi, setLoi] = useState(''), [dangLuu, setDangLuu] = useState(false), [kq, setKq] = useState<BanNhanhKQ | null>(null);
+  const [mayCu, setMayCu] = useState<MayCu[]>([]); // thu cũ đổi mới: máy cũ của khách trừ vào đơn
   const daQuet = useRef<{ ma: string; luc: number }>({ ma: '', luc: 0 });
 
   useFocusEffect(useCallback(() => { setFocus(true); return () => setFocus(false); }, []));
@@ -56,7 +57,8 @@ export default function BanMan() {
   if (khoaTS && khoaTS !== thamSo) { setThamSo(khoaTS); setKhach({ MaKH: p.ma!, TenKH: p.ten! }); setKq(null); }
 
   const tong = useMemo(() => tongGio(gio, vat), [gio, vat]);
-  const thu = soThu ?? tong.tong; // chưa sửa thì khách trả đủ
+  const tongCu = mayCu.reduce((s, m) => s + m.GiaThu, 0), phaiTra = Math.max(0, tong.tong - tongCu);
+  const thu = soThu ?? phaiTra; // chưa sửa thì khách trả đủ (sau khi trừ máy cũ)
 
   const themTheoMa = async (raw: string) => {
     const ma = chuanHoaMa(raw);
@@ -96,8 +98,8 @@ export default function BanMan() {
     setLoi('');
     if (!gio.length) return setLoi('Chưa có hàng nào trong đơn.');
     if (!khach) return setLoi('Chọn khách (hoặc bấm Khách lẻ).');
-    if (thu > tong.tong) return setLoi('Số tiền khách trả lớn hơn tổng đơn.');
-    const ten = khach.TenKH, cau = `${tong.soMay} sản phẩm, tổng ${tien(tong.tong)}.\nKhách trả ${tien(thu)}${thu ? ' (' + hinhThuc + ')' : ''}${thu < tong.tong ? ', còn nợ ' + tien(tong.tong - thu) : ''}.`;
+    if (thu + tongCu > tong.tong) return setLoi(tongCu ? 'Tiền khách trả cộng giá máy cũ lớn hơn tổng đơn.' : 'Số tiền khách trả lớn hơn tổng đơn.');
+    const ten = khach.TenKH, cau = `${tong.soMay} sản phẩm, tổng ${tien(tong.tong)}.${tongCu ? `\nMáy cũ trừ ${tien(tongCu)}.` : ''}\nKhách trả ${tien(thu)}${thu ? ' (' + hinhThuc + ')' : ''}${thu < phaiTra ? ', còn nợ ' + tien(phaiTra - thu) : ''}.`;
     if (!(await hoi(`Bán cho ${ten}?`, cau, 'Bán'))) return;
     setDangLuu(true);
     try {
@@ -105,6 +107,7 @@ export default function BanMan() {
       const r = await goi<BanNhanhKQ>('banNhanh', {
         ...('moi' in khach ? { khachMoi: { TenKH: khach.TenKH, SDT: khach.SDT } } : { MaKH: khach.MaKH }),
         lines, VAT: vat, GhiChu: ghiChu.trim(), thu: { SoTien: thu, HinhThuc: hinhThuc },
+        thuCu: mayCu.map(m => ({ TenHang: m.TenHang, IMEI: m.IMEI, GiaThu: m.GiaThu })),
       });
       setKq(r);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -118,7 +121,7 @@ export default function BanMan() {
   };
 
   const donMoi = () => {
-    setGio([]); setKhach(null); setSoThu(null); setGhiChu(''); setKq(null); setLoi(''); setLoiMa(''); setMaGo(''); setMaChuaCo('');
+    setGio([]); setKhach(null); setSoThu(null); setMayCu([]); setGhiChu(''); setKq(null); setLoi(''); setLoiMa(''); setMaGo(''); setMaChuaCo('');
     setVat(ch?.vat ?? 0); router.setParams({ ma: undefined, ten: undefined });
   };
 
@@ -173,6 +176,8 @@ export default function BanMan() {
         </View>
         <View style={s.dongTien}><Text style={[s.nhanTien, { fontWeight: '800', color: mau.chu }]}>Tổng cộng</Text><Text style={s.tong} testID="tong-cong">{tien(tong.tong)}</Text></View>
         <Vach />
+        <ThuMayCu ds={mayCu} setDs={setMayCu} />
+        {tongCu ? <View style={s.dongTien}><Text style={[s.nhanTien, { fontWeight: '800', color: mau.chu }]}>Còn phải trả</Text><Text style={s.tong} testID="phai-tra">{tien(phaiTra)}</Text></View> : null}
         <Text style={[s.nhanTien, { marginTop: 12 }]}>Khách trả</Text>
         <View style={s.hangNhap}>
           <TextInput style={[s.o, { fontWeight: '800' }]} value={soTienNhap(thu)} onChangeText={t => setSoThu(docTien(t))} keyboardType="number-pad"
@@ -180,8 +185,8 @@ export default function BanMan() {
           <Chip chu="Đủ" chon={soThu === null} onPress={() => setSoThu(null)} testID="tra-du" />
           <Chip chu="Nợ hết" chon={soThu === 0} onPress={() => setSoThu(0)} testID="no-het" />
         </View>
-        {thu < tong.tong ? <Text style={s.goiY} testID="con-no">Khách còn nợ {tien(tong.tong - thu)}</Text> : null}
-        {thu > tong.tong ? <ChuLoi chu="Số tiền khách trả lớn hơn tổng đơn." /> : null}
+        {thu < phaiTra ? <Text style={s.goiY} testID="con-no">Khách còn nợ {tien(phaiTra - thu)}</Text> : null}
+        {thu > phaiTra ? <ChuLoi chu={tongCu ? 'Tiền khách trả cộng giá máy cũ lớn hơn tổng đơn.' : 'Số tiền khách trả lớn hơn tổng đơn.'} /> : null}
         {thu > 0 ? (
           <View style={s.chips}>
             {(ch?.hinhThuc ?? ['Tiền mặt', 'Chuyển khoản']).map(h => <Chip key={h} chu={h} chon={hinhThuc === h} onPress={() => setHinhThuc(h)} testID={'ht-' + boDau(h).replace(/\s+/g, '-')} />)}
@@ -195,6 +200,48 @@ export default function BanMan() {
       <Nut chu={gio.length ? `Bán · ${tien(tong.tong)}` : 'Bán'} bieuTuong="checkmark-circle" onPress={ban} dangChay={dangLuu} style={{ marginTop: 12 }} testID="nut-ban" />
       {gio.length ? <Nut chu="Xóa đơn đang soạn" phu nguyHiem onPress={async () => { if (await hoi('Xóa đơn đang soạn?', 'Bỏ hết hàng và khách đã chọn.', 'Xóa')) donMoi(); }} style={{ marginTop: 10, minHeight: 46 }} /> : null}
     </KhungTrang>
+  );
+}
+
+type MayCu = { k: number; TenHang: string; IMEI: string; GiaThu: number };
+/** Thu cũ đổi mới: máy cũ của khách (tên, IMEI, giá thu) trừ vào đơn; máy chủ nhập máy cũ vào kho */
+function ThuMayCu({ ds, setDs }: { ds: MayCu[]; setDs: React.Dispatch<React.SetStateAction<MayCu[]>> }) {
+  const [mo, setMo] = useState(false), [ten, setTen] = useState(''), [imei, setImei] = useState(''), [gia, setGia] = useState(0), [loi, setLoi] = useState('');
+  const them = () => {
+    const ma = chuanHoaMa(imei);
+    if (!ten.trim()) return setLoi('Nhập tên máy cũ, vd: iPhone 12 64GB.');
+    if (ma.length < 4) return setLoi('Nhập IMEI/serial của máy cũ.');
+    if (gia <= 0) return setLoi('Nhập giá thu.');
+    if (ds.some(m => m.IMEI === ma)) return setLoi('Máy cũ này đã thêm.');
+    setDs(d => [...d, { k: Date.now(), TenHang: ten.trim(), IMEI: ma, GiaThu: gia }]);
+    setTen(''); setImei(''); setGia(0); setLoi(''); setMo(false);
+  };
+  return (
+    <View style={{ marginTop: 12 }} testID="thu-may-cu">
+      {ds.map(m => (
+        <View key={m.k} style={s.dongTien} testID="dong-may-cu">
+          <View style={{ flex: 1 }}>
+            <Text style={s.tenHang}>Máy cũ: {m.TenHang}</Text>
+            <Text style={s.imei}>IMEI {m.IMEI}</Text>
+          </View>
+          <Text style={[s.giaTri, { color: mau.xanh }]}>−{tien(m.GiaThu)}</Text>
+          <Pressable onPress={() => setDs(d => d.filter(x => x.k !== m.k))} hitSlop={10} accessibilityLabel={'Bỏ máy cũ ' + m.TenHang}><Ionicons name="trash-outline" size={20} color={mau.do} /></Pressable>
+        </View>
+      ))}
+      {mo ? (
+        <View style={{ gap: 8, marginTop: 4 }}>
+          <TextInput style={[s.o, { flex: 0 }]} value={ten} onChangeText={setTen} placeholder="Tên máy cũ (vd: iPhone 12 64GB)" placeholderTextColor={mau.xam} testID="o-ten-may-cu" />
+          <TextInput style={[s.o, { flex: 0 }]} value={imei} onChangeText={setImei} placeholder="IMEI / serial máy cũ" placeholderTextColor={mau.xam} autoCapitalize="characters" autoCorrect={false} testID="o-imei-may-cu" />
+          <View style={s.hangNhap}>
+            <TextInput style={s.o} value={soTienNhap(gia)} onChangeText={t => setGia(docTien(t))} keyboardType="number-pad" placeholder="Giá thu" placeholderTextColor={mau.xam} testID="o-gia-may-cu" />
+            <Nut chu="Thêm" bieuTuong="add" onPress={them} style={{ minHeight: 48 }} testID="nut-them-may-cu" />
+          </View>
+          <ChuLoi chu={loi} />
+        </View>
+      ) : (
+        <Nut chu="Thu máy cũ của khách (trừ vào đơn)" phu bieuTuong="swap-horizontal" onPress={() => setMo(true)} style={{ minHeight: 46 }} testID="nut-may-cu" />
+      )}
+    </View>
   );
 }
 
@@ -300,6 +347,7 @@ function ChonKhach({ khach, setKhach }: { khach: Khach | null; setKhach: (k: Kha
 }
 
 function KetQua({ kq, qr, hinhThuc, onMoi }: { kq: BanNhanhKQ; qr: CauHinh['qr']; hinhThuc: string; onMoi: () => void }) {
+  const cu = kq.thuCu ?? [], tienCu = cu.reduce((s, m) => s + m.GiaThu, 0), tienMat = kq.daThu - tienCu; // daThu gồm cả giá máy cũ
   const no = kq.TongCong - kq.daThu;
   return (
     <KhungTrang>
@@ -309,11 +357,12 @@ function KetQua({ kq, qr, hinhThuc, onMoi }: { kq: BanNhanhKQ; qr: CauHinh['qr']
       <The style={s.muc} testID="ket-qua-ban">
         <DongTT nhan="Đơn hàng" giaTri={kq.SoDH} dam />
         <DongTT nhan="Phiếu xuất" giaTri={kq.SoPK} />
-        <DongTT nhan="Phiếu thu" giaTri={kq.SoPT ? `${kq.SoPT} · ${tien(kq.daThu)}` : 'Chưa thu'} />
+        <DongTT nhan="Phiếu thu" giaTri={kq.SoPT ? `${kq.SoPT} · ${tien(tienMat)}` : 'Chưa thu'} />
+        {cu.map(m => <DongTT key={m.IMEI} nhan="Máy cũ thu về" giaTri={`${m.TenHang} · ${tien(m.GiaThu)} · nhập kho ${m.SoPK}`} />)}
         {no > 0 ? <DongTT nhan="Còn nợ" giaTri={tien(no)} dam /> : null}
       </The>
       {kq.loiThu ? <The nhan="Chưa ghi được tiền thu" mauNhan={mau.do} style={s.muc}><Text style={s.phu}>{kq.loiThu} Đơn và phiếu xuất đã lưu; bấm Thu tiền để ghi lại.</Text></The> : null}
-      {kq.daThu > 0 && /chuyen khoan/.test(boDau(hinhThuc)) && qr ? <The nhan="Mã QR chuyển khoản" style={s.muc}><MaQR qr={qr} soTien={kq.daThu} noiDung={kq.SoDH} /></The> : null}
+      {tienMat > 0 && /chuyen khoan/.test(boDau(hinhThuc)) && qr ? <The nhan="Mã QR chuyển khoản" style={s.muc}><MaQR qr={qr} soTien={tienMat} noiDung={kq.SoDH} /></The> : null}
       <TieuDeMuc chu="Hàng đã giao" />
       <The style={s.muc}>
         {kq.lines.map((l, i) => (

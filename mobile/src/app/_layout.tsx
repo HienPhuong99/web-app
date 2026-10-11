@@ -15,7 +15,7 @@ import { Nut } from '../ui/Nut';
 import { mau } from '../ui/theme';
 
 // Màn hình chỉ vào được khi đã đăng nhập (route không khai ở đây thì không được bảo vệ)
-const MAN_DA_DANG_NHAP = ['(tabs)', 'khach/[ma]', 'thu-tien', 'kho', 'kho/[ma]', 'hop-dong', 'thiet-bi', 'so-lieu', 'so-quy'];
+const MAN_DA_DANG_NHAP = ['(tabs)', 'khach/[ma]', 'thu-tien', 'kho', 'kho/[ma]', 'hop-dong', 'thiet-bi', 'so-lieu', 'so-quy', 'sua-chua', 'sua-chua/[so]'];
 
 function DieuHuong() {
   const { dangTai, may } = useAuth();

@@ -377,7 +377,7 @@ table.lines { width: 100%; border-collapse: collapse; min-width: 1040px; }
 
 <script>
 // ===================== Trạng thái & tiện ích =====================
-const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], phieuChi: [], soDuDau: { ngay: '', tienMat: 0, nganHang: 0 }, loaiChi: [], giaVon: {}, hopDong: [], hopDongLich: [], mauHD: [], loaiHD: [], nganHang: [], emailSang: null, hd: null, ton: {},
+const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], suaChua: [], ttSua: [], loaiSua: [], htMayCu: 'Thu máy cũ', phieuChi: [], soDuDau: { ngay: '', tienMat: 0, nganHang: 0 }, loaiChi: [], giaVon: {}, hopDong: [], hopDongLich: [], mauHD: [], loaiHD: [], nganHang: [], emailSang: null, hd: null, ton: {},
   thongKe: { topHang: [], theoNhom: [] }, taiKhoan: null, baoHanh: null, nhatKy: null, view: 'home', loai: '', doc: null, extra: {}, dirty: false, q: {}, onNew: null };
 const D = { thuDH: {}, thuKH: {}, muaKH: {}, noKH: {}, dhBG: {} }; // số liệu suy ra: đã thu, công nợ, báo giá đã chốt
 const LG = { si: 'Giá sỉ', le: 'Giá lẻ', tuy: 'Giá tùy chọn' };
@@ -439,6 +439,7 @@ const IC = {
   file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
   cart: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>',
   card: '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>',
+  tool: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
   wallet: '<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>',
   box: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
   truck: '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
@@ -637,7 +638,7 @@ $('#btnPass').onclick = () => modal({
 // ===================== Điều hướng =====================
 const NAV = [
   ['', [['home', 'Tổng quan', 'home'], ['baocao', 'Báo cáo & sổ doanh thu', 'chart']]],
-  ['Bán hàng', [['baogia', 'Báo giá', 'file'], ['donhang', 'Đơn hàng', 'cart'], ['congno', 'Thu tiền & công nợ', 'card'], ['baohanh', 'Bảo hành', 'award']]],
+  ['Bán hàng', [['baogia', 'Báo giá', 'file'], ['donhang', 'Đơn hàng', 'cart'], ['congno', 'Thu tiền & công nợ', 'card'], ['suachua', 'Nhận bảo hành – sửa chữa', 'tool'], ['baohanh', 'Tra bảo hành', 'award']]],
   ['Tài chính', [['soquy', 'Sổ quỹ (thu – chi)', 'wallet'], ['ncc', 'Nợ nhà cung cấp', 'truck', true]]],
   ['Hợp đồng', [['hopdong', 'Hợp đồng', 'clipboard'], ['hdhan', 'Sắp hết hạn', 'alert'], ['hdlich', 'Lịch thanh toán', 'card']]],
   ['Kho hàng', [['hang', 'Hàng hóa & bảng giá', 'box'], ['kho', 'Nhập – xuất kho', 'truck'], ['ton', 'Tồn kho', 'layers']]],
@@ -658,6 +659,7 @@ function drawNav() {
     ton: S.hang.filter(isLow).length,
     hdhan: S.hopDong.filter(h => hanHD(h)).length,
     hdlich: dotCanThu().length,
+    suachua: suaCanTra().length,
   };
   $('#nav').innerHTML = NAV.map(([sec, items]) => {
     const vis = items.filter(it => !it[3] || isAdmin());
@@ -1206,7 +1208,7 @@ function openThu(pt) {
       <label class="field full"><span class="lb">Thu cho đơn hàng</span><select name="SoDH">${orderOpts(pt.MaKH)}</select></label>
       <label class="field"><span class="lb">Số tiền *</span><input name="SoTien" class="money num" inputmode="numeric" value="${money(pt.SoTien)}"></label>
       <label class="field"><span class="lb">Ngày thu</span><input name="Ngay" type="date" value="${esc(pt.Ngay)}"></label>
-      <label class="field"><span class="lb">Hình thức</span><select name="HinhThuc">${hinhThuc.map(x => `<option${x === pt.HinhThuc ? ' selected' : ''}>${x}</option>`).join('')}</select></label>
+      <label class="field"><span class="lb">Hình thức</span><select name="HinhThuc">${hinhThuc.concat(hinhThuc.includes(pt.HinhThuc) ? [] : [pt.HinhThuc]).map(x => `<option${x === pt.HinhThuc ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
       <label class="field"><span class="lb">Ghi chú</span><input name="GhiChu" value="${esc(pt.GhiChu)}" placeholder="vd: Đặt cọc 50%"></label>
     </div>${isNew ? '' : `<p class="muted">Lập bởi ${esc(pt.NguoiTao)} lúc ${esc(pt.NgayTao)}</p>`}${S.congTy.qrSoTK ? `<div class="qr"><button type="button" class="btn sm" data-qr>${icon('card')}Mã QR chuyển khoản</button><div class="qr-box" data-qrbox></div></div>` : ''}`,
     buttons: [
@@ -1615,6 +1617,7 @@ function vDoc(el) {
   if (L === 'DH' && saved && d.TrangThai !== 'Hủy') {
     if (d.TrangThai !== 'Đã giao') btns.push({ t: 'Giao hàng', ic: 'truck', cls: 'soft', fn: run(giaoHang) });
     if (conNo(d) > 0) btns.push({ t: 'Thu tiền', ic: 'card', cls: 'soft', fn: () => openThu({ SoDH: d.SoDH }) });
+    if (conNo(d) > 0) btns.push({ t: 'Thu máy cũ', ic: 'phone', fn: () => openThuMayCu(d) });
   }
   if (L === 'DH' && saved && d.TrangThai !== 'Hủy') btns.push({ t: 'Tạo hợp đồng', ic: 'clipboard', cls: 'soft', fn: run(() => hdTuDon(d)) });
   if (L === 'DH' && saved) btns.push({ t: d.TrangThai === 'Hủy' ? 'Khôi phục đơn' : 'Hủy đơn', ic: 'x', fn: run(huyDon) });
@@ -2934,6 +2937,131 @@ function soDoanhThuHtml(st, dh) {
     <div class="p-sign"><div style="flex:0 0 320px;margin-left:auto"><i>Ngày ${t.slice(8)} tháng ${t.slice(5, 7)} năm ${t.slice(0, 4)}</i>NGƯỜI ĐẠI DIỆN HỘ KINH DOANH/<br>CÁ NHÂN KINH DOANH<i>(Ký, họ tên, đóng dấu)</i></div></div></div>`;
 }
 
+// ===================== Bảo hành – sửa chữa, thu cũ đổi mới =====================
+const DRIVE_XEM = 'https:/' + '/drive.google.com/file/d/'; // Apps Script cắt chuỗi có hai dấu gạch chéo liền nhau
+const anhSua = r => (Array.isArray(r.Anh) ? r.Anh : String(r.Anh || '').split(',').filter(Boolean));
+const conNgaySua = r => r.NgayHen && r.TrangThai !== 'Đã trả khách' ? Math.round((Date.parse(String(r.NgayHen).slice(0, 10)) - Date.parse(today())) / 864e5) : null;
+const MAU_SUA = { 'Đã nhận': 'b-gray', 'Đang sửa': 'b-blue', 'Chờ linh kiện': 'b-amber', 'Đã sửa xong': 'b-green', 'Không sửa được': 'b-red', 'Đã trả khách': 'b-violet' };
+const suaCanTra = () => S.suaChua.filter(r => r.TrangThai !== 'Đã trả khách');
+const henHtml = r => { const n = conNgaySua(r); return r.NgayHen ? `${dmy(r.NgayHen)}${n === null ? '' : n < 0 ? `<span class="sub red">quá ${-n} ngày</span>` : n === 0 ? '<span class="sub warn">hôm nay</span>' : `<span class="sub">còn ${n} ngày</span>`}` : '<span class="muted">—</span>'; };
+function luuSuaLocal(x) { upsertLocal('suaChua', 'SoPN', Object.assign({}, x, { Anh: anhSua(x).join(','), don: undefined, conNgay: undefined })); }
+
+function vSuaChua(el) {
+  setTop('Bán hàng', 'Bảo hành – sửa chữa', [{ t: 'Nhận máy', ic: 'plus', cls: 'primary', fn: () => openSuaChua() }]);
+  S.onNew = () => openSuaChua();
+  listCard(el, {
+    id: 'suachua', ph: 'Tìm số phiếu, khách, SĐT, tên máy, IMEI…',
+    filters: [{ id: 'tt', options: [['dang', 'Chưa trả khách'], ['hen', 'Đến / quá hẹn trả'], ...(S.ttSua || []).map(t => [t, t]), ['', 'Mọi trạng thái']], def: 'dang' },
+      { id: 'loai', options: [['', 'Bảo hành và sửa chữa'], ...(S.loaiSua || []).map(t => [t, t])] }, { id: 'ngay', type: 'dates' }],
+    filter: (r, f) => (!f.tt || (f.tt === 'dang' ? r.TrangThai !== 'Đã trả khách' : f.tt === 'hen' ? (conNgaySua(r) ?? 1) <= 0 : r.TrangThai === f.tt))
+      && (!f.loai || r.Loai === f.loai) && inRange(r.NgayNhan, f, 'ngay'),
+    sorts: [['nhan', 'Ngày nhận', r => String(r.NgayNhan || '') + r.SoPN, 'giam'], ['hen', 'Hẹn trả', r => r.TrangThai === 'Đã trả khách' ? '' : String(r.NgayHen || ''), 'tang']],
+    cols: [
+      { t: 'Số phiếu', k: 'SoPN', cls: 'code' }, { t: 'Ngày nhận', f: r => dmy(r.NgayNhan) },
+      { t: 'Khách hàng', cls: 'wrap', f: r => `<b>${esc(r.TenKH)}</b><span class="sub">${esc(r.SDT)}</span>` },
+      { t: 'Máy', cls: 'wrap', f: r => `${esc(r.TenMay)}${r.IMEI ? `<span class="sub">${esc(r.IMEI)}</span>` : ''}` },
+      { t: 'Tình trạng', cls: 'wrap', f: r => `${badge(r.Loai, r.Loai === 'Bảo hành' ? 'b-blue' : 'b-gray')} ${esc(r.TinhTrang)}` },
+      { t: 'Hẹn trả', f: henHtml }, { t: 'Trạng thái', f: r => badge(r.TrangThai, MAU_SUA[r.TrangThai] || 'b-gray') },
+      { t: 'Chi phí', cls: 'num', f: r => +r.ChiPhi ? money(r.ChiPhi) : '' },
+    ],
+    data: () => S.suaChua.slice().sort((a, b) => String(b.NgayNhan + b.SoPN).localeCompare(String(a.NgayNhan + a.SoPN))),
+    text: r => [r.SoPN, r.TenKH, r.SDT, r.TenMay, r.IMEI, r.TinhTrang, r.KetQua].join(' '),
+    open: r => openSuaChua(r),
+    foot: rs => `<span>${rs.length} phiếu</span><span>Chưa trả khách <b>${rs.filter(r => r.TrangThai !== 'Đã trả khách').length}</b></span>`,
+  });
+}
+
+function openSuaChua(p) {
+  const moi = !p || !p.SoPN, daTra = !moi && p.TrangThai === 'Đã trả khách', khoa = daTra && !isAdmin() ? ' disabled' : '';
+  p = Object.assign({ Loai: 'Sửa chữa', MaKH: '', TenKH: '', SDT: '', TenMay: '', IMEI: '', TinhTrang: '', PhuKien: '', MatKhauMay: '', NgayHen: iso(new Date(Date.now() + 3 * 864e5)), TrangThai: 'Đã nhận', ChiPhi: '', KetQua: '' }, p || {});
+  const tt = (S.ttSua || []).filter(t => t !== 'Đã trả khách' || daTra), opt = (ds, v) => ds.map(x => `<option${x === v ? ' selected' : ''}>${esc(x)}</option>`).join('');
+  const anh = anhSua(p);
+  const m = modal({
+    title: moi ? 'Nhận máy bảo hành – sửa chữa' : `Phiếu ${p.Loai.toLowerCase()} ${p.SoPN}`, wide: true,
+    body: `<div class="fgrid">
+      <label class="field"><span class="lb">Loại phiếu</span><select name="Loai"${khoa}>${opt(S.loaiSua || ['Bảo hành', 'Sửa chữa'], p.Loai)}</select></label>
+      <label class="field"><span class="lb">Trạng thái</span><select name="TrangThai"${khoa}>${opt(tt, p.TrangThai)}</select></label>
+      <label class="field"><span class="lb">Khách hàng *</span><input name="TenKH" value="${esc(p.TenKH)}" placeholder="Gõ tên hoặc SĐT để tìm, hoặc nhập khách mới" autocomplete="off"${moi ? '' : ' readonly'}><input type="hidden" name="MaKH" value="${esc(p.MaKH)}"></label>
+      <label class="field"><span class="lb">Điện thoại</span><input name="SDT" value="${esc(p.SDT)}"${moi ? '' : ' readonly'}></label>
+      <label class="field"><span class="lb">Tên máy *</span><input name="TenMay" value="${esc(p.TenMay)}" placeholder="vd: iPhone 14 Pro 128GB"${khoa}></label>
+      <label class="field"><span class="lb">IMEI / serial</span><input name="IMEI" value="${esc(p.IMEI)}"${khoa}></label>
+      <label class="field full"><span class="lb">Tình trạng, lỗi khách báo *</span><input name="TinhTrang" value="${esc(p.TinhTrang)}" placeholder="vd: Không lên nguồn, màn hình sọc"${khoa}></label>
+      <label class="field"><span class="lb">Phụ kiện kèm theo</span><input name="PhuKien" value="${esc(p.PhuKien)}" placeholder="vd: Ốp, sim, hộp"${khoa}></label>
+      <label class="field"><span class="lb">Mật khẩu máy</span><input name="MatKhauMay" value="${esc(p.MatKhauMay)}" autocomplete="off"${khoa}></label>
+      <label class="field"><span class="lb">Hẹn trả ngày</span><input name="NgayHen" type="date" value="${esc(String(p.NgayHen || '').slice(0, 10))}"${khoa}></label>
+      <label class="field"><span class="lb">Chi phí (dự kiến)</span><input name="ChiPhi" class="money num" inputmode="numeric" value="${money(p.ChiPhi)}"${khoa}></label>
+      <label class="field full"><span class="lb">Kết quả xử lý</span><input name="KetQua" value="${esc(p.KetQua)}" placeholder="vd: Thay pin, đổi máy mới"${khoa}></label>
+    </div>
+    ${moi ? '' : `<p class="muted">Nhận ${dmy(p.NgayNhan)} bởi ${esc(p.NguoiTao)}${daTra ? ` · đã trả khách ${esc(p.NgayTra)}${p.SoDH ? ' · đơn ' + esc(p.SoDH) : ''}` : ''}${anh.length ? ' · Ảnh: ' + anh.map((id, i) => `<a href="${DRIVE_XEM}${encodeURIComponent(id)}/view" target="_blank" rel="noopener">ảnh ${i + 1}</a>`).join(', ') : ''}</p>`}`,
+    buttons: [
+      ...(khoa ? [] : [{ t: moi ? 'Nhận máy (F8)' : 'Lưu (F8)', ic: 'save', cls: 'primary', save: true, fn: run(async m => {
+        const d = formData(m);
+        const gui = Object.assign({}, d, { SoPN: p.SoPN || '' });
+        if (moi && !d.MaKH) gui.khachMoi = { TenKH: d.TenKH, SDT: d.SDT };
+        const kq = await api('luuSuaChua', gui);
+        luuSuaLocal(kq);
+        if (moi && !d.MaKH && !S.khach.some(k => k.MaKH === kq.MaKH)) upsertLocal('khach', 'MaKH', { MaKH: kq.MaKH, TenKH: kq.TenKH, SDT: kq.SDT });
+        closeModal(); render(); toast(`Đã lưu phiếu ${kq.SoPN}.`);
+        if (moi && confirm('In phiếu nhận máy để đưa khách?')) printHtml(suaPrintHtml(kq));
+      }) }]),
+      ...(moi ? [] : [{ t: 'In phiếu nhận', ic: 'print', fn: () => printHtml(suaPrintHtml(p)) }]),
+      ...(moi || daTra ? [] : [{ t: 'Trả máy cho khách', ic: 'check', cls: 'soft', fn: () => openTraMay(p) }]),
+    ],
+  });
+  if (moi) {
+    const tk = $('[name=TenKH]', m), mk = $('[name=MaKH]', m), sdt = $('[name=SDT]', m);
+    tk.oninput = () => { mk.value = ''; showPicker(tk, khachSource, kh => { tk.value = kh.TenKH; mk.value = kh.MaKH; sdt.value = kh.SDT || ''; $('[name=TenMay]', m).focus(); }); };
+  }
+}
+
+function openTraMay(p) {
+  const hinhThuc = S.congTy.hinhThuc || ['Tiền mặt'];
+  modal({
+    title: 'Trả máy cho khách – ' + p.SoPN,
+    body: `<p class="muted" style="margin-top:0">${esc(p.TenKH)} · ${esc(p.TenMay)}${p.IMEI ? ' · ' + esc(p.IMEI) : ''}. Có chi phí thì app lập một đơn dịch vụ để tính doanh thu và công nợ; bảo hành miễn phí để chi phí 0.</p>
+      <div class="fgrid">
+      <label class="field"><span class="lb">Chi phí</span><input name="ChiPhi" class="money num" inputmode="numeric" value="${money(+p.ChiPhi || 0)}"></label>
+      <label class="field"><span class="lb">Khách trả ngay</span><input name="SoTien" class="money num" inputmode="numeric" value="${money(+p.ChiPhi || 0)}"></label>
+      <label class="field"><span class="lb">Hình thức</span><select name="HinhThuc">${hinhThuc.map(x => `<option>${esc(x)}</option>`).join('')}</select></label>
+      <label class="field"><span class="lb">Kết quả xử lý</span><input name="KetQua" value="${esc(p.KetQua)}"></label></div>`,
+    buttons: [{ t: 'Trả máy (F8)', ic: 'check', cls: 'primary', save: true, fn: run(async m => {
+      const d = formData(m);
+      if (!(d.ChiPhi > 0) && !confirm('Trả máy không tính phí?')) return;
+      const kq = await api('traMaySua', p.SoPN, { ChiPhi: d.ChiPhi || 0, KetQua: d.KetQua, thu: { SoTien: d.SoTien || 0, HinhThuc: d.HinhThuc } });
+      if (kq.don) await loadAll(); else luuSuaLocal(kq); // có đơn dịch vụ: tải lại đơn hàng, phiếu thu
+      closeModal(); render(); toast(`Đã trả máy ${p.SoPN}${kq.don ? ' · đơn ' + kq.don.SoDH : ''}.`);
+    }) }],
+  });
+}
+
+function suaPrintHtml(p) {
+  return `<div class="p-page">${letterhead('PHIẾU NHẬN MÁY ' + String(p.Loai || '').toUpperCase())}
+    ${infoTable([['Số phiếu:', p.SoPN, 'Ngày nhận:', dmy(p.NgayNhan)], ['Khách hàng:', p.TenKH, 'Điện thoại:', p.SDT], ['Máy:', p.TenMay, 'IMEI / serial:', p.IMEI],
+      ['Tình trạng:', p.TinhTrang, 'Phụ kiện kèm:', p.PhuKien || 'Không'], ['Hẹn trả:', p.NgayHen ? dmy(p.NgayHen) : '—', 'Chi phí dự kiến:', +p.ChiPhi ? money(p.ChiPhi) + ' đ' : 'Báo sau']])}
+    <p style="font-size:13px">Quý khách vui lòng mang phiếu này khi nhận lại máy. Cửa hàng không chịu trách nhiệm về dữ liệu trong máy; vui lòng sao lưu trước khi gửi.</p>
+    ${signs(['Khách hàng', 'Nhân viên nhận máy'])}</div>`;
+}
+
+// Thu máy cũ của khách trừ vào đơn đang còn nợ: máy vào kho, giá thu ghi thành phiếu thu "Thu máy cũ"
+function openThuMayCu(d) {
+  modal({
+    title: 'Thu máy cũ trừ vào đơn ' + d.SoDH,
+    body: `<p class="muted" style="margin-top:0">Đơn còn nợ ${money(conNo(d))} ₫. Máy cũ vào kho (nhóm "Máy cũ", giá nhập = giá thu); giá thu trừ vào tiền khách phải trả.</p><div class="fgrid">
+      <label class="field"><span class="lb">Tên máy cũ *</span><input name="TenHang" placeholder="vd: iPhone 12 64GB"></label>
+      <label class="field"><span class="lb">IMEI / serial *</span><input name="IMEI"></label>
+      <label class="field"><span class="lb">Giá thu *</span><input name="GiaThu" class="money num" inputmode="numeric"></label>
+      <label class="field"><span class="lb">Giá bán lại (dự kiến)</span><input name="GiaLe" class="money num" inputmode="numeric"></label>
+      <label class="field full"><span class="lb">Tình trạng máy</span><input name="GhiChu" placeholder="vd: trầy nhẹ, pin 85%"></label></div>`,
+    buttons: [{ t: 'Thu máy (F8)', ic: 'check', cls: 'primary', save: true, fn: run(async m => {
+      const o = Object.assign(formData(m), { SoDH: d.SoDH });
+      const kq = await api('thuMayCu', o);
+      await loadAll();
+      closeModal(); await openDoc('DH', S.donHang.find(x => x.SoDH === d.SoDH));
+      toast(`Đã thu máy cũ ${kq.TenHang}: trừ ${money(kq.GiaThu)} ₫ vào đơn.`);
+    }) }],
+  });
+}
+
 // ===================== Tài chính: lãi gộp, sổ quỹ, phiếu chi, nợ nhà cung cấp =====================
 // Lãi gộp của một đơn (quản trị): tiền hàng chưa VAT − giá vốn bình quân. Dòng dịch vụ (không mã hàng) không có giá vốn.
 function laiDonHtml(d) {
@@ -2948,7 +3076,7 @@ function laiDonHtml(d) {
 
 const laTienMat = ht => String(ht || '').trim().toLowerCase() === 'tiền mặt';
 // Mỗi phiếu thu / chi thành một dòng sổ quỹ
-const dongQuy = () => S.thuTien.map(p => ({ loai: 'Thu', so: p.SoPT, Ngay: p.Ngay, NgayTao: p.NgayTao, noiDung: p.TenKH + (p.SoDH ? ' · đơn ' + p.SoDH : ''), ghiChu: p.GhiChu, HinhThuc: p.HinhThuc, thu: +p.SoTien || 0, chi: 0, NguoiTao: p.NguoiTao, goc: p }))
+const dongQuy = () => S.thuTien.filter(p => p.HinhThuc !== S.htMayCu).map(p => ({ loai: 'Thu', so: p.SoPT, Ngay: p.Ngay, NgayTao: p.NgayTao, noiDung: p.TenKH + (p.SoDH ? ' · đơn ' + p.SoDH : ''), ghiChu: p.GhiChu, HinhThuc: p.HinhThuc, thu: +p.SoTien || 0, chi: 0, NguoiTao: p.NguoiTao, goc: p }))
   .concat(S.phieuChi.map(c => ({ loai: 'Chi', so: c.SoPC, Ngay: c.Ngay, NgayTao: c.NgayTao, noiDung: c.Loai + (c.DoiTac ? ' · ' + c.DoiTac : ''), nhom: c.Loai, ghiChu: c.GhiChu, HinhThuc: c.HinhThuc, thu: 0, chi: +c.SoTien || 0, NguoiTao: c.NguoiTao, goc: c })));
 // Tồn quỹ tới hết ngày den (mặc định hôm nay): số dư đầu + thu − chi, tách tiền mặt / ngân hàng
 function tonQuy(den) {
@@ -3298,7 +3426,7 @@ function openCuaHang() {
 }
 
 // ===================== Phím tắt: F2 mới, F3 tìm, F8 lưu, Esc đóng =====================
-const VIEWS = { soquy: vSoQuy, ncc: vNCC, home: vHome, baogia: vBaoGia, donhang: vDonHang, congno: vCongNo, hang: vHang, kho: vKho, ton: vTon, khach: vKhach, taikhoan: vTaiKhoan, thietbi: vThietBi, caidat: vCaiDat, baohanh: vBaoHanh, hopdong: vHopDong, hd: vHD, hdhan: vHDHan, hdlich: vHDLich, baocao: vBaoCao, nhatky: vNhatKy, doc: vDoc };
+const VIEWS = { suachua: vSuaChua, soquy: vSoQuy, ncc: vNCC, home: vHome, baogia: vBaoGia, donhang: vDonHang, congno: vCongNo, hang: vHang, kho: vKho, ton: vTon, khach: vKhach, taikhoan: vTaiKhoan, thietbi: vThietBi, caidat: vCaiDat, baohanh: vBaoHanh, hopdong: vHopDong, hd: vHD, hdhan: vHDHan, hdlich: vHDLich, baocao: vBaoCao, nhatky: vNhatKy, doc: vDoc };
 document.addEventListener('keydown', e => {
   if ($('#app').classList.contains('hidden')) return;
   const modalOpen = !$('#modal').classList.contains('hidden');

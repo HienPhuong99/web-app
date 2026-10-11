@@ -16,11 +16,12 @@ function apiHam_() {
     cauHinhMay: cauHinhMay, khoMay: khoMay, traMaKho: traMaKho, dsKhachMay: dsKhachMay, chiTietKhach: chiTietKhach, banNhanh: banNhanh,
     dsHopDongMay: dsHopDongMay, taiPdfHopDong: taiPdfHopDong, dsThietBi: dsThietBi, xoaThietBi: xoaThietBi, thuThongBao: thuThongBao, chiTietTongQuan: chiTietTongQuan,
     soQuyMay: soQuyMay, luuPhieuChi: luuPhieuChi, loiNhuan: loiNhuan,
+    dsSuaChua: dsSuaChua, chiTietSuaChua: chiTietSuaChua, luuSuaChua: luuSuaChua, traMaySua: traMaySua, luuAnhSuaChua: luuAnhSuaChua,
   };
 }
 
 // Hàm chỉ đọc: kết quả được ghi nhớ (ketQuaNho_ trong Code.gs) tới khi có dữ liệu mới. App gửi moi: true (kéo xuống làm mới) để lấy số mới nhất.
-const DOC_NHO = ['tongQuanMay', 'chiTietTongQuan', 'khoMay', 'dsKhachMay', 'chiTietKhach', 'dsHopDongMay', 'theKho', 'cauHinhMay', 'traMaKho', 'traBaoHanh', 'soQuyMay', 'loiNhuan'];
+const DOC_NHO = ['tongQuanMay', 'chiTietTongQuan', 'khoMay', 'dsKhachMay', 'chiTietKhach', 'dsHopDongMay', 'theKho', 'cauHinhMay', 'traMaKho', 'traBaoHanh', 'soQuyMay', 'loiNhuan', 'dsSuaChua', 'chiTietSuaChua'];
 
 let MAY_HIEN_TAI_ = ''; // mã băm của điện thoại đang gọi API: để đánh dấu "máy này" và gửi thông báo thử
 
@@ -145,7 +146,7 @@ function tongQuanMay(token) {
   return {
     user: { u: user.u, ten: user.ten, vaiTro: user.vaiTro }, cuaHang: { ten: ch.ten, moTa: ch.moTa },
     homNay: du.homNay, ban: du.homNayBan, thu: du.homNayThu, homQua: du.homQuaBan, ban7: du.ban7,
-    hopDong: du.hopDong.slice(0, 20), dot: du.dot.slice(0, 20), donTre: du.donTre.slice(0, 20), hang: du.hang.slice(0, 20),
+    hopDong: du.hopDong.slice(0, 20), dot: du.dot.slice(0, 20), donTre: du.donTre.slice(0, 20), hang: du.hang.slice(0, 20), suaChua: du.suaChua.slice(0, 20),
     soMuc: du.soMuc, no: { soKhach: du.no.soKhach, tong: du.no.tong, top: du.no.top },
     lai: user.vaiTro === 'admin' ? loiNhuanKy_(du.homNay, du.homNay).tong : null, // lãi gộp hôm nay: chỉ quản trị
   };
@@ -333,7 +334,7 @@ function chiTietKhach(token, maKH) {
  * Kiểm tra hết trước khi ghi; phiếu xuất vẫn lỗi thì xóa đơn vừa lập. Phiếu thu lỗi thì giữ đơn + phiếu xuất và báo loiThu.
  */
 function banNhanh(token, o) {
-  user_(token);
+  const user = user_(token);
   o = o || {};
   const ngay = homNay_(), hang = {};
   readTable_('HangHoa').forEach(h => { hang[h.MaHH] = h; });
@@ -363,7 +364,8 @@ function banNhanh(token, o) {
   if (imeis.length) kiemIMEI_('Xuất', '', imeis); // máy đã bán thì báo ngay, chưa ghi gì
   const vat = Math.min(100, Math.max(0, +o.VAT || 0)), tienHang = lines.reduce((s, l) => s + Math.round(l.SoLuong * l.DonGia), 0);
   const tong = tienHang + Math.round(tienHang * vat / 100), thu = o.thu || {}, soThu = Math.round(+thu.SoTien || 0);
-  if (soThu < 0 || soThu > tong) throw new Error('Số tiền khách trả phải từ 0 đến ' + tong + ' đ.');
+  const mayCu = chuanMayCu_(o.thuCu), tongCu = mayCu.reduce((s, m) => s + m.GiaThu, 0); // thu cũ đổi mới: trừ vào đơn (DichVu.gs)
+  if (soThu < 0 || soThu + tongCu > tong) throw new Error(tongCu ? 'Tiền khách trả cộng giá máy cũ (' + (soThu + tongCu) + ' đ) lớn hơn tổng đơn (' + tong + ' đ).' : 'Số tiền khách trả phải từ 0 đến ' + tong + ' đ.');
   // Khách: chọn sẵn, hoặc khách mới (trùng số điện thoại với khách cũ thì dùng khách cũ)
   let kh;
   if (o.MaKH) {
@@ -393,7 +395,9 @@ function banNhanh(token, o) {
     try { pt = luuThuTien(token, { Ngay: ngay, SoDH: dh.SoDH, SoTien: soThu, HinhThuc: String(thu.HinhThuc || 'Tiền mặt').slice(0, 60), GhiChu: 'Bán nhanh trên app' }); }
     catch (e) { loiThu = String(e && e.message || e); }
   }
-  return { SoDH: dh.SoDH, SoPK: pk.SoPK, SoPT: pt ? pt.SoPT : '', TongCong: tong, daThu: pt ? soThu : 0, MaKH: kh.MaKH, TenKH: kh.TenKH,
+  const cu = [];
+  mayCu.forEach(m => { try { cu.push(ghiMayCu_(token, user, kh, dh.SoDH, m, ngay)); } catch (e) { loiThu = (loiThu ? loiThu + ' ' : '') + 'Chưa ghi được máy cũ ' + m.IMEI + ': ' + (e && e.message || e); } });
+  return { SoDH: dh.SoDH, SoPK: pk.SoPK, SoPT: pt ? pt.SoPT : '', TongCong: tong, daThu: (pt ? soThu : 0) + cu.reduce((s, m) => s + m.GiaThu, 0), thuCu: cu, MaKH: kh.MaKH, TenKH: kh.TenKH,
     lines: pk.lines.map(l => ({ TenHang: l.TenHang, SoLuong: l.SoLuong, IMEI: l.IMEI, HetHan: l.HetHan })), loiThu: loiThu };
 }
 
@@ -467,7 +471,7 @@ function thuThongBao(token) {
 
 /** Nội dung thông báo sáng từ kết quả tongHopSang_ (null khi không có việc gì). */
 function noiDungThongBao_(tenCH, du) {
-  const muc = [[du.dot.length, 'đợt trả góp cần thu'], [du.hopDong.length, 'hợp đồng sắp/quá hạn'], [du.donTre.length, 'đơn trễ giao'], [du.hang.length, 'mặt hàng sắp hết']]
+  const muc = [[(du.suaChua || []).length, 'máy sửa cần trả khách'], [du.dot.length, 'đợt trả góp cần thu'], [du.hopDong.length, 'hợp đồng sắp/quá hạn'], [du.donTre.length, 'đơn trễ giao'], [du.hang.length, 'mặt hàng sắp hết']]
     .filter(m => m[0] > 0).map(m => m[0] + ' ' + m[1]);
   if (!muc.length) return null;
   return { title: tenCH + ': ' + du.soMuc + ' việc cần làm hôm nay', body: muc.join(' · ') };

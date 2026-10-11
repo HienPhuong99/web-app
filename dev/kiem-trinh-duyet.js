@@ -178,6 +178,52 @@ BUOC.push(['Tài chính: giá nhập ở phiếu nhập, nợ nhà cung cấp, p
   await page.waitForSelector('#view [data-loi]');
   assert.match(await page.locator('#view [data-loi]').innerText(), /Lãi gộp/);
 }]);
+BUOC.push(['Nhận máy sửa chữa, đổi trạng thái, trả máy lập đơn dịch vụ; thu máy cũ trừ vào đơn', async page => {
+  const hoi = [];
+  const ghi = d => { hoi.push(d.message()); if (/In phiếu/.test(d.message())) d.dismiss(); else d.accept(); };
+  page.on('dialog', ghi);
+  try {
+    await page.click('#nav a[data-go="suachua"]');
+    await page.locator('#topActions .btn', { hasText: 'Nhận máy' }).click();
+    await page.fill('#modal [name=TenKH]', 'Khách Sửa Mới');
+    await page.fill('#modal [name=SDT]', '0977000999');
+    await page.fill('#modal [name=TenMay]', 'iPhone 13');
+    await page.fill('#modal [name=IMEI]', '356000111222333');
+    await page.fill('#modal [name=TinhTrang]', 'Vỡ màn hình');
+    await page.fill('#modal [name=ChiPhi]', '1500000');
+    await page.locator('#modal .btn', { hasText: 'Nhận máy' }).click();
+    await page.waitForSelector('#modal', { state: 'hidden' });
+    assert.ok(hoi.some(m => /In phiếu nhận/.test(m)), 'Phải hỏi in phiếu nhận: ' + hoi.join('|'));
+    const dong = () => page.locator('#view tbody tr:has-text("Khách Sửa Mới")');
+    assert.match(await dong().innerText(), /\d{3}-\d{4}\/PN.*iPhone 13.*Vỡ màn hình.*Đã nhận/s);
+    assert.match(await page.locator('#nav a[data-go="suachua"] .cnt').innerText(), /\d/);
+    await dong().click();
+    await page.selectOption('#modal [name=TrangThai]', 'Đã sửa xong');
+    await page.locator('#modal .btn', { hasText: 'Lưu' }).click();
+    await page.waitForSelector('#modal', { state: 'hidden' });
+    assert.match(await dong().innerText(), /Đã sửa xong/);
+    // Trả máy, khách chưa trả tiền: lập đơn dịch vụ còn nợ
+    await dong().click();
+    await page.locator('#modal .btn', { hasText: 'Trả máy cho khách' }).click();
+    await page.fill('#modal [name=SoTien]', '0');
+    await page.fill('#modal [name=KetQua]', 'Thay màn hình');
+    await page.locator('#modal .btn', { hasText: 'Trả máy' }).click();
+    await page.waitForSelector('#modal', { state: 'hidden' });
+    assert.strictEqual(await dong().count(), 0); // mặc định chỉ hiện phiếu chưa trả khách
+    // Đơn dịch vụ: thu máy cũ trừ vào đơn
+    await page.click('#nav a[data-go="donhang"]');
+    await page.locator('#view tbody tr:has-text("Khách Sửa Mới")').first().click();
+    await page.waitForFunction(() => /Đơn hàng \d{3}-\d{4}\/DH/.test(document.querySelector('#title').textContent), null, { timeout: 8000 });
+    await page.locator('#topActions .btn', { hasText: 'Thu máy cũ' }).click();
+    await page.fill('#modal [name=TenHang]', 'iPhone 8 64GB');
+    await page.fill('#modal [name=IMEI]', '356000999888777');
+    await page.fill('#modal [name=GiaThu]', '1000000');
+    await page.locator('#modal .btn', { hasText: 'Thu máy' }).click();
+    await page.waitForSelector('#modal', { state: 'hidden' });
+    await page.waitForSelector('#view .side-cards :text("Thu máy cũ")');
+    assert.match(await page.locator('#view .side-cards').innerText(), /Còn nợ\s*500\.000/);
+  } finally { page.off('dialog', ghi); }
+}]);
 try { require('./kiem-trinh-duyet-hopdong')(BUOC); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
 
 (async () => {
