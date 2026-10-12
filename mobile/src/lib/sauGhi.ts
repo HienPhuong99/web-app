@@ -18,7 +18,9 @@ function doiNo(no: No, maKH: string, tenKH: string, them: number): No {
   return { soKhach: Math.max(soKhach, top.length), tong: Math.max(0, no.tong + them), top };
 }
 
-export function tongQuanSauBan(tq: TongQuan, kq: BanNhanhKQ): TongQuan {
+/** homNay: ngày bán (giờ VN). Tổng quan đang nhớ là của ngày khác (app mở qua 0 giờ) thì chỉ sửa công nợ, không cộng vào "hôm nay" cũ */
+export function tongQuanSauBan(tq: TongQuan, kq: BanNhanhKQ, homNay?: string): TongQuan {
+  if (homNay && tq.homNay !== homNay) return { ...tq, no: doiNo(tq.no, kq.MaKH, kq.TenKH, kq.TongCong - kq.daThu) };
   return {
     ...tq,
     ban: { don: tq.ban.don + 1, tien: tq.ban.tien + kq.TongCong },

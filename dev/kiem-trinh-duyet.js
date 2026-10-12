@@ -270,6 +270,94 @@ BUOC.push(['Giảm giá đơn hàng, kiểm kho theo IMEI, khách trả hàng (h
     assert.ok(!(await page.locator('#topActions .btn', { hasText: 'Khách trả hàng' }).count()));
   } finally { page.off('dialog', ghi); }
 }]);
+BUOC.push(['Danh sách dài: vẽ dần, nút Hiện thêm, lọc lại về 300 dòng đầu; logo cửa hàng không bị thu nhỏ', async page => {
+  // logo SVG từng ăn theo padding của .logo (khung tiêu đề thanh bên) nên chỉ còn một chấm
+  assert.ok(await page.evaluate(() => document.querySelector('#sideMark svg rect').getBoundingClientRect().width > 30), 'Logo thanh bên phải đầy khung');
+  await page.evaluate(() => { const g = S.khach.slice(); for (let i = 0; S.khach.length < 700; i++) S.khach.push(Object.assign({}, g[i % g.length], { MaKH: 'KX' + String(i).padStart(5, '0'), TenKH: 'Khách dài ' + i })); S.q.khach = null; go('khach'); }); // bỏ chữ tìm bước trước còn nhớ
+  await page.waitForFunction(() => document.querySelectorAll('#view tbody tr[data-i]').length === 300);
+  assert.match(await page.locator('#view .count').textContent(), /Hiện 300 \/ 700 dòng/);
+  await page.locator('#view tr.them button', { hasText: 'Hiện thêm 300 dòng (còn 400)' }).waitFor();
+  await page.evaluate(() => { const b = document.querySelector('#view tr.them button'); b.click(); b.click(); }); // bấm hai lần liền
+  await page.waitForFunction(() => document.querySelectorAll('#view tbody tr[data-i]').length >= 600 && document.querySelector('#view tr.them'));
+  assert.ok(await page.evaluate(() => [...document.querySelectorAll('#view tbody tr[data-i]')].every((r, i) => +r.dataset.i === i)), 'Dòng phải liền nhau, không sót khúc nào');
+  assert.strictEqual(await page.locator('#view tbody tr[data-i]').count(), 600);
+  await page.locator('#view tr.them button', { hasText: 'còn 100' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('#view tbody tr[data-i]').length === 700);
+  assert.strictEqual(await page.locator('#view tr.them').count(), 0);
+  assert.match(await page.locator('#view .count').textContent(), /^700 dòng/);
+  await page.locator('#view tbody tr[data-i="650"]').click(); // dòng vẽ sau vẫn mở đúng khách
+  await page.waitForSelector('#modal:not(.hidden)');
+  assert.match(await page.locator('#modal h3').textContent(), /Khách dài/);
+  await page.locator('#modal [data-close]').first().click();
+  await page.fill('#view .search input', 'Khách dài 69');
+  await page.waitForFunction(() => /^\d+ dòng/.test(document.querySelector('#view .count').textContent) && document.querySelectorAll('#view tbody tr[data-i]').length < 300);
+  const tim = await page.evaluate(() => [+document.querySelector('#view .count').textContent.match(/\d+/)[0], [...document.querySelectorAll('#view tbody tr[data-i]')].map(r => r.textContent)]);
+  assert.ok(tim[0] > 0 && tim[0] === tim[1].length && tim[1].every(t => /Khách dài \d*69/.test(t)), 'Lọc lại phải hiện đủ dòng khớp: ' + tim[0]);
+  assert.strictEqual(await page.locator('#view tr.them').count(), 0);
+  await page.evaluate(() => { S.khach = S.khach.filter(k => !/^KX/.test(k.MaKH)); S.q.khach = null; go('home'); });
+}]);
+BUOC.push(['Màn soạn chứng từ: bảng dòng hàng vừa màn 1280px; trên điện thoại các nút gom một hàng vuốt ngang', async page => {
+  const vp = page.viewportSize();
+  try {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.evaluate(() => openDoc('DH', S.donHang[0]));
+    await page.waitForSelector('table.lines tbody tr');
+    const [sw, cw] = await page.evaluate(() => { const w = document.querySelector('.lines-wrap'); return [w.scrollWidth, w.clientWidth]; });
+    assert.ok(sw <= cw + 1, `Bảng dòng hàng không phải cuộn ngang ở 1280px: ${sw} > ${cw}`);
+    await page.setViewportSize({ width: 375, height: 740 });
+    await page.waitForTimeout(200);
+    const top = await page.evaluate(() => { const a = document.querySelector('#topActions'); return [a.children.length, a.getBoundingClientRect().height, a.scrollWidth > a.clientWidth, document.documentElement.scrollWidth - document.documentElement.clientWidth]; });
+    assert.ok(top[0] >= 3 && top[1] < 60 && top[2], 'Điện thoại: nút một hàng vuốt được ' + top);
+    assert.strictEqual(top[3], 0, 'Trang không được tràn ngang');
+    // dòng hàng thành thẻ có nhãn, không phải vuốt ngang bảng rộng
+    const the = await page.evaluate(() => { const w = document.querySelector('.lines-wrap'), td = document.querySelector('table.lines tbody tr td:nth-child(3)'); return [w.scrollWidth - w.clientWidth, getComputedStyle(td, '::before').content]; });
+    assert.ok(the[0] <= 1 && /Model/i.test(the[1]), 'Điện thoại: dòng hàng dạng thẻ có nhãn ' + the);
+    await page.evaluate(() => { S.dirty = false; go('donhang'); });
+    const mot = await page.evaluate(() => document.querySelector('#topActions').scrollWidth <= document.querySelector('#topActions').clientWidth + 1);
+    assert.ok(mot, 'Màn danh sách (1 nút) vẫn như cũ');
+  } finally { await page.setViewportSize(vp); await page.evaluate(() => { S.dirty = false; go('home'); }); }
+}]);
+BUOC.push(['Phiếu nhập từ khách (thu cũ, khách trả hàng) không thành nợ nhà cung cấp; đơn có phiếu trả hàng ghi đúng nhãn', async page => {
+  const r = await page.evaluate(() => {
+    const d = S.donHang[0], them = [
+      { SoPK: 'T-NCC', Loai: 'Nhập', Ngay: '2026-10-01', DoiTac: 'Công ty Phân Phối A', GhiChu: '', GiaTri: 5000000 },
+      { SoPK: 'T-CU', Loai: 'Nhập', Ngay: '2026-10-01', DoiTac: 'Anh Khách Đổi', GhiChu: 'Thu cũ đổi mới · đơn 001', GiaTri: 3000000 },
+      { SoPK: 'T-TRA', Loai: 'Nhập', Ngay: '2026-10-02', SoDH: d.SoDH, DoiTac: d.TenKH, GhiChu: 'Khách trả hàng · đơn ' + d.SoDH, GiaTri: 1000000 },
+    ];
+    S.phieuKho.push(...them);
+    const ncc = noNCC().map(x => x.ten);
+    return { ncc, so: d.SoDH };
+  });
+  assert.ok(r.ncc.includes('Công ty Phân Phối A'), 'Nhà cung cấp thật vẫn có: ' + r.ncc);
+  assert.ok(!r.ncc.includes('Anh Khách Đổi') && r.ncc.every(t => !/Khách Đổi/.test(t)), 'Khách thu cũ không là nhà cung cấp: ' + r.ncc);
+  await page.evaluate(so => openDoc('DH', S.donHang.find(x => x.SoDH === so)), r.so);
+  await page.waitForSelector('tr[data-go="pk:T-TRA"]');
+  assert.match(await page.locator('tr[data-go="pk:T-TRA"]').textContent(), /Khách trả hàng/);
+  await page.evaluate(() => { S.phieuKho = S.phieuKho.filter(p => !/^T-/.test(p.SoPK)); S.dirty = false; go('home'); });
+}]);
+BUOC.push(['Ngày "hôm nay" trên web theo giờ Việt Nam như máy chủ, dù máy để múi giờ khác', async page => {
+  const [web, vn] = await page.evaluate(() => [today(), new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())]);
+  assert.strictEqual(web, vn);
+}]);
+BUOC.push(['Tiền trên màn hình khớp lúc lưu: bỏ dòng không tên; phiếu trả lại tiền chỉ xem; đơn đã hủy vẫn chọn được khi đang gắn', async page => {
+  // Tổng đơn: dòng đã xóa tên hàng không tính (máy chủ cũng bỏ dòng đó khi lưu)
+  await page.evaluate(() => newDoc('DH', { VAT: 0, lines: [{ TenHang: 'Hàng A', SoLuong: 1, DonGia: 100000 }, { TenHang: '', SoLuong: 2, DonGia: 5000000 }] }));
+  await page.waitForSelector('#view [data-t="TongCong"]');
+  assert.strictEqual(+(await page.locator('#view [data-t="TongCong"]').innerText()).replace(/\D/g, ''), 100000);
+  await page.evaluate(() => { S.dirty = false; go('home'); });
+  // Phiếu trả lại tiền (số âm): tiêu đề rõ, số tiền không sửa được, hiện không dấu trừ
+  const d = await page.evaluate(() => S.donHang[0]);
+  await page.evaluate(d => openThu({ SoPT: 'PT-TRA', MaKH: d.MaKH, TenKH: d.TenKH, SoDH: d.SoDH, SoTien: -500000, HinhThuc: 'Tiền mặt', Ngay: today(), NguoiTao: 'x', NgayTao: 'y' }), d);
+  assert.match(await page.locator('#modal h3').innerText(), /Phiếu trả lại tiền PT-TRA/);
+  assert.deepStrictEqual([await page.locator('#modal [name=SoTien]').inputValue(), await page.locator('#modal [name=SoTien]').getAttribute('readonly')], ['500.000', '']);
+  await page.locator('#modal [data-close]').first().click();
+  // Phiếu gắn đơn đã hủy: lựa chọn đơn vẫn là đơn đó (không tự bỏ liên kết khi lưu)
+  const huy = await page.evaluate(() => { const x = S.donHang[0]; x._tt = x.TrangThai; x.TrangThai = 'Hủy'; return x; });
+  await page.evaluate(d => openThu({ SoPT: 'PT-CU', MaKH: d.MaKH, TenKH: d.TenKH, SoDH: d.SoDH, SoTien: 100000, HinhThuc: 'Tiền mặt', Ngay: today(), NguoiTao: 'x', NgayTao: 'y' }), huy);
+  assert.strictEqual(await page.locator('#modal [name=SoDH]').inputValue(), huy.SoDH);
+  await page.locator('#modal [data-close]').first().click();
+  await page.evaluate(() => { const x = S.donHang[0]; x.TrangThai = x._tt; delete x._tt; });
+}]);
 try { require('./kiem-trinh-duyet-hopdong')(BUOC); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
 
 (async () => {

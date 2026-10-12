@@ -17,7 +17,7 @@ function chuanMayCu_(ds) {
   if (ds.length > 5) throw new Error('Mỗi đơn thu tối đa 5 máy cũ.');
   const kq = ds.map((m, i) => {
     m = m || {};
-    const ten = String(m.TenHang || '').trim().slice(0, 150), imei = String(m.IMEI || '').toUpperCase().replace(/[\s.\-]/g, '');
+    const ten = String(m.TenHang || '').trim().slice(0, 150), imei = gonMa_(m.IMEI);
     const gia = Math.round(+m.GiaThu || 0), giaLe = Math.round(+m.GiaLe || 0);
     if (!ten) throw new Error('Máy cũ ' + (i + 1) + ': nhập tên máy (vd: iPhone 13 128GB).');
     if (!/^[A-Z0-9][A-Z0-9._/-]{3,39}$/.test(imei)) throw new Error('Máy cũ ' + (i + 1) + ': nhập IMEI/serial của máy cũ (4–40 chữ, số).');
@@ -33,9 +33,12 @@ function chuanMayCu_(ds) {
 /** Ghi một máy cũ đã kiểm tra: mặt hàng "… (máy cũ)", phiếu nhập kho, phiếu thu "Thu máy cũ" gắn đơn */
 function ghiMayCu_(token, user, kh, soDH, m, ngay) {
   const ten = /máy cũ/i.test(m.TenHang) ? m.TenHang : m.TenHang + ' (máy cũ)';
-  let h = readTable_('HangHoa').find(x => x.NhomHang === NHOM_MAY_CU && boDau_(x.TenHang) === boDau_(ten));
+  const timHang = () => readTable_('HangHoa').find(x => x.NhomHang === NHOM_MAY_CU && boDau_(x.TenHang) === boDau_(ten));
+  let h = timHang();
   if (!h) {
-    h = withLock_(() => {
+    h = withLock_(() => { // tìm lại trong khóa: hai quầy cùng thu một mẫu máy thì chỉ tạo một mặt hàng
+      const co = timHang();
+      if (co) return co;
       const moi = upsert_('HangHoa', { TenHang: ten, NhomHang: NHOM_MAY_CU, PhanLoai: NHOM_MAY_CU, DVT: 'Máy', GiaLe: m.GiaLe, GhiChu: 'Tạo khi thu cũ đổi mới' }, () => nextCode_('HangHoa', 'HH', 4), []);
       log_(user, 'Thêm mặt hàng', moi.MaHH, ten + ' · máy cũ thu về');
       return moi;
@@ -43,7 +46,12 @@ function ghiMayCu_(token, user, kh, soDH, m, ngay) {
   }
   const nk = luuChungTu(token, 'NK', { Ngay: ngay, DoiTac: kh.TenKH, GhiChu: 'Thu cũ đổi mới' + (soDH ? ' · đơn ' + soDH : '') + (m.GhiChu ? ' · ' + m.GhiChu : ''),
     lines: [{ MaHH: h.MaHH, TenHang: h.TenHang, Model: h.Model || '', DVT: h.DVT || 'Máy', SoLuong: 1, IMEI: m.IMEI, GiaVon: m.GiaThu }] }).doc;
-  const pt = luuThuTien(token, { Ngay: ngay, SoDH: soDH, MaKH: kh.MaKH, TenKH: kh.TenKH, SoTien: m.GiaThu, HinhThuc: HT_MAY_CU, GhiChu: 'Máy cũ ' + h.TenHang + ' · IMEI ' + m.IMEI });
+  let pt;
+  try { pt = luuThuTien(token, { Ngay: ngay, SoDH: soDH, MaKH: kh.MaKH, TenKH: kh.TenKH, SoTien: m.GiaThu, HinhThuc: HT_MAY_CU, GhiChu: 'Máy cũ ' + h.TenHang + ' · IMEI ' + m.IMEI }); }
+  catch (e) { // phiếu thu lỗi: bỏ phiếu nhập vừa ghi, kẻo máy nằm trong kho mà nợ khách không giảm và không thu lại được (IMEI đã có trong kho)
+    withLock_(() => { deleteWhere_('PhieuKhoCT', nk.SoPK); deleteWhere_('PhieuKho', nk.SoPK); log_(user, 'Bỏ phiếu nhập máy cũ (thu tiền lỗi)', nk.SoPK, m.IMEI); });
+    throw e;
+  }
   return { MaHH: h.MaHH, TenHang: h.TenHang, IMEI: m.IMEI, GiaThu: m.GiaThu, SoPK: nk.SoPK, SoPT: pt.SoPT };
 }
 
@@ -122,13 +130,16 @@ function luuSuaChua(token, p) {
   let kh = null;
   if (p.MaKH) { kh = findObj_('KhachHang', p.MaKH); if (!kh) throw new Error('Không tìm thấy khách hàng ' + p.MaKH + '.'); }
   else if (p.khachMoi && String(p.khachMoi.TenKH || '').trim()) {
-    const so = String(p.khachMoi.SDT || '').replace(/\D/g, '');
+    const so = sdtVN_(p.khachMoi.SDT);
     kh = so.length >= 8 ? readTable_('KhachHang').find(k => sdtList_(k.SDT).indexOf(so) >= 0) : null;
     if (!kh) kh = luuKhach(token, { TenKH: String(p.khachMoi.TenKH).trim().slice(0, 150), SDT: String(p.khachMoi.SDT || '').trim().slice(0, 40) });
   } else if (!cu) throw new Error('Chọn khách hoặc nhập tên, số điện thoại khách.');
   Object.assign(o, kh ? { MaKH: kh.MaKH, TenKH: kh.TenKH, SDT: String(kh.SDT || '') } : { MaKH: cu.MaKH, TenKH: cu.TenKH, SDT: String(cu.SDT || '') });
   return withLock_(() => {
     const moi = !o.SoPN, now = now_();
+    // đọc lại trong khóa: máy khác vừa bấm Trả máy thì không ghi đè trạng thái cũ (phiếu hiện lại như đang sửa, trả lần nữa là tính tiền hai lần)
+    const hien = moi ? null : findObj_('SuaChua', o.SoPN);
+    if (hien && hien.TrangThai === 'Đã trả khách' && cu.TrangThai !== 'Đã trả khách') throw new Error('Phiếu ' + o.SoPN + ' vừa được trả khách ở máy khác. Tải lại phiếu rồi sửa.');
     if (moi) Object.assign(o, { NgayNhan: homNay_(), NguoiTao: user.ten, NgayTao: now });
     o.NgaySua = now;
     upsert_('SuaChua', o, () => nextSo_('SuaChua', 'PN', homNay_()), ['NgayNhan', 'NguoiTao', 'NgayTao', 'NgayTra', 'SoDH', 'Anh']);
@@ -144,9 +155,24 @@ function luuSuaChua(token, p) {
 function traMaySua(token, soPN, o) {
   const user = user_(token);
   o = o || {};
-  const r = findObj_('SuaChua', soPN);
-  if (!r) throw new Error('Không tìm thấy phiếu ' + soPN + '.');
-  if (r.TrangThai === 'Đã trả khách') throw new Error('Phiếu ' + soPN + ' đã trả khách.');
+  // Giữ phiếu trong khóa trước khi lập đơn: bấm hai lần / hai máy cùng trả không tạo hai đơn, hai phiếu thu
+  const giu = 'traSua_' + CUR_SHOP + '_' + soPN;
+  const r = withLock_(() => {
+    const p = findObj_('SuaChua', soPN);
+    if (!p) throw new Error('Không tìm thấy phiếu ' + soPN + '.');
+    if (p.TrangThai === 'Đã trả khách') throw new Error('Phiếu ' + soPN + ' đã trả khách.');
+    if (!giuCho_(giu)) throw new Error('Phiếu ' + soPN + ' đang được trả ở máy khác, đợi vài giây rồi tải lại.');
+    return p;
+  });
+  try { return traMaySuaDaGiu_(token, user, soPN, o, r); } finally { boGiu_(giu); }
+}
+// Giữ chỗ một việc dài (gọi trong withLock_): false nếu lần gọi khác đang giữ. CacheService lỗi thì cho chạy như khi chưa có giữ chỗ.
+function giuCho_(khoa) {
+  try { const c = CacheService.getScriptCache(); if (c.get(khoa)) return false; c.put(khoa, '1', 120); } catch (e) {}
+  return true;
+}
+function boGiu_(khoa) { try { CacheService.getScriptCache().remove(khoa); } catch (e) {} }
+function traMaySuaDaGiu_(token, user, soPN, o, r) {
   const chiPhi = Math.max(0, Math.round(+(o.ChiPhi == null ? r.ChiPhi : o.ChiPhi) || 0));
   let don = null;
   if (chiPhi > 0) {
@@ -205,13 +231,13 @@ function imeiTrongKho_() {
     const p = pk[l.SoPK];
     if (!p || !l.IMEI) return;
     const k = String(p.Ngay) + p.NgayTao;
-    imeiList_(l.IMEI).forEach(x => { if (!cuoi[x] || k >= cuoi[x].k) cuoi[x] = { k: k, p: p, l: l }; });
+    imeiList_(l.IMEI).forEach(x => { const g = gonMa_(x); if (!cuoi[g] || k >= cuoi[g].k) cuoi[g] = { k: k, p: p, l: l, ma: x }; }); // khóa: mã gọn; IMEI: mã như đã lưu
   });
   const kho = {}, daXuat = {};
   Object.keys(cuoi).forEach(x => {
     const c = cuoi[x];
-    if (c.p.Loai === 'Nhập') kho[x] = { MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay };
-    else daXuat[x] = { MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay, DoiTac: c.p.DoiTac || '' };
+    if (c.p.Loai === 'Nhập') kho[x] = { IMEI: c.ma, MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay };
+    else daXuat[x] = { IMEI: c.ma, MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay, DoiTac: c.p.DoiTac || '' };
   });
   return { kho: kho, daXuat: daXuat };
 }
@@ -224,17 +250,19 @@ function kiemKho(token, ds, o) {
   const user = user_(token);
   o = o || {};
   const quet = [];
-  (Array.isArray(ds) ? ds : []).forEach(x => { const m = String(x == null ? '' : x).toUpperCase().replace(/[\s.\-]/g, ''); if (m.length >= 4 && quet.indexOf(m) < 0) quet.push(m); });
+  (Array.isArray(ds) ? ds : []).forEach(x => { const m = gonMa_(x); if (m.length >= 4 && quet.indexOf(m) < 0) quet.push(m); });
   if (quet.length > 3000) throw new Error('Mỗi lần kiểm tối đa 3000 mã.');
   const { kho, daXuat } = imeiTrongKho_(), daThay = {};
+  // kho / daXuat theo mã gọn (như mã quét); kết quả ghi IMEI như đã lưu
+  const tim = (g, x) => (g[x] ? x : /^S[A-Z0-9]{10,12}$/.test(x) && g[x.slice(1)] ? x.slice(1) : ''); // mã vạch serial Apple có chữ S đầu; không cắt mã khác
   const khop = [], la = [];
   quet.forEach(x => {
-    const m = kho[x] ? x : /^S[A-Z0-9]{10,12}$/.test(x) && kho[x.slice(1)] ? x.slice(1) : ''; // mã vạch serial Apple có chữ S đầu
-    if (m && (!o.MaHH || kho[m].MaHH === o.MaHH)) { daThay[m] = 1; khop.push(Object.assign({ IMEI: m }, kho[m])); return; }
-    const xu = daXuat[x] || daXuat[x.slice(1)];
+    const m = tim(kho, x);
+    if (m && (!o.MaHH || kho[m].MaHH === o.MaHH)) { daThay[m] = 1; khop.push(Object.assign({}, kho[m])); return; }
+    const xm = tim(daXuat, x), xu = xm && daXuat[xm];
     la.push(m ? Object.assign({ IMEI: m, lyDo: 'Khác mặt hàng đang kiểm' }, kho[m]) : xu ? Object.assign({ IMEI: x, lyDo: 'Đã xuất ở phiếu ' + xu.SoPK + (xu.DoiTac ? ' (' + xu.DoiTac + ')' : '') }, xu) : { IMEI: x, MaHH: '', TenHang: '', lyDo: 'Chưa nhập kho' });
   });
-  const thieu = Object.keys(kho).filter(x => !daThay[x] && (!o.MaHH || kho[x].MaHH === o.MaHH)).map(x => Object.assign({ IMEI: x }, kho[x]))
+  const thieu = Object.keys(kho).filter(x => !daThay[x] && (!o.MaHH || kho[x].MaHH === o.MaHH)).map(x => Object.assign({}, kho[x]))
     .sort((a, b) => String(a.TenHang).localeCompare(String(b.TenHang), 'vi') || a.IMEI.localeCompare(b.IMEI));
   const hang = {};
   const dong = (r, k) => { const h = hang[r.MaHH] || (hang[r.MaHH] = { MaHH: r.MaHH, TenHang: r.TenHang, trongKho: 0, thay: 0 }); h[k]++; };
@@ -253,8 +281,16 @@ function kiemKho(token, ds, o) {
  * tiền trả lại khách ghi thành phiếu thu âm (sổ quỹ giảm). xemTruoc: chỉ tính tổng mới và số tiền trả lại tối đa, chưa ghi gì.
  */
 function traHang(token, o) {
-  const user = user_(token);
   o = o || {};
+  if (o.xemTruoc) return traHang_(token, o);
+  user_(token);
+  // Giữ đơn trong khóa trước khi kiểm tra và ghi: hai lần gửi cùng lúc không nhập kho hai lần, không trả tiền hai lần
+  const giu = 'traHang_' + CUR_SHOP + '_' + o.SoDH;
+  withLock_(() => { if (!giuCho_(giu)) throw new Error('Đơn ' + o.SoDH + ' đang được nhận trả ở máy khác, đợi vài giây rồi tải lại.'); });
+  try { return traHang_(token, o); } finally { boGiu_(giu); }
+}
+function traHang_(token, o) {
+  const user = user_(token);
   const dh = findObj_('DonHang', o.SoDH);
   if (!dh) throw new Error('Không tìm thấy đơn hàng ' + o.SoDH + '.');
   if (dh.TrangThai === 'Hủy') throw new Error('Đơn đã hủy.');
@@ -274,8 +310,8 @@ function traHang(token, o) {
     if (!(sl > 0) || sl > l.SoLuong) throw new Error('Dòng trả ' + (i + 1) + ': số lượng trả phải từ 1 đến ' + l.SoLuong + '.');
     if (im.length && !l.MaHH) throw new Error('Dòng trả ' + (i + 1) + ': ' + l.TenHang + ' không phải hàng trong kho, không ghi IMEI/serial.');
     im.forEach(x => {
-      const c = daXuat[x];
-      if (kho[x] && pkDon[kho[x].SoPK] === -1) throw new Error('IMEI/serial ' + x + ' khách đã trả, đã nhập ở phiếu ' + kho[x].SoPK + '.');
+      const g = gonMa_(x), c = daXuat[g], k = kho[g]; // kho / daXuat theo mã gọn
+      if (k && pkDon[k.SoPK] === -1) throw new Error('IMEI/serial ' + x + ' khách đã trả, đã nhập ở phiếu ' + k.SoPK + '.');
       if (!c || pkDon[c.SoPK] !== 1) throw new Error('IMEI/serial ' + x + ' không có trong các lần giao của đơn ' + dh.SoDH + ' (hoặc máy đã về kho, đã bán cho khách khác).');
       if (c.MaHH !== l.MaHH) throw new Error('IMEI/serial ' + x + ' là máy ' + c.TenHang + ', không phải ' + l.TenHang + '.');
     });

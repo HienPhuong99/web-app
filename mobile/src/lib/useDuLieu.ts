@@ -76,7 +76,8 @@ export function useDuLieu<T>(fn: string, args: unknown[], o: TuyChon = {}): DuLi
   const khoa = bat ? taoKhoa(fn, ...(JSON.parse(thamSo) as unknown[])) : '';
   const [muc, setMuc] = useState<Muc<T> | null>(() => (khoa ? layNgay<T>(khoa) : null));
   const [loi, setLoi] = useState(''), [dangTai, setDangTai] = useState(false);
-  const lan = useRef(0);
+  const lan = useRef(0), dangLamMoi = useRef(false), khoaHienTai = useRef(khoa);
+  useEffect(() => { khoaHienTai.current = khoa; }, [khoa]);
 
   // Đổi khóa (đổi bộ lọc, đổi ngày…): hiện ngay số đã nhớ của khóa mới
   const [khoaDangXem, setKhoaDangXem] = useState(khoa);
@@ -95,16 +96,22 @@ export function useDuLieu<T>(fn: string, args: unknown[], o: TuyChon = {}): DuLi
   }, [khoa]);
 
   const chay = useCallback(async (moi: boolean) => {
-    if (!khoa) return;
+    if (!khoa || (!moi && dangLamMoi.current)) return; // đang kéo làm mới: lần tải thường (có thể là số máy chủ nhớ 5 phút) không chen vào
     const so = ++lan.current;
+    if (moi) dangLamMoi.current = true;
     setDangTai(true);
     try {
       const du = await (moi ? goiMoi : goi)<T>(fn, ...(JSON.parse(thamSo) as unknown[]));
+      if (so !== lan.current) { // lần gọi cũ về sau lần mới: không ghi đè số mới; khác khóa (đã đổi bộ lọc) thì vẫn nhớ cho khóa đó
+        if (khoa !== khoaHienTai.current) luu(khoa, du, luuMay);
+        return;
+      }
       luu(khoa, du, luuMay);
-      if (so === lan.current) { setMuc(layNgay<T>(khoa)); setLoi(''); }
+      setMuc(layNgay<T>(khoa)); setLoi('');
     } catch (e) {
       if (so === lan.current) setLoi((e as Error).message);
     } finally {
+      if (moi) dangLamMoi.current = false;
       if (so === lan.current) setDangTai(false);
     }
   }, [khoa, fn, thamSo, luuMay, goi, goiMoi]);

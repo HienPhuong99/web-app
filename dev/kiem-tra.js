@@ -431,7 +431,7 @@ assert.ok(plain(G.dsNhatKy(admin)).some(x => x.HanhDong === 'Tạo file hợp đ
 
 
 // ===== Hợp đồng (GĐ4): nhân bản, tạo hàng loạt =====
-const hdNguon = G.luuHopDong(lan, { LoaiHD: 'Hợp đồng mua bán', TenDN: 'Công ty Nguồn', MaKH: khHD.MaKH, MST: '0311111111', NguoiDaiDien: 'Trần Văn B', ChucVu: 'TGĐ', SDT: '0900123456',
+const hdNguon = G.luuHopDong(lan, { LoaiHD: 'Hợp đồng mua bán', TenDN: 'Công ty Nguồn', MaKH: khHD.MaKH, MST: '0311111111', NguoiDaiDien: 'Trần Văn B', ChucVu: 'TGĐ', SDT: '0900123456', SoCCCD: '079012345678', CCCDCap: '01/02/2021 tại Cục CS QLHC',
   SoTK: '111222', NganHang: 'ACB', VAT: 8, GhiChu: 'ghi chú gốc', NgayHieuLuc: '2026-01-01', NgayHetHan: '2026-12-31', TrangThai: 'Đang hiệu lực', SoDH: dhP.SoDH,
   lines: [{ MaHH: 'HH0001', TenHang: 'iPhone 16 Pro Max', DVT: 'Máy', SoLuong: 2, DonGia: 28200000 }] }).doc;
 const nb1 = plain(G.nhanBanHopDong(lan, hdNguon.SoHD, 'Hợp đồng nguyên tắc', false));
@@ -439,6 +439,7 @@ assert.deepStrictEqual([nb1.nguon, nb1.doc.LoaiHD, nb1.doc.TrangThai, nb1.doc.Te
   [hdNguon.SoHD, 'Hợp đồng nguyên tắc', 'Soạn thảo', 'Công ty Nguồn', 'Trần Văn B', '0900123456', 8, 60912000, dhP.SoDH, today]);
 assert.deepStrictEqual([nb1.doc.NgayHieuLuc, nb1.doc.NgayHetHan, nb1.doc.GhiChu, nb1.doc.FileId || '', nb1.doc.NguoiTao, 'lines' in nb1.doc], ['', '', '', '', 'Lan', false]);
 assert.notStrictEqual(nb1.doc.SoHD, hdNguon.SoHD);
+assert.deepStrictEqual([nb1.doc.SoCCCD, nb1.doc.CCCDCap], ['079012345678', '01/02/2021 tại Cục CS QLHC']); // thông tin bên A gồm cả CCCD
 assert.deepStrictEqual(plain(G.layHopDong(lan, nb1.doc.SoHD).lines).map(l => [l.TenHang, l.SoLuong, l.DonGia, l.ThanhTien]), [['iPhone 16 Pro Max', 2, 28200000, 56400000]]);
 assert.strictEqual(G.findObj_('HopDong', hdNguon.SoHD).TrangThai, 'Đang hiệu lực'); // hợp đồng gốc không bị đụng
 // có tạo file: ra file đúng mẫu của loại mới, bảng hàng đúng
@@ -553,12 +554,26 @@ assert.throws(() => G.luuLichHopDong(lan, hdTG.SoHD, lichSua.map(r => Object.ass
 assert.strictEqual(plain(G.luuLichHopDong(lan, hdTG.SoHD, lichSua)).lich.length, 3); // không đổi gì thì không bị chặn
 assert.strictEqual(plain(G.luuLichHopDong(admin, hdTG.SoHD, lichSua.map(r => Object.assign({}, r, r.SoPT ? {} : { SoTien: r.SoTien + 1 })))).lich[1].SoTien, 12000001);
 G.luuLichHopDong(admin, hdTG.SoHD, lichSua);
-assert.strictEqual(plain(G.thuDotHopDong(lan, hdTG.SoHD, 2, {})).phieu.SoTien, 12000000);
+// Máy đang mở bản lịch cũ (đợt 2 khi đó là ngày khác / số tiền khác): không thu nhầm đợt
+assert.throws(() => G.thuDotHopDong(lan, hdTG.SoHD, 2, { kiemNgay: '2026-11-05', kiemTien: 10000000 }), /vừa thay đổi ở máy khác/);
+assert.throws(() => G.thuDotHopDong(lan, hdTG.SoHD, 2, { kiemNgay: '2026-11-20', kiemTien: 1 }), /vừa thay đổi ở máy khác/);
+const thuD2 = plain(G.thuDotHopDong(lan, hdTG.SoHD, 2, { kiemNgay: '2026-11-20', kiemTien: 12000000 }));
+assert.strictEqual(thuD2.phieu.SoTien, 12000000);
+// Phiếu của đợt không xóa / đổi tiền được ở màn Thu tiền (lịch sẽ chỉ vào phiếu không còn); sửa ghi chú vẫn được
+assert.throws(() => G.xoaThuTien(admin, thuD2.phieu.SoPT), /ghi nhận Kỳ 1\/2 của hợp đồng .*Hủy ghi nhận thu/);
+assert.throws(() => G.luuThuTien(admin, Object.assign({}, thuD2.phieu, { SoTien: 1 })), /không sửa số tiền/);
+assert.strictEqual(G.luuThuTien(admin, Object.assign({}, thuD2.phieu, { GhiChu: 'sửa ghi chú' })).GhiChu, 'sửa ghi chú');
+{ // phiếu bị xóa thẳng trên Sheet: không được ghi lại với số tiền khác
+  const sh = sheets.PS_ThuTien, i = sh.rows.findIndex(r => r[0] === thuD2.phieu.SoPT), dong = sh.rows.splice(i, 1)[0];
+  assert.throws(() => G.luuThuTien(admin, Object.assign({}, thuD2.phieu, { SoTien: 1 })), /không sửa số tiền/);
+  sh.rows.splice(i, 0, dong);
+}
 // Hủy thu (quản trị): xóa phiếu, đưa đợt về chưa thu; hợp đồng đã thu thì không xóa được
 assert.throws(() => G.huyThuDotHopDong(lan, hdTG.SoHD, 2), /quản trị/);
 assert.throws(() => G.xoaHopDong(admin, hdTG.SoHD), /đã ghi nhận thu tiền/);
 const soPT2 = G.findObj_('ThuTien', plain(G.layHopDong(lan, hdTG.SoHD).lich)[1].SoPT).SoPT;
-assert.strictEqual(plain(G.huyThuDotHopDong(admin, hdTG.SoHD, 2).soPT), soPT2);
+assert.throws(() => G.huyThuDotHopDong(admin, hdTG.SoHD, 2, 'PT-khac'), /vừa thay đổi ở máy khác/); // đang thấy phiếu khác: không hủy nhầm
+assert.strictEqual(plain(G.huyThuDotHopDong(admin, hdTG.SoHD, 2, soPT2).soPT), soPT2);
 assert.deepStrictEqual([G.findObj_('ThuTien', soPT2), plain(G.layHopDong(lan, hdTG.SoHD).lich)[1].SoPT], [null, '']);
 assert.throws(() => G.huyThuDotHopDong(admin, hdTG.SoHD, 2), /chưa thu tiền/);
 // Tạo file từ mẫu trả góp: bảng lịch, số kỳ, tổng; sửa lịch thì file cũ, ghi nhận thu thì không
@@ -878,7 +893,7 @@ assert.deepStrictEqual(plain(G.xoaCuaHangDaBo_()), []); // chạy lại không l
   const r = plain(G.nhapKhach(nv, [
     { _dong: 2, TenKH: ' Nhập Một ', SDT: '0922000001', NguoiDaiDien: 'Ông A' },
     { _dong: 3, TenKH: 'Nhập Hai', SDT: '0922000002 / 0922000003' },
-    { _dong: 4, TenKH: 'Trùng sẵn có', SDT: '0911.222.333' },       // trùng SĐT với khách đã có
+    { _dong: 4, TenKH: 'Trùng sẵn có', SDT: '+84 911.222.333' },    // trùng SĐT với khách đã có (dạng +84)
     { _dong: 5, TenKH: 'Trùng trong file', SDT: '0922000003' },     // trùng dòng 3
     { _dong: 6, TenKH: '', SDT: '0933000000' },                     // thiếu tên
     { _dong: 7, TenKH: '', SDT: '' },                               // dòng trống: bỏ qua im lặng
@@ -911,6 +926,16 @@ assert.deepStrictEqual(plain(G.xoaCuaHangDaBo_()), []); // chạy lại không l
   assert.deepStrictEqual([G.findObj_('HangHoa', h.them[1].MaHH).GiaSi], ['']);
   assert.ok(h.them.every(x => /^HH\d{4}$/.test(x.MaHH)));
   assert.deepStrictEqual(plain(G.taiDuLieu(admin2).hang.filter(x => x.TenHang === 'Hàng nhập 1')).map(x => x.GiaSi).sort(), ['', 25000000]);
+}
+
+// Bảng đã nhớ trong một lần gọi phải đọc lại khi vào khóa ghi: người khác ghi trong lúc chờ khóa thì kiểm tra trong khóa vẫn thấy
+{
+  const sh = sheets.PS_PhieuKho, truoc = sh.rows.length;
+  const kq = vm.runInContext(`(() => { BANG_DA_DOC_ = {}; const a = readTable_('PhieuKho').length; return { a, ngoai: () => readTable_('PhieuKho').length, trong: () => withLock_(() => readTable_('PhieuKho').length) }; })()`, G);
+  sh.rows.push(['PK-KHAC-GHI', today, 'Nhập']); // lần chạy khác ghi vào giữa chừng
+  assert.deepStrictEqual([kq.a, kq.ngoai(), kq.trong()], [truoc - 1, truoc - 1, truoc]);
+  sh.rows.pop();
+  vm.runInContext('BANG_DA_DOC_ = null; TIEU_DE_DA_DOC_ = null;', G);
 }
 
 require('./kiem-tra-html'); // giao diện: cú pháp, và các chỗ Apps Script sẽ cắt nhầm khi xóa chú thích

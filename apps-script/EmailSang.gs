@@ -69,7 +69,7 @@ function guiThuEmailSang(token) {
 function guiEmailSang(e) {
   if (!e || typeof e !== 'object' || !(e.triggerUid || e.year)) return;
   const homNay = homNay_(), cd = caiDatMap_(), props = PropertiesService.getScriptProperties();
-  Object.keys(SHOPS).forEach(id => {
+  docMotLan_(() => Object.keys(SHOPS).forEach(id => { // email và thông báo cùng tính tongHopSang_: mỗi trang tính chỉ đọc một lần
     CUR_SHOP = id;
     if (cauHinhEmailSang_(id, cd).bat && props.getProperty('emailSang.' + id) !== homNay) {
       try { if (guiEmailSang_(id, cauHinhEmailSang_(id, cd), homNay, false).daGui) props.setProperty('emailSang.' + id, homNay); }
@@ -79,7 +79,7 @@ function guiEmailSang(e) {
       try { guiThongBaoSang_(id, homNay); props.setProperty('thongBao.' + id, homNay); }
       catch (err) { Logger.log('Không gửi được thông báo sáng của ' + id + ': ' + err); }
     }
-  });
+  }));
 }
 
 const homNay_ = () => Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd');
@@ -99,6 +99,14 @@ function guiEmailSang_(id, cfg, homNay, thu) {
 /**
  * Gom các việc cần chú ý tại homNay (yyyy-MM-dd). Cách tính phải giống màn hình Tổng quan (hanHD, trangThaiDot, conNo, isLow).
  */
+// Công nợ theo khách = đã mua (đơn không hủy) trừ đã thu (mọi phiếu thu của khách), nhiều nhất trước. Màn Khách còn nợ của app cũng dùng.
+function dsNo_(song, thu, khach) {
+  const mua = {}, da = {};
+  song.forEach(d => { mua[d.MaKH] = (mua[d.MaKH] || 0) + (+d.TongCong || 0); });
+  thu.forEach(p => { da[p.MaKH] = (da[p.MaKH] || 0) + (+p.SoTien || 0); });
+  return Object.keys(Object.assign({}, mua, da)).map(k => ({ MaKH: k, tien: (mua[k] || 0) - (da[k] || 0) })).filter(x => x.tien > 0).sort((a, b) => b.tien - a.tien)
+    .map(x => ({ MaKH: x.MaKH, TenKH: x.MaKH && khach[x.MaKH] ? khach[x.MaKH].TenKH : (x.MaKH || 'Khách lẻ'), SDT: x.MaKH && khach[x.MaKH] ? khach[x.MaKH].SDT : '', tien: x.tien }));
+}
 function tongHopSang_(homNay) {
   const homQua = new Date(Date.parse(homNay) - 864e5).toISOString().slice(0, 10), ngay = v => String(v == null ? '' : v).slice(0, 10);
   const donHang = readTable_('DonHang'), thu = readTable_('ThuTien'), khach = {};
@@ -120,15 +128,11 @@ function tongHopSang_(homNay) {
     .map(d => ({ SoDH: d.SoDH, MaKH: d.MaKH || '', TenKH: d.TenKH, NgayGiao: ngay(d.NgayGiao), TongCong: +d.TongCong || 0 }));
   // Hàng sắp hết: tồn <= mức tối thiểu (hàng có nhập xuất), hoặc có đặt mức tối thiểu mà chưa có phiếu kho nào
   const ton = tonKho_();
-  const hang = readTable_('HangHoa').filter(h => ton[h.MaHH] ? ton[h.MaHH].nhap - ton[h.MaHH].xuat <= (+h.TonToiThieu || 0) : h.TonToiThieu !== '' && +h.TonToiThieu > 0)
+  // Máy cũ thu về (mỗi mã một chiếc) bán xong là tồn 0: không tính sắp hết trừ khi có đặt mức tối thiểu, kẻo sáng nào cũng có "việc"
+  const hang = readTable_('HangHoa').filter(h => !(h.NhomHang === NHOM_MAY_CU && !(+h.TonToiThieu > 0)) && (ton[h.MaHH] ? ton[h.MaHH].nhap - ton[h.MaHH].xuat <= (+h.TonToiThieu || 0) : h.TonToiThieu !== '' && +h.TonToiThieu > 0))
     .map(h => ({ MaHH: h.MaHH, TenHang: h.TenHang, ton: ton[h.MaHH] ? ton[h.MaHH].nhap - ton[h.MaHH].xuat : 0, toiThieu: +h.TonToiThieu || 0 }))
     .sort((a, b) => (a.ton - a.toiThieu) - (b.ton - b.toiThieu));
-  // Công nợ theo khách = đã mua (đơn không hủy) trừ đã thu (mọi phiếu thu của khách)
-  const mua = {}, da = {};
-  song.forEach(d => { mua[d.MaKH] = (mua[d.MaKH] || 0) + (+d.TongCong || 0); });
-  thu.forEach(p => { da[p.MaKH] = (da[p.MaKH] || 0) + (+p.SoTien || 0); });
-  const noDs = Object.keys(Object.assign({}, mua, da)).map(k => ({ MaKH: k, tien: (mua[k] || 0) - (da[k] || 0) })).filter(x => x.tien > 0).sort((a, b) => b.tien - a.tien)
-    .map(x => ({ MaKH: x.MaKH, TenKH: x.MaKH && khach[x.MaKH] ? khach[x.MaKH].TenKH : (x.MaKH || 'Khách lẻ'), SDT: x.MaKH && khach[x.MaKH] ? khach[x.MaKH].SDT : '', tien: x.tien }));
+  const noDs = dsNo_(song, thu, khach);
   const ban = n => { const ds = song.filter(d => ngay(d.Ngay) === n); return { don: ds.length, tien: ds.reduce((s, d) => s + (+d.TongCong || 0), 0) }; };
   const daThu = n => thu.filter(p => ngay(p.Ngay) === n).reduce((s, p) => s + (+p.SoTien || 0), 0);
   const du = {

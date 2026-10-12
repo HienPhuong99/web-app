@@ -89,6 +89,9 @@ test('bán xong: doanh số, tiền thu, công nợ trên Tổng quan', () => {
   // Trả đủ: công nợ không đổi
   const du = tongQuanSauBan(TQ(), KQ({ daThu: 100 }));
   assert.deepEqual([du.no, du.thu], [TQ().no, 110]);
+  const qua0h = tongQuanSauBan(TQ(), KQ(), '2099-01-01'); // Tổng quan đang nhớ của ngày khác: không cộng vào doanh số "hôm nay" cũ
+  assert.deepEqual([qua0h.ban, qua0h.thu, qua0h.ban7], [TQ().ban, TQ().thu, TQ().ban7]);
+  assert.equal(tongQuanSauBan(TQ(), KQ(), TQ().homNay).ban.don, TQ().ban.don + 1);
   // Khách đang nợ mua thêm chưa trả: không tăng số khách
   assert.deepEqual(tongQuanSauBan(TQ(), KQ({ MaKH: 'K2', daThu: 0 })).no.soKhach, 2);
   assert.equal(TQ().ban.don, 2); // không sửa dữ liệu gốc

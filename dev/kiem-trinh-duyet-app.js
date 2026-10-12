@@ -193,6 +193,9 @@ buoc('Thu nốt tiền còn nợ của đơn vừa bán → hồ sơ khách hế
   await xong.waitFor({ timeout: 15000 });
   assert.match(await xong.textContent(), new RegExp('8\\.500\\.000 đ.*Tiền mặt.*' + c.soDH.replace('/', '\\/')));
   await v(page, 'nut-xong-thu').click();
+  await v(page, 'nut-xem-khach').waitFor();
+  // về màn Đã bán: không còn "Còn nợ" và nút Thu tiền (trước đây vẫn hiện số cũ, bấm lại là thu trùng)
+  await page.waitForFunction(() => ![...document.querySelectorAll('[data-testid="nut-thu-sau-ban"]')].some(e => e.offsetParent), null, { timeout: 15000 });
   await v(page, 'nut-xem-khach').click();
   await v(page, 'cong-no').getByText('Không còn nợ').waitFor({ timeout: 15000 });
   await v(page, 'the-may').getByText('356789012345680').waitFor();
@@ -317,7 +320,7 @@ buoc('Tổng quan: phím tắt Bán nhanh, bấm khách còn nợ mở hồ sơ'
 });
 
 buoc('Tổng quan động: bấm số đơn → đơn và phiếu thu hôm nay, lật ngày; bấm cột 7 ngày; khách còn nợ → hồ sơ', async page => {
-  const homNay = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  const homNay = new Date(Date.now() + 7 * 36e5).toISOString().slice(0, 10); // hôm nay theo giờ Việt Nam, như app và máy chủ
   const dmy = n => n.split('-').reverse().join('/');
   await page.getByTestId('tab-index').click();
   await v(page, 'so-don').click({ timeout: 15000 });
@@ -444,6 +447,7 @@ buoc('Kiểm kho theo IMEI; bán có giảm giá, gửi phiếu PDF; khách tr�
   await v(page, 'o-imei-ban').fill('356789012345698');
   await v(page, 'nut-them-imei').click();
   await v(page, 'dong-gio').getByText('iPhone 16 Pro Max', { exact: false }).waitFor({ timeout: 15000 });
+  assert.ok((await v(page, 'o-giam-gia').boundingBox()).width >= 120, 'Ô giảm giá phải đủ rộng (từng co lại còn phần đệm)');
   await v(page, 'o-giam-gia').fill('200000');
   await v(page, 'tong-cong').getByText('28.000.000 đ').waitFor();
   await v(page, 'o-tim-khach-ban').fill('Khách Trả Máy');

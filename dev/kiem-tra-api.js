@@ -230,6 +230,8 @@ assert.strictEqual(goi(binh, 'khoMay').find(h => h.MaHH === 'HH0002').xuat, 3);
 // Khách mới trùng số điện thoại với khách đã có: dùng khách cũ, không tạo trùng. Khách chưa trả: không có phiếu thu
 const bn2 = ban({ khachMoi: { TenKH: 'Mai', SDT: '0977123456' }, lines: [{ TenHang: 'Dán màn hình', SoLuong: 1, DonGia: 100000 }] });
 assert.deepStrictEqual([bn2.MaKH, bn2.SoPT, bn2.daThu], [bn.MaKH, '', 0]);
+// Số dạng +84 vẫn là khách cũ (cách bán nhanh tìm khách), không tạo khách trùng
+assert.strictEqual(require('vm').runInContext(`readTable_('KhachHang').find(k => sdtList_(k.SDT).indexOf(sdtVN_('+84 977 123 456')) >= 0).MaKH`, G), bn.MaKH);
 assert.strictEqual(sheets.PS_KhachHang.rows.filter(r => r[3] && String(r[3]).replace(/\D/g, '') === '0977123456').length, 1);
 // "Khách lẻ" không số điện thoại: mọi lần bán lẻ dùng chung một khách; khách mới khác tên không số thì tạo mới
 const le1 = ban({ khachMoi: { TenKH: 'Khách lẻ' }, lines: [{ TenHang: 'Cáp sạc', SoLuong: 1, DonGia: 90000 }], thu: { SoTien: 90000 } });
@@ -376,6 +378,10 @@ props.delete('thongBao.phone');
 G.guiEmailSang({ triggerUid: 'x' });
 assert.strictEqual(push.da.length, soLo + 2);
 assert.strictEqual(goi(binh4, 'dsThietBi')[0].thongBao, false);
+// Bấm thử thông báo đúng lúc máy chủ Expo báo máy đã gỡ đăng ký: báo rõ, không nói "đã gửi"
+goi(binh4, 'datThongBao', MA_TB);
+assert.throws(() => goi(binh4, 'thuThongBao'), /tắt thông báo hoặc cài lại app/);
+assert.strictEqual(goi(binh4, 'dsThietBi')[0].thongBao, false);
 delete push.loi[MA_TB];
 // Tắt thông báo; không còn máy nào bật và email sáng tắt: bỏ hẹn giờ
 goi(binh4, 'datThongBao', MA_TB);
@@ -521,7 +527,14 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   assert.strictEqual(anh.Anh.length, 1);
   // Trả máy: lập đơn dịch vụ 300.000, khách trả ngay → không còn nợ
   const no0 = goi(binh4, 'chiTietKhach', p.MaKH).no;
+  // Máy khác đang trả phiếu này (bấm hai lần, mạng chậm): lần sau bị từ chối, không lập thêm đơn
+  const soDon0 = sheets.PS_DonHang.rows.length;
+  cache.set('traSua_phone_' + p.SoPN, '1');
+  assert.throws(() => goi(binh4, 'traMaySua', p.SoPN, { thu: { SoTien: 300000, HinhThuc: 'Tiền mặt' } }), /đang được trả ở máy khác/);
+  assert.strictEqual(sheets.PS_DonHang.rows.length, soDon0);
+  cache.delete('traSua_phone_' + p.SoPN);
   const tra = goi(binh4, 'traMaySua', p.SoPN, { thu: { SoTien: 300000, HinhThuc: 'Tiền mặt' } });
+  assert.ok(![...cache.keys()].some(k => k.startsWith('traSua_')), 'Trả xong phải bỏ giữ phiếu');
   assert.deepStrictEqual([tra.TrangThai, tra.ChiPhi, !!tra.SoDH, tra.don.TongCong, tra.don.daThu], ['Đã trả khách', 300000, true, 300000, 300000]);
   assert.strictEqual(G.findObj_('DonHang', tra.SoDH).TrangThai, 'Đã giao');
   assert.strictEqual(goi(binh4, 'chiTietKhach', p.MaKH).no, no0);
@@ -560,11 +573,84 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   assert.deepStrictEqual([kq.soQuet, kq.khop], [3, 1]); // mã trùng chỉ tính một lần
   assert.deepStrictEqual(kq.la.map(x => [x.IMEI, /Đã xuất/.test(x.lyDo) ? 'ban' : x.lyDo]), [['356789012345671', 'ban'], ['999999999999', 'Chưa nhập kho']]);
   assert.strictEqual(kq.thieu.length, trong.length - 1);
+  // mã lạ dài hơn một ký tự so với máy đã bán (không phải serial Apple có chữ S) thì là chưa nhập, không được nhận nhầm là máy kia
+  assert.deepStrictEqual(goi(binh4, 'kiemKho', ['9356789012345671']).la.map(x => x.lyDo), ['Chưa nhập kho']);
   assert.ok(kq.theoHang.some(h => h.thay === 1 && h.trongKho >= 1));
   const motHang = goi(binh4, 'kiemKho', ['359999000000017'], { MaHH: 'HH0001' });
   assert.deepStrictEqual([motHang.khop, motHang.la[0].lyDo], [0, 'Khác mặt hàng đang kiểm']);
   assert.ok(motHang.thieu.every(x => x.MaHH === 'HH0001'));
   assert.ok(sheets.PS_NhatKy.rows.some(r => r[2] === 'Kiểm kho theo IMEI'));
+}
+
+// Phiếu thu không ghi hình thức: tính là tiền mặt (sổ quỹ không đẩy sang ngân hàng); máy cũ bán hết không thành hàng sắp hết
+{
+  const t = G.dangNhap('admin', adminPass).token, kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Không Hình Thức', SDT: '0966000666' });
+  assert.strictEqual(G.luuThuTien(t, { Ngay: today, MaKH: kh.MaKH, SoTien: 5000 }).HinhThuc, 'Tiền mặt');
+  const cu = G.luuHang(t, { TenHang: 'iPhone 7 32GB (máy cũ) thử', NhomHang: 'Máy cũ', GiaLe: 1000000 }), moi = G.luuHang(t, { TenHang: 'Cáp thử hết hàng', GiaLe: 50000 });
+  G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'NCC', lines: [{ MaHH: cu.MaHH, TenHang: cu.TenHang, SoLuong: 1 }, { MaHH: moi.MaHH, TenHang: moi.TenHang, SoLuong: 1 }] });
+  G.luuChungTu(t, 'XK', { Ngay: today, DoiTac: 'Khách', lines: [{ MaHH: cu.MaHH, TenHang: cu.TenHang, SoLuong: 1 }, { MaHH: moi.MaHH, TenHang: moi.TenHang, SoLuong: 1 }] });
+  const sap = G.tongHopSang_(today).hang.map(h => h.MaHH);
+  assert.ok(sap.includes(moi.MaHH) && !sap.includes(cu.MaHH), JSON.stringify(sap));
+}
+
+// Thu máy cũ: phiếu thu lỗi thì bỏ phiếu nhập vừa ghi (máy không nằm lại trong kho), thử lại được; mặt hàng máy cũ không tạo trùng
+{
+  const t = G.dangNhap('admin', adminPass).token, kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Thu Cũ Lỗi', SDT: '0966000777' });
+  const don = goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [{ TenHang: 'Dịch vụ thử', SoLuong: 1, DonGia: 5000000 }] });
+  const pk0 = sheets.PS_PhieuKho.rows.length, may = { SoDH: don.SoDH, TenHang: 'iPhone 11 64GB', IMEI: '356000555444333', GiaThu: 2000000 };
+  const goc = G.luuThuTien;
+  G.luuThuTien = () => { throw new Error('giả lập lỗi ghi phiếu thu'); };
+  try { assert.throws(() => G.thuMayCu(t, may), /giả lập lỗi/); } finally { G.luuThuTien = goc; }
+  assert.strictEqual(sheets.PS_PhieuKho.rows.length, pk0);
+  assert.strictEqual(goi(binh4, 'traMaKho', '356000555444333').trangThai, 'chuaCo');
+  const lai = G.thuMayCu(t, may); // thử lại được
+  assert.ok(lai.SoPK && lai.SoPT);
+  assert.strictEqual(G.readTable_('HangHoa').filter(h => h.TenHang === 'iPhone 11 64GB (máy cũ)').length, 1);
+}
+
+// Bán nhanh cho khách mới mà xuất kho lỗi: bỏ cả đơn và khách vừa tạo
+{
+  const kh0 = sheets.PS_KhachHang.rows.length, dh0 = sheets.PS_DonHang.rows.length, goc = G.luuChungTu;
+  G.luuChungTu = function (tk, loai, doc) { if (loai === 'XK') throw new Error('giả lập lỗi xuất kho'); return goc.apply(this, arguments); };
+  try { assert.throws(() => goi(binh4, 'banNhanh', { khachMoi: { TenKH: 'Khách Lỗi Xuất Kho', SDT: '0966000888' }, lines: [{ TenHang: 'Dán màn hình', SoLuong: 1, DonGia: 100000 }] }), /giả lập lỗi xuất kho/); }
+  finally { G.luuChungTu = goc; }
+  assert.deepStrictEqual([sheets.PS_KhachHang.rows.length, sheets.PS_DonHang.rows.length], [kh0, dh0]);
+}
+
+// Lệnh ghi kèm mã lần gửi: gửi lại cùng mã (app báo lỗi mạng mà máy chủ đã ghi) nhận kết quả cũ, không ghi thêm phiếu
+{
+  const kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Gửi Lại', SDT: '0966000555' }), so0 = sheets.PS_ThuTien.rows.length;
+  const gui = ma => api({ may: binh4, fn: 'luuThuTien', args: [{ Ngay: today, MaKH: kh.MaKH, SoTien: 120000, HinhThuc: 'Tiền mặt' }], maGhi: ma });
+  const a = gui('lan-gui-0001'), b = gui('lan-gui-0001');
+  assert.ok(a.ok && b.ok && a.result.SoPT === b.result.SoPT, JSON.stringify([a, b]));
+  assert.strictEqual(sheets.PS_ThuTien.rows.length, so0 + 1);
+  assert.strictEqual(gui('lan-gui-0002').ok && sheets.PS_ThuTien.rows.length, so0 + 2); // mã mới: phiếu mới
+  const khoa = 'ghi_' + G.bamMay_(binh4).slice(0, 20) + '_lan-gui-0003';
+  cache.set(khoa, '…đang ghi');
+  assert.match(gui('lan-gui-0003').error, /đang được máy chủ xử lý/);
+  cache.delete(khoa);
+  const loi = api({ may: binh4, fn: 'luuThuTien', args: [{ Ngay: today, MaKH: kh.MaKH, SoTien: 0 }], maGhi: 'lan-gui-0004' });
+  assert.match(loi.error, /Nhập số tiền thu/);
+  assert.ok(!cache.has('ghi_' + G.bamMay_(binh4).slice(0, 20) + '_lan-gui-0004'), 'Lỗi thật thì bỏ giữ để gửi lại được');
+  assert.strictEqual(api({ may: binh4, fn: 'luuThuTien', args: [{ Ngay: today, MaKH: kh.MaKH, SoTien: 1000 }], maGhi: 'bad' }).ok, true); // mã sai dạng: bỏ qua, ghi bình thường
+}
+
+// Serial có dấu gạch / chấm (lưu nguyên như nhập): quét hay gõ không dấu vẫn tìm thấy ở tra kho, kiểm kho, tra bảo hành
+{
+  const t = G.dangNhap('admin', adminPass).token, kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Serial Gạch', SDT: '0966000444' });
+  G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'NCC', lines: [{ MaHH: 'HH0001', TenHang: 'iPhone 16 Pro Max 256GB - Titan Đen', SoLuong: 1, IMEI: 'F2L-ABC.1234' }] });
+  assert.deepStrictEqual([goi(binh4, 'traMaKho', 'f2l abc1234').trangThai, goi(binh4, 'traMaKho', 'F2LABC1234').ma], ['trongKho', 'F2L-ABC.1234']);
+  assert.deepStrictEqual(goi(binh4, 'kiemKho', ['F2LABC1234'], { MaHH: 'HH0001' }).khop, 1);
+  goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [{ MaHH: 'HH0001', SoLuong: 1, DonGia: 28000000, IMEI: 'F2L-ABC.1234' }], thu: { SoTien: 28000000, HinhThuc: 'Tiền mặt' } });
+  assert.strictEqual(goi(binh4, 'traMaKho', 'F2LABC1234').trangThai, 'daBan');
+  assert.strictEqual(goi(binh4, 'traBaoHanh', 'F2LABC1234').ds[0].IMEIKhop, 'F2L-ABC.1234');
+  assert.match(goi(binh4, 'kiemKho', ['F2LABC1234']).la[0].lyDo, /Đã xuất ở phiếu/);
+  // cùng máy viết khác dấu: không bán lần nữa, không nhập trùng trong một phiếu
+  assert.throws(() => goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [{ MaHH: 'HH0001', SoLuong: 1, DonGia: 1, IMEI: 'f2l_abc/1234' }] }), /đã xuất ở phiếu/);
+  assert.throws(() => G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'NCC', lines: [{ MaHH: 'HH0001', TenHang: 'iPhone', SoLuong: 2, IMEI: 'AB-1234, AB1234' }] }), /bị lặp trong phiếu/);
+  const vmc = c => require('vm').runInContext(c, G);
+  assert.deepStrictEqual(JSON.parse(vmc(`JSON.stringify([sdtList_('0911000001 - 0912000002'), sdtList_('0911-000-001'), sdtVN_('+84 0911 000 001'), sdtVN_('84911000001')])`)),
+    [['0911000001', '0912000002'], ['0911000001'], '0911000001', '0911000001']);
 }
 
 // Khách trả hàng: nhập lại kho, đơn giảm (trả hết thì hủy), trả lại tiền bằng phiếu thu âm, bảo hành không còn thuộc khách
@@ -575,6 +661,11 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
     thu: { SoTien: 56100000, HinhThuc: 'Tiền mặt' } });
   assert.throws(() => goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0001', IMEI: '357000000000099' }] }), /không có trong các lần giao/);
   assert.throws(() => goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [] }), /Chọn hàng/);
+  // đang có máy khác nhận trả đơn này: từ chối; lỗi kiểm tra ở trên không để lại giữ đơn
+  assert.ok(![...cache.keys()].some(k => k.startsWith('traHang_')));
+  cache.set('traHang_phone_' + b.SoDH, '1');
+  assert.throws(() => goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0001', IMEI: '357000000000011' }] }), /đang được nhận trả ở máy khác/);
+  cache.delete('traHang_phone_' + b.SoDH);
   const xem = goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0001', IMEI: '357000000000011' }], xemTruoc: true });
   assert.deepStrictEqual([xem.tongCu, xem.tongMoi, xem.daThu, xem.hoanToiDa, xem.huy], [56100000, 28100000, 56100000, 28000000, false]);
   assert.throws(() => goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0001', IMEI: '357000000000011' }], hoan: { SoTien: 30000000 } }), /tối đa 28000000/);
@@ -586,6 +677,11 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   const sq = goi(binh4, 'soQuyMay', '');
   assert.strictEqual(sq.ton.tienMat, tmTruoc - 28000000);
   assert.ok(sq.ds.some(x => x.loai === 'chi' && x.so === r.SoPT && x.SoTien === 28000000));
+  // Mở phiếu trả lại tiền trên web rồi bấm Lưu (ô số tiền không có dấu trừ): vẫn là số âm; đổi số tiền thì không được
+  const ptTra = G.findObj_('ThuTien', r.SoPT), at2 = G.dangNhap('admin', adminPass).token;
+  assert.strictEqual(G.luuThuTien(at2, Object.assign({}, ptTra, { SoTien: 28000000, GhiChu: 'khách nhận tiền mặt' })).SoTien, -28000000);
+  assert.strictEqual(G.findObj_('ThuTien', r.SoPT).SoTien, -28000000);
+  assert.throws(() => G.luuThuTien(at2, Object.assign({}, ptTra, { SoTien: 1000 })), /phiếu trả lại tiền khách/);
   assert.strictEqual(G.giaVonBQ_().HH0001, 25000000); // nhập lại không ghi giá: giá vốn bình quân không đổi
   const bh = goi(binh4, 'traBaoHanh', '357000000000011');
   assert.ok(!bh.ds.some(x => x.MaKH === kh.MaKH)); // máy đã trả: không còn bảo hành cho khách này
