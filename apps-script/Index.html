@@ -1665,7 +1665,7 @@ function vDoc(el) {
   }
   if (L === 'DH' && saved && d.TrangThai !== 'Hủy' && S.phieuKho.some(p => p.SoDH === d.SoDH && p.Loai === 'Xuất')) btns.push({ t: 'Khách trả hàng', ic: 'down', fn: () => openTraHang(d) });
   if (L === 'DH' && saved && d.TrangThai !== 'Hủy') btns.push({ t: 'Tạo hợp đồng', ic: 'clipboard', cls: 'soft', fn: run(() => hdTuDon(d)) });
-  if (L === 'DH' && saved) btns.push({ t: d.TrangThai === 'Hủy' ? 'Khôi phục đơn' : 'Hủy đơn', ic: 'x', fn: run(huyDon) });
+  if (L === 'DH' && saved && !(d.TrangThai !== 'Hủy' && coThuCu(d))) btns.push({ t: d.TrangThai === 'Hủy' ? 'Khôi phục đơn' : 'Hủy đơn', ic: 'x', fn: run(huyDon) }); // đơn lên đời: hủy bằng Khách trả hàng
   if (L === 'XK' && d.SoDH) {
     const dh = S.donHang.find(x => x.SoDH === d.SoDH);
     if (saved && dh && conNo(dh) > 0) btns.push({ t: 'Thu tiền', ic: 'card', cls: 'soft', fn: () => openThu({ SoDH: d.SoDH }) }); // giao xong thu tiền luôn, khỏi quay lại đơn
@@ -1763,6 +1763,12 @@ function drawLines(el) {
         <td><input data-f="IMEI" value="${esc(l.IMEI)}" aria-label="IMEI hoặc serial dòng ${i + 1}"${i ? '' : ' placeholder="Mỗi máy một mã, cách nhau dấu phẩy"'}></td>
         ${L === 'NK' ? `<td><input data-f="GiaVon" class="num money" inputmode="numeric" value="${money(l.GiaVon)}" aria-label="Giá nhập một đơn vị dòng ${i + 1}"${i ? '' : ' placeholder="Giá 1 máy"'}></td>` : ''}
         <td class="c num" data-c="ton">${t === null ? '' : `<span data-av="${t}" class="${L === 'XK' && +l.SoLuong > t ? 'red' : ''}">${money(t)}</span>`}</td>${rm}</tr>`;
+    }
+    if (+l.SoLuong < 0) { // dòng máy cũ thu lại (đơn lên đời): máy chủ ghi kèm phiếu nhập kho, không sửa / xóa ở đây
+      const ro = v => `<td><input value="${esc(v)}" readonly tabindex="-1"></td>`;
+      return `<tr data-i="${i}" class="thu-cu"><td class="c muted">${i + 1}</td><td><input value="${esc(l.TenHang)}" readonly tabindex="-1" aria-label="Máy cũ thu lại dòng ${i + 1}"></td>${ro(l.Model)}${ro(l.DVT)}${ro(l.XuatXu)}
+        <td><input class="num" value="${esc(l.SoLuong)}" readonly tabindex="-1"></td><td><span class="badge b-amber">Thu máy cũ</span></td>
+        <td><input class="num money" value="${money(l.DonGia)}" readonly tabindex="-1"></td><td class="c num" data-c="ThanhTien">${money(lineTotal(l))}</td>${showGiao ? '<td class="c muted">nhập kho</td>' : ''}<td></td></tr>`;
     }
     let giao = '';
     if (showGiao) {
@@ -2921,10 +2927,11 @@ function vBaoCao(el) {
     else {
       const st2 = (l, v, cls = '') => `<div class="stat"><div class="l">${l}</div><div class="v ${cls}">${v}</div></div>`;
       them = `<div class="card" style="margin-bottom:16px" data-loi><div class="card-b"><div class="stats" style="margin-top:0">${st2('Doanh thu (chưa VAT)', money(r.tong.doanhThu) + ' ₫')}${st2('Giá vốn hàng bán', money(r.tong.giaVon) + ' ₫')}${st2('Lãi gộp', money(r.tong.lai) + ' ₫', r.tong.lai >= 0 ? 'green' : 'red')}${st2('Tỷ lệ lãi gộp', tl(r.tong))}</div>
+        ${r.tong.laiMayCu != null ? `<p style="margin:12px 0 0" data-lai-tach><b>Lãi bán máy mới (và hàng, dịch vụ khác):</b> <span class="${r.tong.laiMayMoi >= 0 ? 'green' : 'red'}">${money(r.tong.laiMayMoi)} ₫</span> · <b>Lãi máy cũ (bán lại máy thu về):</b> <span class="${r.tong.laiMayCu >= 0 ? 'green' : 'red'}">${money(r.tong.laiMayCu)} ₫</span></p>` : ''}
         ${r.theoNhom.length ? `<p style="margin:12px 0 0"><b>Theo nhóm hàng:</b> ${r.theoNhom.map(n => `${esc(n.nhom)} <b>${money(n.lai)} ₫</b> (${tl(n)})`).join(' · ')}</p>` : ''}
         ${r.theoThang.length > 1 ? `<p style="margin:6px 0 0"><b>Theo tháng:</b> ${r.theoThang.map(m => `${m.thang.slice(5)}/${m.thang.slice(0, 4)} <b>${money(m.lai)} ₫</b>`).join(' · ')}</p>` : ''}
         ${r.thieuGiaVon.length ? `<p class="warn" style="margin:10px 0 0">Chưa có giá nhập (đang tính giá vốn 0, lãi cao hơn thực tế): ${r.thieuGiaVon.map(h => esc(h.TenHang)).join(', ')}. Ghi giá nhập ở phiếu nhập kho của các mặt hàng này.</p>` : ''}
-        <p class="muted" style="margin:8px 0 0">Giá vốn = giá nhập bình quân của các phiếu nhập có ghi giá. Dịch vụ (dòng không có mã hàng) không có giá vốn. Không tính đơn đã hủy.</p></div></div>`;
+        <p class="muted" style="margin:8px 0 0">Giá vốn = giá nhập bình quân của các phiếu nhập có ghi giá, cộng phiếu chi "Làm lại máy cũ". Dịch vụ (dòng không có mã hàng) không có giá vốn. Máy cũ thu vào trừ vào đơn: doanh thu và giá vốn cùng bằng giá thu (lãi 0), lãi máy cũ tính khi bán lại. Không tính đơn đã hủy.</p></div></div>`;
     }
     const rs = r ? r.theoHang : [];
     head = [['Mặt hàng'], ['Số lượng', 'num'], ['Doanh thu (chưa VAT)', 'num'], ['Giá vốn', 'num'], ['Lãi gộp', 'num'], ['Tỷ lệ', 'num']];
@@ -3025,11 +3032,13 @@ function openKiemKho() {
 
 // Khách trả hàng của đơn: chọn số lượng (và IMEI máy trả), xem trước số tiền, nhập lại kho, giảm đơn, trả lại tiền
 function openTraHang(d) {
-  const ls = filled(d.lines);
+  const ls = filled(d.lines).filter(l => +l.SoLuong > 0), cu = filled(d.lines).filter(l => +l.SoLuong < 0); // cu: máy cũ thu lại (đơn lên đời)
   const hinhThuc = S.congTy.hinhThuc || ['Tiền mặt'];
+  const han = new Date(Date.parse(String(d.Ngay).slice(0, 10) + 'T12:00:00Z') + NGAY_GIU * 864e5).toISOString().slice(0, 10);
   const m = modal({
     title: 'Khách trả hàng – đơn ' + d.SoDH, wide: true,
     body: `<p class="muted" style="margin-top:0">Hàng trả nhập lại kho; đơn giảm theo hàng trả (trả hết thì hủy đơn). Máy có IMEI: ghi IMEI máy khách trả.</p>
+      ${cu.length ? `<p class="warn" style="margin-top:0">Đơn lên đời: khách trả máy thì cửa hàng trả lại đúng máy cũ đã thu (${cu.map(l => esc(l.TenHang)).join('; ')}). Chỉ nhận trả đến hết ngày ${dmy(han)}.</p>` : ''}
       <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Hàng hóa</th><th class="num">Đã mua</th><th class="num">Trả</th><th>IMEI máy trả</th></tr></thead><tbody>
       ${ls.map((l, i) => `<tr><td>${esc(l.TenHang)}<span class="sub">${money(l.DonGia)} ₫</span></td><td class="num">${money(l.SoLuong)}</td>
         <td class="num"><input type="number" min="0" max="${+l.SoLuong || 0}" step="1" value="0" data-sl="${i}" style="width:70px" aria-label="Số lượng trả ${esc(l.TenHang)}"></td>
@@ -3043,12 +3052,12 @@ function openTraHang(d) {
       const kq = await api('traHang', { SoDH: d.SoDH, lines: dong(), hoan: { SoTien: f.SoTien || 0, HinhThuc: f.HinhThuc }, GhiChu: f.GhiChu });
       await loadAll();
       closeModal(); await openDoc('DH', S.donHang.find(x => x.SoDH === d.SoDH));
-      toast(`Đã nhận hàng trả${kq.SoPK ? ' (nhập kho ' + kq.SoPK + ')' : ''}${kq.hoan ? ', trả lại ' + money(kq.hoan) + ' ₫' : ''}${kq.huy ? ', đơn đã hủy' : ''}.`);
+      toast(`Đã nhận hàng trả${kq.SoPK ? ' (nhập kho ' + kq.SoPK + ')' : ''}${kq.SoPKCu ? ', trả lại máy cũ (phiếu ' + kq.SoPKCu + ')' : ''}${kq.hoan ? ', trả lại ' + money(kq.hoan) + ' ₫' : ''}${kq.huy ? ', đơn đã hủy' : ''}.`);
     }) }],
   });
   const dong = () => ls.map((l, i) => {
     const im = (($(`[data-imei="${i}"]`, m) || {}).value || '').trim(), sl = +$(`[data-sl="${i}"]`, m).value || 0;
-    return { MaHH: l.MaHH, TenHang: l.TenHang, SoLuong: sl, IMEI: im };
+    return { STT: l.STT, MaHH: l.MaHH, TenHang: l.TenHang, SoLuong: sl, IMEI: im }; // STT: đúng dòng khách trả khi đơn có cùng mặt hàng ở nhiều dòng giá
   }).filter(l => l.SoLuong > 0 || l.IMEI);
   const xemEl = $('[data-xem]', m), tien = $('[name=SoTien]', m);
   let lan = 0;
@@ -3058,7 +3067,8 @@ function openTraHang(d) {
     try {
       const r = await api('traHang', { SoDH: d.SoDH, lines: ds, xemTruoc: true });
       if (so !== lan) return;
-      xemEl.innerHTML = `Đơn ${money(r.tongCu)} ₫ → <b>${money(r.tongMoi)} ₫</b>${r.huy ? ' (hủy đơn)' : ''} · khách đã trả ${money(r.daThu)} ₫ · trả lại tối đa <b>${money(r.hoanToiDa)} ₫</b>`;
+      xemEl.innerHTML = `Đơn ${money(r.tongCu)} ₫ → <b>${money(r.tongMoi)} ₫</b>${r.huy ? ' (hủy đơn)' : ''} · khách đã trả ${money(r.daThu)} ₫ · trả lại tối đa <b>${money(r.hoanToiDa)} ₫</b>`
+        + ((r.mayCuTra || []).length ? `<br><b class="warn">Trả lại khách máy cũ:</b> ${r.mayCuTra.map(x => esc(x.TenHang) + ' · IMEI ' + esc(x.IMEI)).join('; ')}` : '');
       tien.value = money(r.hoanToiDa);
     } catch (e) { if (so === lan) xemEl.innerHTML = `<span class="red">${esc(errMsg(e))}</span>`; }
   };
@@ -3174,11 +3184,14 @@ function suaPrintHtml(p) {
     ${signs(['Khách hàng', 'Nhân viên nhận máy'])}</div>`;
 }
 
-// Thu máy cũ của khách trừ vào đơn đang còn nợ: máy vào kho, giá thu ghi thành phiếu thu "Thu máy cũ"
+// Đơn lên đời: máy cũ của khách thành một dòng −1 của đơn (giá thu), máy vào kho ngay; giữ NGAY_GIU ngày để khách trả hàng thì trả lại đúng máy
+const NGAY_GIU = 7;
+const coThuCu = d => (d.lines || []).some(l => +l.SoLuong < 0);
 function openThuMayCu(d) {
   modal({
     title: 'Thu máy cũ trừ vào đơn ' + d.SoDH,
-    body: `<p class="muted" style="margin-top:0">Đơn còn nợ ${money(conNo(d))} ₫. Máy cũ vào kho (nhóm "Máy cũ", giá nhập = giá thu); giá thu trừ vào tiền khách phải trả.</p><div class="fgrid">
+    body: `<p class="muted" style="margin-top:0">Đơn còn nợ ${money(conNo(d))} ₫. Máy cũ thành một dòng của đơn (số lượng −1, đơn giá = giá thu) và vào kho ngay, nhóm "Máy cũ".
+      Trong ${NGAY_GIU} ngày kể từ ngày bán, khách trả máy mới thì cửa hàng trả lại đúng máy cũ này, nên máy cũ chưa bán được; quá ${NGAY_GIU} ngày không nhận trả.</p><div class="fgrid">
       <label class="field"><span class="lb">Tên máy cũ *</span><input name="TenHang" placeholder="vd: iPhone 12 64GB"></label>
       <label class="field"><span class="lb">IMEI / serial *</span><input name="IMEI"></label>
       <label class="field"><span class="lb">Giá thu *</span><input name="GiaThu" class="money num" inputmode="numeric"></label>
@@ -3189,7 +3202,7 @@ function openThuMayCu(d) {
       const kq = await api('thuMayCu', o);
       await loadAll();
       closeModal(); await openDoc('DH', S.donHang.find(x => x.SoDH === d.SoDH));
-      toast(`Đã thu máy cũ ${kq.TenHang}: trừ ${money(kq.GiaThu)} ₫ vào đơn.`);
+      toast(`Đã thu máy cũ ${kq.TenHang} (nhập kho ${kq.SoPK}): trừ ${money(kq.GiaThu)} ₫ vào đơn.`);
     }) }],
   });
 }
@@ -3198,8 +3211,8 @@ function openThuMayCu(d) {
 // Lãi gộp của một đơn (quản trị): tiền hàng chưa VAT − giá vốn bình quân. Dòng dịch vụ (không mã hàng) không có giá vốn.
 function laiDonHtml(d) {
   if (!isAdmin()) return '';
-  const ls = filled(d.lines), dt = sum(ls, lineTotal) - (+d.GiamGia || 0), von = sum(ls, l => l.MaHH ? (+l.SoLuong || 0) * (S.giaVon[l.MaHH] || 0) : 0);
-  const thieu = ls.filter(l => l.MaHH && !S.giaVon[l.MaHH]);
+  const ls = filled(d.lines), dt = sum(ls, lineTotal) - (+d.GiamGia || 0), von = sum(ls, l => +l.SoLuong < 0 ? lineTotal(l) : l.MaHH ? (+l.SoLuong || 0) * (S.giaVon[l.MaHH] || 0) : 0); // máy cũ thu lại: giá vốn = giá thu
+  const thieu = ls.filter(l => l.MaHH && +l.SoLuong > 0 && !S.giaVon[l.MaHH]);
   return `<div class="card"><div class="card-h"><h3>Lãi gộp</h3></div><div class="card-b">
     <div class="stats" style="margin-top:0"><div class="stat"><div class="l">Tiền hàng (chưa VAT)</div><div class="v">${money(dt)}</div></div>
     <div class="stat"><div class="l">Giá vốn</div><div class="v">${money(von)}</div></div><div class="stat"><div class="l">Lãi gộp</div><div class="v ${dt - von >= 0 ? 'green' : 'red'}" data-lai>${money(dt - von)}</div></div></div>
@@ -3289,6 +3302,7 @@ function vNCC(el) {
   el.append(p);
 }
 
+const LAM_LAI = 'Làm lại máy cũ'; // loại phiếu chi cộng vào giá vốn của một máy (SoQuy.gs)
 function openChi(pc) {
   const isNew = !pc || !pc.SoPC, sua = isNew || isAdmin(), loai = S.loaiChi.length ? S.loaiChi : ['Chi khác'];
   const hinhThuc = S.congTy.hinhThuc || ['Tiền mặt', 'Chuyển khoản'];
@@ -3304,10 +3318,12 @@ function openChi(pc) {
       <label class="field"><span class="lb">Ngày chi</span><input name="Ngay" type="date" value="${esc(pc.Ngay)}"${ro}></label>
       <label class="field"><span class="lb">Hình thức</span><select name="HinhThuc"${ro}>${chon(hinhThuc, pc.HinhThuc)}</select></label>
       <label class="field"><span class="lb">Ghi chú</span><input name="GhiChu" value="${esc(pc.GhiChu)}" placeholder="vd: Tiền nhà tháng 10"${ro}></label>
+      <label class="field" data-imei-chi style="${pc.Loai === LAM_LAI ? '' : 'display:none'}"><span class="lb">IMEI máy làm lại *</span><input name="IMEI" value="${esc(pc.IMEI || '')}" placeholder="Máy đang trong kho; tiền chi cộng vào giá vốn máy"${ro}></label>
     </div>${isNew ? '' : `<p class="muted">Lập bởi ${esc(pc.NguoiTao)} lúc ${esc(pc.NgayTao)}${sua ? '' : ' · chỉ tài khoản quản trị được sửa, xóa phiếu chi'}</p>`}`,
     buttons: (sua ? [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', save: true, fn: run(async m => {
       const d = formData(m);
       if (!(d.SoTien > 0)) throw new Error('Nhập số tiền chi.');
+      if (d.Loai === LAM_LAI && !String(d.IMEI || '').trim()) throw new Error('Nhập IMEI của máy được làm lại.');
       const saved = await api('luuPhieuChi', Object.assign({}, d, { SoPC: pc.SoPC || '' }));
       upsertLocal('phieuChi', 'SoPC', saved); sortAll();
       closeModal(); render(); toast(`Đã lưu phiếu chi ${saved.SoPC}: ${money(saved.SoTien)} ₫.`);
@@ -3318,6 +3334,8 @@ function openChi(pc) {
       closeModal(); render(); toast('Đã xóa phiếu chi.');
     }) }] : []),
   });
+  const m = $('#modal') || document.querySelector('.modal');
+  if (m) m.onchange = e => { if (e.target.name === 'Loai') { const f = $('[data-imei-chi]', m); if (f) f.style.display = e.target.value === LAM_LAI ? '' : 'none'; } };
 }
 
 function openSoDuDau() {

@@ -383,7 +383,8 @@ function traHang_(token, o) {
     if (mayTra.length) pkCu = ghiThuCu_(() => luuChungTu(token, 'XK', { Ngay: ngay, DoiTac: dh.TenKH, GhiChu: 'Trả lại máy cũ · đơn ' + dh.SoDH,
       lines: mayTra.map(m => ({ MaHH: m.MaHH, TenHang: m.TenHang, Model: m.Model, DVT: m.DVT, SoLuong: 1, IMEI: m.IMEI })) }).doc);
     const ghiDon = Object.assign({}, dh, huy ? { TrangThai: 'Hủy', GhiChu: [dh.GhiChu, 'Khách trả hết hàng ' + ngay].filter(Boolean).join(' · ') } : {});
-    don = ghiThuCu_(() => luuChungTu(token, 'DH', Object.assign(ghiDon, { lines: (huy ? cu : conLai).map(l => { const x = Object.assign({}, l); delete x.SoDH; return x; }) })).doc);
+    // trả hết: đơn hủy giữ các dòng đã bán để tra lại, bỏ dòng máy cũ (đã trả lại khách) để khôi phục đơn không làm sống lại máy cũ
+    don = ghiThuCu_(() => luuChungTu(token, 'DH', Object.assign(ghiDon, { lines: (huy ? cu.filter(l => !(+l.SoLuong < 0)) : conLai).map(l => { const x = Object.assign({}, l); delete x.SoDH; return x; }) })).doc);
     if (hoan > 0) {
       pt = withLock_(() => {
         const p = { Ngay: ngay, MaKH: dh.MaKH, TenKH: dh.TenKH, SoDH: dh.SoDH, SoTien: -hoan, HinhThuc: String(o.hoan.HinhThuc || 'Tiền mặt').slice(0, 60), GhiChu: 'Trả lại tiền khách trả hàng', NguoiTao: user.ten, NgayTao: now_() };
