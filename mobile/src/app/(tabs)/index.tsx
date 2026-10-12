@@ -73,7 +73,7 @@ export default function TongQuanMan() {
                   <So bieuTuong="time-outline" mauBT={mau.vang} so={tienGon(du.no.tong)} nhan="Khách còn nợ" onPress={xemNo} testID="so-no" />
                 </View>
                 {du.lai ? (
-                  <Text style={s.lai} testID="lai-hom-nay">Lãi gộp hôm nay <Text style={{ color: du.lai.lai >= 0 ? mau.xanh : mau.do }}>{tien(du.lai.lai)}</Text></Text>
+                  <Text style={s.lai} testID="lai-hom-nay">Lãi gộp hôm nay <Text style={{ color: du.lai.lai >= 0 ? mau.xanh : mau.do }}>{tien(du.lai.lai)}</Text>{du.lai.laiMayCu ? <Text> · máy cũ {tien(du.lai.laiMayCu)}</Text> : null}</Text>
                 ) : null}
                 <Text style={s.goiY}>Bấm vào số liệu để xem chi tiết</Text>
               </The>

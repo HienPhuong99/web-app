@@ -69,7 +69,7 @@ export type PhieuSua = {
   Anh: string[]; conNgay: number | null; NguoiTao: string;
 };
 export const TT_SUA = ['Đã nhận', 'Đang sửa', 'Chờ linh kiện', 'Đã sửa xong', 'Không sửa được', 'Đã trả khách'] as const;
-export type LaiGop = { doanhThu: number; giaVon: number; lai: number };
+export type LaiGop = { doanhThu: number; giaVon: number; lai: number; laiMayMoi?: number; laiMayCu?: number }; // laiMayCu: lãi bán lại máy thu về
 
 /** soQuyMay(ngày): tồn quỹ cuối ngày (tiền mặt / ngân hàng), thu – chi trong ngày và từng phiếu */
 export type SoQuy = {
@@ -109,8 +109,8 @@ export type HoSoKhach = {
 export type BanNhanhKQ = {
   SoDH: string; SoPK: string; SoPT: string; TongCong: number; daThu: number; MaKH: string; TenKH: string; loiThu: string;
   lines: { TenHang: string; SoLuong: number; IMEI: string; HetHan: string }[];
-  /** máy cũ thu về trừ vào đơn (daThu đã gồm giá các máy này) */
-  thuCu?: { MaHH: string; TenHang: string; IMEI: string; GiaThu: number; SoPK: string; SoPT: string }[];
+  /** máy cũ thu lại (đơn lên đời): mỗi máy là dòng −1 của đơn, TongCong đã trừ; daThu là tiền thật khách trả */
+  thuCu?: { MaHH: string; TenHang: string; IMEI: string; GiaThu: number; SoPK: string }[];
 };
 export type PhieuThu = { SoPT: string; Ngay: string; MaKH: string; TenKH: string; SoDH: string; SoTien: number; HinhThuc: string };
 

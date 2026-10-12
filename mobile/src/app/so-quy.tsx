@@ -74,15 +74,16 @@ function PhieuChiMoi({ sq, onXong, onHuy }: { sq: SoQuy; onXong: () => void; onH
   const boNho = useSuaBoNho();
   const [loai, setLoai] = useState(sq.loaiChi[sq.loaiChi.length - 1] || 'Chi khác'), [soTien, setSoTien] = useState<number | null>(null);
   const [hinhThuc, setHinhThuc] = useState(sq.hinhThuc.includes('Tiền mặt') ? 'Tiền mặt' : sq.hinhThuc[0] || 'Tiền mặt');
-  const [doiTac, setDoiTac] = useState(''), [ghiChu, setGhiChu] = useState(''), [loi, setLoi] = useState(''), [dang, setDang] = useState(false);
-  const traNCC = loai === sq.loaiChi[0];
+  const [doiTac, setDoiTac] = useState(''), [ghiChu, setGhiChu] = useState(''), [loi, setLoi] = useState(''), [dang, setDang] = useState(false), [imei, setImei] = useState('');
+  const traNCC = loai === sq.loaiChi[0], lamLai = loai === 'Làm lại máy cũ'; // làm lại máy: ghi IMEI, tiền chi vào giá vốn máy đó
   const luu = async () => {
     setLoi('');
     if (!soTien || soTien <= 0) return setLoi('Nhập số tiền chi.');
     if (traNCC && !doiTac.trim()) return setLoi('Nhập tên nhà cung cấp được trả tiền.');
+    if (lamLai && !imei.trim()) return setLoi('Nhập IMEI của máy được làm lại.');
     setDang(true);
     try {
-      const pc = await goi<PhieuChi>('luuPhieuChi', { Ngay: sq.ngay, Loai: loai, DoiTac: doiTac.trim(), SoTien: soTien, HinhThuc: hinhThuc, GhiChu: ghiChu.trim() });
+      const pc = await goi<PhieuChi>('luuPhieuChi', { Ngay: sq.ngay, Loai: loai, DoiTac: doiTac.trim(), SoTien: soTien, HinhThuc: hinhThuc, GhiChu: ghiChu.trim(), IMEI: lamLai ? imei.trim() : '' });
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       // Máy chủ đã ghi: sổ quỹ ngày này hiện ngay phiếu vừa ghi
       const tm = pc.HinhThuc.trim().toLowerCase() === 'tiền mặt';
@@ -102,6 +103,7 @@ function PhieuChiMoi({ sq, onXong, onHuy }: { sq: SoQuy; onXong: () => void; onH
       <TextInput style={s.o} value={soTien ? soTienNhap(soTien) : ''} onChangeText={t => setSoTien(docTien(t))} keyboardType="number-pad" placeholder="0" placeholderTextColor={mau.xam} testID="o-tien-chi" />
       <Text style={s.nhanO}>Hình thức</Text>
       <View style={s.chips}>{sq.hinhThuc.map(x => <Chip key={x} chu={x} chon={x === hinhThuc} onPress={() => setHinhThuc(x)} />)}</View>
+      {lamLai ? <TextInput style={s.o} value={imei} onChangeText={setImei} placeholder="IMEI máy làm lại * (máy đang trong kho)" placeholderTextColor={mau.xam} autoCapitalize="characters" autoCorrect={false} testID="o-imei-chi" /> : null}
       <TextInput style={s.o} value={doiTac} onChangeText={setDoiTac} placeholder={traNCC ? 'Tên nhà cung cấp *' : 'Chi cho ai (không bắt buộc)'} placeholderTextColor={mau.xam} testID="o-doi-tac-chi" />
       <TextInput style={s.o} value={ghiChu} onChangeText={setGhiChu} placeholder="Ghi chú, vd: ship giao máy cho anh Minh" placeholderTextColor={mau.xam} />
       <ChuLoi chu={loi} testID="loi-chi" />

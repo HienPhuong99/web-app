@@ -393,13 +393,14 @@ buoc('Thu cũ đổi mới khi bán nhanh; nhận bảo hành từ kết quả t
   await v(page, 'o-imei-may-cu').fill('356000999888111');
   await v(page, 'o-gia-may-cu').fill('300000');
   await v(page, 'nut-them-may-cu').click();
-  await v(page, 'phai-tra').getByText('200.000 đ').waitFor();
+  await v(page, 'tong-cong').getByText('200.000 đ').waitFor(); // đơn lên đời: tổng đơn đã trừ máy cũ
   assert.strictEqual(await v(page, 'o-khach-tra').inputValue(), '200.000');
   page.once('dialog', d => d.accept());
   await v(page, 'nut-ban').click();
   await v(page, 'da-ban').waitFor({ timeout: 20000 });
   const kq = await v(page, 'ket-qua-ban').textContent();
   assert.match(kq, /Máy cũ thu về.*iPhone 8 64GB \(máy cũ\).*300\.000/);
+  assert.match(kq, /Phiếu thu.*200\.000/); // tiền thật khách trả, không gồm giá máy cũ
   assert.ok(!/Còn nợ/.test(kq), 'Trả đủ sau khi trừ máy cũ: ' + kq);
   const may = await page.evaluate(() => localStorage.getItem('may'));
   assert.strictEqual((await api(c, { may, fn: 'traMaKho', args: ['356000999888111'] })).result.trangThai, 'trongKho');

@@ -1,5 +1,6 @@
 // Khách trả máy: máy (IMEI) của một đơn nhập lại kho, đơn giảm theo (trả hết thì hủy đơn), trả lại tiền cho khách nếu đã thu nhiều hơn.
 // Mở từ thẻ máy trong hồ sơ khách / kết quả tra bảo hành. Đổi máy = khách trả máy này rồi bán máy khác.
+// Đơn lên đời (có máy cũ trừ vào đơn): chỉ trả trong 7 ngày kể từ ngày bán, và cửa hàng trả lại khách đúng máy cũ đã thu.
 import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -7,7 +8,7 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../lib/auth';
 import type { CauHinh } from '../lib/api';
-import { tien } from '../lib/dinhDang';
+import { ngay, tien } from '../lib/dinhDang';
 import { docTien, soTienNhap } from '../lib/gioHang';
 import { useDuLieu } from '../lib/useDuLieu';
 import { Chip } from '../ui/Chip';
@@ -18,8 +19,9 @@ import { The } from '../ui/The';
 import { KhungCho } from '../ui/TrangThaiTai';
 import { mau } from '../ui/theme';
 
-type XemTruoc = { SoDH: string; tongCu: number; tongMoi: number; daThu: number; hoanToiDa: number; huy: boolean };
-type KetQua = { SoDH: string; TrangThai: string; TongCong: number; SoPK: string; SoPT: string; hoan: number; huy: boolean };
+type MayCuTra = { TenHang: string; IMEI: string; GiaThu: number };
+type XemTruoc = { SoDH: string; tongCu: number; tongMoi: number; daThu: number; hoanToiDa: number; huy: boolean; mayCuTra?: MayCuTra[]; hanTra?: string };
+type KetQua = { SoDH: string; TrangThai: string; TongCong: number; SoPK: string; SoPT: string; hoan: number; huy: boolean; SoPKCu?: string; mayCuTra?: MayCuTra[] };
 
 export default function TraHangMan() {
   const p = useLocalSearchParams<{ don: string; ma: string; ten: string; imei: string; kh?: string; tenKH?: string }>();
@@ -47,6 +49,7 @@ export default function TraHangMan() {
         <The style={s.muc} testID="ket-qua-tra">
           <DongTT nhan="Máy" giaTri={`${p.ten} · ${p.imei}`} />
           <DongTT nhan="Nhập lại kho" giaTri={xong.SoPK || '—'} />
+          {(xong.mayCuTra ?? []).map(m => <DongTT key={m.IMEI} nhan="Đã trả lại máy cũ" giaTri={`${m.TenHang} · ${m.IMEI}`} dam />)}
           <DongTT nhan="Đơn hàng" giaTri={`${xong.SoDH} · ${xong.huy ? 'đã hủy' : 'còn ' + tien(xong.TongCong)}`} dam />
           <DongTT nhan="Trả lại khách" giaTri={xong.hoan ? `${tien(xong.hoan)} · ${hinhThuc}` : 'Không'} dam />
         </The>
@@ -68,6 +71,8 @@ export default function TraHangMan() {
         <The nhan="Tiền" style={s.muc} testID="xem-tra">
           <DongTT nhan="Đơn" giaTri={`${tien(xem.tongCu)} → ${xem.huy ? 'hủy đơn' : tien(xem.tongMoi)}`} />
           <DongTT nhan="Khách đã trả" giaTri={tien(xem.daThu)} />
+          {(xem.mayCuTra ?? []).map(m => <DongTT key={m.IMEI} nhan="Trả lại khách máy cũ" giaTri={`${m.TenHang} · ${m.IMEI}`} dam />)}
+          {xem.hanTra ? <Text style={s.nhanO} testID="han-tra">Đơn lên đời: nhận trả đến hết ngày {ngay(xem.hanTra)}. Đưa lại khách đúng máy cũ ở trên.</Text> : null}
           <Text style={s.nhanO}>Trả lại khách (tối đa {tien(xem.hoanToiDa)})</Text>
           <TextInput style={s.o} value={soTienNhap(soHoan)} onChangeText={t => setHoan(docTien(t))} keyboardType="number-pad" testID="o-hoan" />
           {soHoan > 0 ? <View style={s.chips}>{(ch?.hinhThuc ?? ['Tiền mặt']).map(h => <Chip key={h} chu={h} chon={h === hinhThuc} onPress={() => setHt(h)} />)}</View> : null}
