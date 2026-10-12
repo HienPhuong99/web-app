@@ -346,8 +346,10 @@ function chiTietKhach(token, maKH) {
 // ===== Bán nhanh tại quầy =====
 /**
  * Một lần bấm: lập đơn hàng, phiếu xuất kho (kèm IMEI) và phiếu thu nếu khách trả ngay. Ngày là hôm nay.
- * o = { MaKH | khachMoi: { TenKH, SDT }, lines: [{ MaHH, TenHang, SoLuong, DonGia, IMEI }], VAT, GhiChu, thu: { SoTien, HinhThuc } }
- * Kiểm tra hết trước khi ghi; phiếu xuất vẫn lỗi thì xóa đơn vừa lập. Phiếu thu lỗi thì giữ đơn + phiếu xuất và báo loiThu.
+ * o = { MaKH | khachMoi: { TenKH, SDT }, lines: [{ MaHH, TenHang, SoLuong, DonGia, IMEI }], VAT, GhiChu, thu: { SoTien, HinhThuc }, thuCu: [{ TenHang, IMEI, GiaThu }] }
+ * thuCu (đơn lên đời): mỗi máy cũ là một dòng −1 của đơn và vào kho bằng phiếu nhập; tổng đơn, giảm giá, VAT tính trên tiền hàng đã trừ máy cũ (DichVu.gs).
+ * Kiểm tra hết trước khi ghi; phiếu xuất / nhập máy cũ vẫn lỗi thì xóa phần vừa ghi. Phiếu thu lỗi thì giữ đơn + phiếu kho và báo loiThu.
+ * Trả về TongCong (đã trừ máy cũ) và daThu = tiền thật khách trả.
  */
 function banNhanh(token, o) {
   const user = user_(token);
@@ -371,6 +373,7 @@ function banNhanh(token, o) {
     const sai = im.find(x => !/^[A-Z0-9][A-Z0-9._/-]{3,39}$/.test(x));
     if (sai) throw new Error('Dòng ' + (i + 1) + ': IMEI/serial "' + sai + '" không hợp lệ.');
     if (im.length && im.length !== sl) throw new Error('Dòng ' + (i + 1) + ': có ' + im.length + ' IMEI/serial nhưng số lượng là ' + sl + '.');
+    if (laMay_(h) && im.length !== sl) throw new Error('Dòng ' + (i + 1) + ': ' + ten + ' là máy, ghi IMEI/serial của từng máy.');
     imeis = imeis.concat(im);
     return { MaHH: h ? h.MaHH : '', TenHang: ten, Model: h ? h.Model : '', DVT: h ? h.DVT : String(l.DVT || ''), XuatXu: h ? h.XuatXu : '',
       SoLuong: sl, LoaiGia: h && gia === (+h.GiaLe || 0) ? 'Giá lẻ' : 'Giá tùy chọn', DonGia: gia, IMEI: im.join(', ') };
@@ -378,11 +381,12 @@ function banNhanh(token, o) {
   const gon = imeis.map(gonMa_), lap = imeis.find((x, i) => gon.indexOf(gon[i]) !== i);
   if (lap) throw new Error('IMEI/serial ' + lap + ' bị lặp trong đơn.');
   if (imeis.length) kiemIMEI_('Xuất', '', imeis); // máy đã bán thì báo ngay, chưa ghi gì
-  const vat = Math.min(100, Math.max(0, +o.VAT || 0)), cong = lines.reduce((s, l) => s + Math.round(l.SoLuong * l.DonGia), 0);
-  const giam = Math.min(Math.max(0, cong), Math.max(0, Math.round(+o.GiamGia || 0))), tienHang = cong - giam; // giảm giá cả đơn, trước VAT
+  const mayCu = chuanMayCu_(o.thuCu), tongCu = mayCu.reduce((s, m) => s + m.GiaThu, 0); // thu cũ đổi mới: dòng −1 của đơn (DichVu.gs)
+  const vat = Math.min(100, Math.max(0, +o.VAT || 0)), cong = lines.reduce((s, l) => s + Math.round(l.SoLuong * l.DonGia), 0) - tongCu;
+  if (cong < 0) throw new Error('Giá máy cũ (' + tongCu + ' đ) lớn hơn tiền hàng (' + (cong + tongCu) + ' đ).');
+  const giam = Math.min(cong, Math.max(0, Math.round(+o.GiamGia || 0))), tienHang = cong - giam; // giảm giá cả đơn, trước VAT
   const tong = tienHang + Math.round(tienHang * vat / 100), thu = o.thu || {}, soThu = Math.round(+thu.SoTien || 0);
-  const mayCu = chuanMayCu_(o.thuCu), tongCu = mayCu.reduce((s, m) => s + m.GiaThu, 0); // thu cũ đổi mới: trừ vào đơn (DichVu.gs)
-  if (soThu < 0 || soThu + tongCu > tong) throw new Error(tongCu ? 'Tiền khách trả cộng giá máy cũ (' + (soThu + tongCu) + ' đ) lớn hơn tổng đơn (' + tong + ' đ).' : 'Số tiền khách trả phải từ 0 đến ' + tong + ' đ.');
+  if (soThu < 0 || soThu > tong) throw new Error('Số tiền khách trả phải từ 0 đến ' + tong + ' đ' + (tongCu ? ' (đã trừ máy cũ ' + tongCu + ' đ)' : '') + '.');
   // Khách: chọn sẵn, hoặc khách mới (trùng số điện thoại với khách cũ thì dùng khách cũ)
   let kh, khMoi = false;
   if (o.MaKH) {
@@ -401,8 +405,9 @@ function banNhanh(token, o) {
   const ghiChu = String(o.GhiChu || '').trim().slice(0, 500);
   let dh;
   try {
-    dh = luuChungTu(token, 'DH', { Ngay: ngay, MaKH: kh.MaKH, TenKH: kh.TenKH, SDT: kh.SDT || '', DiaChi: kh.DiaChi || '', NgayGiao: ngay, VAT: vat, GiamGia: giam, GhiChu: ghiChu,
-      lines: lines.map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, Model: l.Model, DVT: l.DVT, XuatXu: l.XuatXu, SoLuong: l.SoLuong, LoaiGia: l.LoaiGia, DonGia: l.DonGia })) }).doc;
+    mayCu.forEach(m => { m.h = hangMayCu_(user, m); });
+    dh = ghiThuCu_(() => luuChungTu(token, 'DH', { Ngay: ngay, MaKH: kh.MaKH, TenKH: kh.TenKH, SDT: kh.SDT || '', DiaChi: kh.DiaChi || '', NgayGiao: ngay, VAT: vat, GiamGia: giam, GhiChu: ghiChu,
+      lines: lines.map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, Model: l.Model, DVT: l.DVT, XuatXu: l.XuatXu, SoLuong: l.SoLuong, LoaiGia: l.LoaiGia, DonGia: l.DonGia })).concat(mayCu.map(dongMayCu_)) }).doc);
   } catch (e) { withLock_(boKhachMoi); throw e; }
   let pk;
   try {
@@ -412,14 +417,20 @@ function banNhanh(token, o) {
     withLock_(() => { deleteWhere_('DonHang', dh.SoDH); deleteWhere_('DonHangCT', dh.SoDH); boKhachMoi(); });
     throw e;
   }
+  let nk = null;
+  if (mayCu.length) {
+    try { nk = nhapMayCu_(token, kh, dh.SoDH, mayCu, ngay); }
+    catch (e) {
+      withLock_(() => { deleteWhere_('PhieuKhoCT', pk.SoPK); deleteWhere_('PhieuKho', pk.SoPK); deleteWhere_('DonHang', dh.SoDH); deleteWhere_('DonHangCT', dh.SoDH); boKhachMoi(); });
+      throw e;
+    }
+  }
   let pt = null, loiThu = '';
   if (soThu > 0) {
     try { pt = luuThuTien(token, { Ngay: ngay, SoDH: dh.SoDH, SoTien: soThu, HinhThuc: String(thu.HinhThuc || 'Tiền mặt').slice(0, 60), GhiChu: 'Bán nhanh trên app' }); }
     catch (e) { loiThu = String(e && e.message || e); }
   }
-  const cu = [];
-  mayCu.forEach(m => { try { cu.push(ghiMayCu_(token, user, kh, dh.SoDH, m, ngay)); } catch (e) { loiThu = (loiThu ? loiThu + ' ' : '') + 'Chưa ghi được máy cũ ' + m.IMEI + ': ' + (e && e.message || e); } });
-  return { SoDH: dh.SoDH, SoPK: pk.SoPK, SoPT: pt ? pt.SoPT : '', TongCong: tong, daThu: (pt ? soThu : 0) + cu.reduce((s, m) => s + m.GiaThu, 0), thuCu: cu, MaKH: kh.MaKH, TenKH: kh.TenKH,
+  return { SoDH: dh.SoDH, SoPK: pk.SoPK, SoPT: pt ? pt.SoPT : '', TongCong: dh.TongCong, daThu: pt ? soThu : 0, thuCu: mayCu.map(m => ketQuaMayCu_(m, nk.SoPK)), MaKH: kh.MaKH, TenKH: kh.TenKH,
     lines: pk.lines.map(l => ({ TenHang: l.TenHang, SoLuong: l.SoLuong, IMEI: l.IMEI, HetHan: l.HetHan })), loiThu: loiThu };
 }
 

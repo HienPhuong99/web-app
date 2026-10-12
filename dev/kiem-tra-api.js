@@ -59,7 +59,7 @@ assert.throws(() => goi(lan, 'luuChungTu', 'XK', { Ngay: today, lines: [{ MaHH: 
 // Dữ liệu tra bảo hành: 2 máy giao hôm nay cho Anh Minh, 1 máy giao năm 2020 (đã hết bảo hành), 1 dòng dịch vụ
 const dh = goi(ad, 'luuChungTu', 'DH', { Ngay: today, MaKH: 'KH00001', TenKH: 'Anh Minh', SDT: '0911000001', VAT: 0, lines: [
   { MaHH: 'HH0001', TenHang: 'iPhone 16 Pro Max 256GB - Titan Đen', SoLuong: 2, DonGia: 28200000 }, { TenHang: 'Dán cường lực', SoLuong: 1, DonGia: 100000 }] }).doc;
-goi(ad, 'luuChungTu', 'NK', { Ngay: today, DoiTac: 'NCC', lines: [{ MaHH: 'HH0001', TenHang: 'iPhone 16 Pro Max', SoLuong: 5 }] });
+goi(ad, 'luuChungTu', 'NK', { Ngay: today, DoiTac: 'NCC', lines: [{ MaHH: 'HH0001', TenHang: 'iPhone 16 Pro Max', SoLuong: 5, IMEI: '356789012345671, F2LXK0ABC9, NK0503, NK0504, NK0505' }] });
 goi(lan, 'luuChungTu', 'XK', { Ngay: today, SoDH: dh.SoDH, DoiTac: 'Anh Minh', lines: [
   { MaHH: 'HH0001', TenHang: 'iPhone 16 Pro Max 256GB - Titan Đen', SoLuong: 2, IMEI: '356789012345671, F2LXK0ABC9' }, { TenHang: 'Dán cường lực', SoLuong: 1 }] });
 goi(ad, 'luuChungTu', 'XK', { Ngay: '2020-01-15', DoiTac: 'Chị Hoa', lines: [{ MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', SoLuong: 1, IMEI: '351111122222333' }] });
@@ -430,10 +430,10 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
 {
   const adQ = may('admin', adminPass, 'Máy sổ quỹ'), t = G.dangNhap('admin', adminPass).token;
   const iphone15 = { MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', DVT: 'Máy' };
-  G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'NCC Minh Phát', lines: [Object.assign({ SoLuong: 2, GiaVon: 10000000 }, iphone15)] });
-  G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'NCC Minh Phát', lines: [Object.assign({ SoLuong: 2, GiaVon: 11000000 }, iphone15)] });
+  G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'NCC Minh Phát', lines: [Object.assign({ SoLuong: 2, GiaVon: 10000000, IMEI: 'SQ0001, SQ0002' }, iphone15)] });
+  G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'NCC Minh Phát', lines: [Object.assign({ SoLuong: 2, GiaVon: 11000000, IMEI: 'SQ0003, SQ0004' }, iphone15)] });
   assert.strictEqual(G.giaVonBQ_().HH0002, 10500000); // (2 × 10tr + 2 × 11tr) / 4; lần nhập không có giá không tính
-  const xk = G.luuChungTu(t, 'XK', { Ngay: today, DoiTac: 'Khách lẻ', lines: [Object.assign({ SoLuong: 1, GiaVon: 999 }, iphone15)] }).doc;
+  const xk = G.luuChungTu(t, 'XK', { Ngay: today, DoiTac: 'Khách lẻ', lines: [Object.assign({ SoLuong: 1, GiaVon: 999, IMEI: 'SQ0001' }, iphone15)] }).doc;
   assert.strictEqual(sheets.PS_PhieuKhoCT.rows.find(r => r[0] === xk.SoPK)[sheets.PS_PhieuKhoCT.rows[0].indexOf('GiaVon')], ''); // phiếu xuất không lưu giá vốn
   const dhLai = G.luuChungTu(t, 'DH', { Ngay: today, MaKH: 'KH00001', TenKH: 'Anh Minh', VAT: 10, lines: [Object.assign({ SoLuong: 2, DonGia: 12000000 }, iphone15), { TenHang: 'Dán cường lực', SoLuong: 1, DonGia: 100000 }] }).doc;
   const ln = goi(adQ, 'loiNhuan', today, today);
@@ -479,33 +479,96 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   assert.strictEqual(dAd.phieuKho.find(p => p.DoiTac === 'NCC Minh Phát').GiaTri, 20000000); // giá trị nhập: để tính nợ nhà cung cấp
 }
 
-// Thu cũ đổi mới: máy cũ vào kho (giá nhập = giá thu), trừ vào đơn bằng phiếu thu "Thu máy cũ", sổ quỹ không tính
+// Đơn lên đời: máy cũ là dòng −1 của đơn (giá thu), vào kho ngay; tổng đơn = tiền khách trả thật; máy cũ giữ 7 ngày; trả hàng trong 7 ngày thì trả lại đúng máy cũ
+const ngayLui = n => new Date(Date.parse(today + 'T12:00:00Z') - n * 864e5).toISOString().slice(0, 10);
+const doiNgay = (bang, so, ngay) => { const sh = sheets['PS_' + bang], c = sh.rows[0].indexOf('Ngay'); sh.rows.find(x => x[0] === so)[c] = ngay; };
 {
   const t = G.dangNhap('admin', adminPass).token;
-  const iphone15 = { MaHH: 'HH0002', SoLuong: 1, DonGia: 12000000 };
+  const iphone15 = { MaHH: 'HH0002', SoLuong: 1, DonGia: 12000000, IMEI: 'SQ0002' };
   const kh = goi(binh4, 'luuKhach', { TenKH: 'Anh Đổi Máy', SDT: '0966000222' });
   const cu1 = { TenHang: 'iPhone 12 64GB', IMEI: '359999000000017', GiaThu: 5000000, GiaLe: 6500000, GhiChu: 'trầy nhẹ' };
-  assert.throws(() => goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [iphone15], thuCu: [cu1], thu: { SoTien: 8000000, HinhThuc: 'Tiền mặt' } }), /cộng giá máy cũ/);
+  assert.throws(() => goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [iphone15], thuCu: [cu1], thu: { SoTien: 8000000, HinhThuc: 'Tiền mặt' } }), /từ 0 đến 7000000 đ \(đã trừ máy cũ 5000000/);
   assert.throws(() => goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [iphone15], thuCu: [Object.assign({}, cu1, { GiaThu: 0 })] }), /giá thu/);
   assert.throws(() => goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [iphone15], thuCu: [Object.assign({}, cu1, { IMEI: '' })] }), /IMEI/);
-  const tmTruoc = goi(binh4, 'soQuyMay', '').ton.tienMat;
+  assert.throws(() => goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [iphone15], thuCu: [Object.assign({}, cu1, { GiaThu: 13000000 })] }), /lớn hơn tiền hàng/);
+  assert.throws(() => goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [Object.assign({}, iphone15, { IMEI: '' })], thuCu: [cu1] }), /là máy, ghi IMEI/);
+  const tmTruoc = goi(binh4, 'soQuyMay', '').ton.tienMat, nk0 = sheets.PS_PhieuKho.rows.length;
   const r = goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [iphone15], thuCu: [cu1], thu: { SoTien: 7000000, HinhThuc: 'Tiền mặt' } });
-  assert.deepStrictEqual([r.TongCong, r.daThu, r.thuCu.length, r.loiThu], [12000000, 12000000, 1, '']);
+  assert.deepStrictEqual([r.TongCong, r.daThu, r.thuCu.length, r.loiThu, sheets.PS_PhieuKho.rows.length], [7000000, 7000000, 1, '', nk0 + 2]);
+  const ct = G.readTable_('DonHangCT').filter(l => l.SoDH === r.SoDH);
+  assert.deepStrictEqual(ct.map(l => [l.SoLuong, l.DonGia, l.ThanhTien]), [[1, 12000000, 12000000], [-1, 5000000, -5000000]]);
+  assert.match(ct[1].TenHang, /^iPhone 12 64GB \(máy cũ\) · IMEI 359999000000017$/);
   const hCu = G.readTable_('HangHoa').find(h => h.MaHH === r.thuCu[0].MaHH);
-  assert.deepStrictEqual([hCu.TenHang, hCu.NhomHang, hCu.GiaLe], ['iPhone 12 64GB (máy cũ)', 'Máy cũ', 6500000]);
+  assert.deepStrictEqual([hCu.TenHang, hCu.NhomHang, hCu.GiaLe, hCu.DVT], ['iPhone 12 64GB (máy cũ)', 'Máy cũ', 6500000, 'Máy']);
+  assert.match(G.findObj_('PhieuKho', r.thuCu[0].SoPK).GhiChu, /^Thu cũ đổi mới · đơn .* · trầy nhẹ$/);
   assert.strictEqual(goi(binh4, 'traMaKho', '359999000000017').trangThai, 'trongKho');
   assert.strictEqual(G.giaVonBQ_()[hCu.MaHH], 5000000);
-  assert.strictEqual(goi(binh4, 'chiTietKhach', kh.MaKH).no, 0);
-  assert.ok(G.readTable_('ThuTien').some(p => p.SoDH === r.SoDH && p.HinhThuc === 'Thu máy cũ' && p.SoTien === 5000000));
-  assert.strictEqual(goi(binh4, 'soQuyMay', '').ton.tienMat, tmTruoc + 7000000); // 5 triệu máy cũ không phải tiền mặt
-  assert.throws(() => goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [iphone15], thuCu: [cu1] }), /đã nhập ở phiếu/); // máy đang trong kho
-  // Web: thu máy cũ cho đơn đã lập; cùng tên máy dùng lại mặt hàng
+  assert.deepStrictEqual([goi(binh4, 'chiTietKhach', kh.MaKH).no, G.findObj_('DonHang', r.SoDH).TrangThai], [0, 'Đã giao']);
+  assert.ok(!G.readTable_('ThuTien').some(p => p.SoDH === r.SoDH && p.HinhThuc === 'Thu máy cũ')); // không còn phiếu thu "Thu máy cũ"
+  assert.strictEqual(goi(binh4, 'soQuyMay', '').ton.tienMat, tmTruoc + 7000000);
+  assert.throws(() => goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [Object.assign({}, iphone15, { IMEI: 'SQ0003' })], thuCu: [cu1] }), /đã nhập ở phiếu/); // máy đang trong kho
+  // Máy cũ đang giữ 7 ngày: không bán được, kể cả qua phiếu xuất; web không thêm / sửa / xóa dòng máy cũ, không hủy, không xóa đơn
+  assert.throws(() => goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [{ MaHH: hCu.MaHH, SoLuong: 1, DonGia: 6500000, IMEI: '359999000000017' }] }), /đang giữ cho khách đổi trả đến hết ngày/);
+  assert.throws(() => G.luuChungTu(t, 'XK', { Ngay: today, DoiTac: 'Khách', lines: [{ MaHH: hCu.MaHH, TenHang: hCu.TenHang, SoLuong: 1, IMEI: '359999000000017' }] }), /đang giữ cho khách/);
+  const don = G.findObj_('DonHang', r.SoDH), dong = ct.map(l => { const x = plain(l); delete x.SoDH; return x; });
+  assert.throws(() => G.luuChungTu(t, 'DH', Object.assign(plain(don), { lines: dong.slice(0, 1) })), /chỉ thêm bằng nút "Thu máy cũ"/);
+  assert.throws(() => G.luuChungTu(t, 'DH', Object.assign(plain(don), { lines: [dong[0], Object.assign({}, dong[1], { DonGia: 1000 })] })), /chỉ thêm bằng nút/);
+  assert.throws(() => G.luuChungTu(t, 'DH', Object.assign(plain(don), { lines: dong.concat([{ MaHH: hCu.MaHH, TenHang: 'x', SoLuong: -1, DonGia: 1 }]) })), /chỉ thêm bằng nút/);
+  assert.throws(() => G.luuChungTu(t, 'DH', Object.assign(plain(don), { TrangThai: 'Hủy', lines: dong })), /không hủy được/);
+  assert.strictEqual(G.luuChungTu(t, 'DH', Object.assign(plain(don), { GhiChu: 'Khách hẹn lấy hộp sau', lines: dong })).doc.TongCong, 7000000); // sửa ghi chú vẫn được
+  assert.throws(() => G.luuChungTu(t, 'BG', { Ngay: today, MaKH: kh.MaKH, TenKH: kh.TenKH, lines: [{ TenHang: 'x', SoLuong: -1, DonGia: 1 }] }), /lớn hơn 0/);
+  assert.throws(() => G.xoaChungTu(t, 'DH', r.SoDH), /không xóa được|Xóa các phiếu/);
+  // Web: thu máy cũ cho đơn đã lập: thêm dòng −1, cùng tên máy dùng lại mặt hàng; không quá số còn nợ
   const dh = G.luuChungTu(t, 'DH', { Ngay: today, MaKH: kh.MaKH, TenKH: kh.TenKH, VAT: 0, lines: [{ MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', SoLuong: 1, DonGia: 12000000 }] }).doc;
   assert.throws(() => G.thuMayCu(t, { SoDH: dh.SoDH, TenHang: 'iPhone 12 64GB', IMEI: '359999000000025', GiaThu: 13000000 }), /còn nợ của đơn/);
   const m2 = G.thuMayCu(t, { SoDH: dh.SoDH, TenHang: 'iPhone 12 64GB', IMEI: '359999000000025', GiaThu: 4000000 });
   assert.strictEqual(m2.MaHH, hCu.MaHH);
+  assert.deepStrictEqual([G.findObj_('DonHang', dh.SoDH).TongCong, G.findObj_('DonHang', dh.SoDH).TrangThai], [8000000, 'Chờ giao']);
   assert.strictEqual(goi(binh4, 'chiTietKhach', kh.MaKH).no, 8000000);
   assert.strictEqual(G.giaVonBQ_()[hCu.MaHH], 4500000);
+  // Ghi đơn lỗi: bỏ phiếu nhập máy cũ vừa lập, thử lại được, không tạo trùng mặt hàng
+  const pk0 = sheets.PS_PhieuKho.rows.length, goc = G.luuChungTu, may3 = { SoDH: dh.SoDH, TenHang: 'iPhone 11 64GB', IMEI: '356000555444333', GiaThu: 2000000 };
+  G.luuChungTu = function (tk, loai) { if (loai === 'DH') throw new Error('giả lập lỗi ghi đơn'); return goc.apply(this, arguments); };
+  try { assert.throws(() => G.thuMayCu(t, may3), /giả lập lỗi/); } finally { G.luuChungTu = goc; }
+  assert.deepStrictEqual([sheets.PS_PhieuKho.rows.length, goi(binh4, 'traMaKho', '356000555444333').trangThai], [pk0, 'chuaCo']);
+  assert.ok(G.thuMayCu(t, may3).SoPK);
+  assert.strictEqual(G.readTable_('HangHoa').filter(h => h.TenHang === 'iPhone 11 64GB (máy cũ)').length, 1);
+
+  // Trả ốp lưng của đơn lên đời: máy cũ không trả lại. Trả máy mới trong 7 ngày: trả lại đúng máy cũ, hoàn tối đa tiền khách đã trả
+  const op = G.luuHang(t, { TenHang: 'Ốp thử lên đời', DVT: 'Cái', GiaLe: 200000 });
+  G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'NCC', lines: [{ MaHH: op.MaHH, TenHang: op.TenHang, SoLuong: 5 }] });
+  const kh2 = goi(binh4, 'luuKhach', { TenKH: 'Anh Nam Lên Đời', SDT: '0966000999' });
+  const cu2 = { TenHang: 'iPhone 11 128GB', IMEI: '359999000000033', GiaThu: 5000000 };
+  const b = goi(binh4, 'banNhanh', { MaKH: kh2.MaKH, lines: [{ MaHH: 'HH0002', SoLuong: 1, DonGia: 25000000, IMEI: 'SQ0003' }, { MaHH: op.MaHH, SoLuong: 1, DonGia: 200000 }], thuCu: [cu2], thu: { SoTien: 20200000, HinhThuc: 'Tiền mặt' } });
+  assert.strictEqual(b.TongCong, 20200000);
+  let xem = goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: op.MaHH, SoLuong: 1 }], xemTruoc: true });
+  assert.deepStrictEqual([xem.tongMoi, xem.hoanToiDa, xem.mayCuTra.length, xem.hanTra], [20000000, 200000, 0, ngayLui(-7)]);
+  xem = goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0002', IMEI: 'SQ0003' }], xemTruoc: true });
+  assert.deepStrictEqual([xem.tongMoi, xem.hoanToiDa, plain(xem.mayCuTra)], [200000, 20000000, [{ TenHang: 'iPhone 11 128GB (máy cũ)', IMEI: '359999000000033', GiaThu: 5000000 }]]);
+  assert.throws(() => goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0002', IMEI: 'SQ0003' }], hoan: { SoTien: 25000000 } }), /tối đa 20000000/);
+  // Bước sửa đơn lỗi: gỡ phiếu nhập hàng trả và phiếu trả máy cũ, không có gì thay đổi
+  const pk1 = sheets.PS_PhieuKho.rows.length;
+  let lan = 0;
+  G.luuChungTu = function (tk, loai) { if (loai === 'DH' && !lan++) throw new Error('giả lập lỗi sửa đơn'); return goc.apply(this, arguments); };
+  try { assert.throws(() => goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0002', IMEI: 'SQ0003' }], hoan: { SoTien: 20000000 } }), /Chưa ghi gì.*giả lập lỗi sửa đơn/); } finally { G.luuChungTu = goc; }
+  assert.deepStrictEqual([sheets.PS_PhieuKho.rows.length, goi(binh4, 'traMaKho', 'SQ0003').trangThai, goi(binh4, 'traMaKho', '359999000000033').trangThai], [pk1, 'daBan', 'trongKho']);
+  const tmTruoc2 = goi(binh4, 'soQuyMay', '').ton.tienMat;
+  const tr = goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0002', IMEI: 'SQ0003' }], hoan: { SoTien: 20000000, HinhThuc: 'Tiền mặt' } });
+  assert.deepStrictEqual([tr.TongCong, tr.huy, !!tr.SoPK, !!tr.SoPKCu, tr.mayCuTra.length], [200000, false, true, true, 1]);
+  assert.deepStrictEqual([goi(binh4, 'traMaKho', 'SQ0003').trangThai, goi(binh4, 'traMaKho', '359999000000033').trangThai], ['trongKho', 'daBan']);
+  assert.ok(!goi(binh4, 'traBaoHanh', '359999000000033').ds.length); // máy cũ trả lại khách: không phải bán, không có bảo hành
+  assert.deepStrictEqual([goi(binh4, 'chiTietKhach', kh2.MaKH).no, goi(binh4, 'soQuyMay', '').ton.tienMat], [0, tmTruoc2 - 20000000]);
+  assert.ok(!G.readTable_('DonHangCT').some(l => l.SoDH === b.SoDH && l.SoLuong < 0));
+  // Quá 7 ngày: không nhận trả; máy cũ hết thời gian giữ thì bán được
+  const c = goi(binh4, 'banNhanh', { MaKH: kh2.MaKH, lines: [{ MaHH: 'HH0002', SoLuong: 1, DonGia: 25000000, IMEI: 'SQ0004' }], thuCu: [{ TenHang: 'iPhone X', IMEI: '359999000000041', GiaThu: 3000000 }], thu: { SoTien: 22000000 } });
+  doiNgay('DonHang', c.SoDH, ngayLui(8));
+  assert.throws(() => goi(binh4, 'traHang', { SoDH: c.SoDH, lines: [{ MaHH: 'HH0002', IMEI: 'SQ0004' }], xemTruoc: true }), /chỉ nhận trả trong 7 ngày .* đã quá hạn/);
+  doiNgay('DonHang', c.SoDH, ngayLui(7));
+  assert.ok(goi(binh4, 'traHang', { SoDH: c.SoDH, lines: [{ MaHH: 'HH0002', IMEI: 'SQ0004' }], xemTruoc: true }).hanTra === today); // ngày thứ 7 vẫn trả được
+  doiNgay('PhieuKho', c.thuCu[0].SoPK, ngayLui(8));
+  const hX = c.thuCu[0].MaHH;
+  goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [{ MaHH: hX, SoLuong: 1, DonGia: 3500000, IMEI: '359999000000041' }] });
+  assert.throws(() => goi(binh4, 'traHang', { SoDH: c.SoDH, lines: [{ MaHH: 'HH0002', IMEI: 'SQ0004' }], xemTruoc: true }), /Máy cũ 359999000000041 không còn trong kho \(đã xuất ở phiếu/);
 }
 
 // Bảo hành – sửa chữa: nhận máy, đổi trạng thái, việc cần làm, trả máy có tính phí (lập đơn dịch vụ), ảnh
@@ -591,21 +654,6 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   G.luuChungTu(t, 'XK', { Ngay: today, DoiTac: 'Khách', lines: [{ MaHH: cu.MaHH, TenHang: cu.TenHang, SoLuong: 1 }, { MaHH: moi.MaHH, TenHang: moi.TenHang, SoLuong: 1 }] });
   const sap = G.tongHopSang_(today).hang.map(h => h.MaHH);
   assert.ok(sap.includes(moi.MaHH) && !sap.includes(cu.MaHH), JSON.stringify(sap));
-}
-
-// Thu máy cũ: phiếu thu lỗi thì bỏ phiếu nhập vừa ghi (máy không nằm lại trong kho), thử lại được; mặt hàng máy cũ không tạo trùng
-{
-  const t = G.dangNhap('admin', adminPass).token, kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Thu Cũ Lỗi', SDT: '0966000777' });
-  const don = goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [{ TenHang: 'Dịch vụ thử', SoLuong: 1, DonGia: 5000000 }] });
-  const pk0 = sheets.PS_PhieuKho.rows.length, may = { SoDH: don.SoDH, TenHang: 'iPhone 11 64GB', IMEI: '356000555444333', GiaThu: 2000000 };
-  const goc = G.luuThuTien;
-  G.luuThuTien = () => { throw new Error('giả lập lỗi ghi phiếu thu'); };
-  try { assert.throws(() => G.thuMayCu(t, may), /giả lập lỗi/); } finally { G.luuThuTien = goc; }
-  assert.strictEqual(sheets.PS_PhieuKho.rows.length, pk0);
-  assert.strictEqual(goi(binh4, 'traMaKho', '356000555444333').trangThai, 'chuaCo');
-  const lai = G.thuMayCu(t, may); // thử lại được
-  assert.ok(lai.SoPK && lai.SoPT);
-  assert.strictEqual(G.readTable_('HangHoa').filter(h => h.TenHang === 'iPhone 11 64GB (máy cũ)').length, 1);
 }
 
 // Bán nhanh cho khách mới mà xuất kho lỗi: bỏ cả đơn và khách vừa tạo
@@ -727,7 +775,7 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
 // Phiếu bán hàng PDF để gửi khách; nhắc khách sắp hết bảo hành
 {
   const t = G.dangNhap('admin', adminPass).token, kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Phiếu', SDT: '0966000444' });
-  const b = goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [{ MaHH: 'HH0001', SoLuong: 1, DonGia: 28000000 }], GiamGia: 1000000, thu: { SoTien: 20000000, HinhThuc: 'Tiền mặt' } });
+  const b = goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [{ MaHH: 'HH0001', SoLuong: 1, DonGia: 28000000, IMEI: 'NK0503' }], GiamGia: 1000000, thu: { SoTien: 20000000, HinhThuc: 'Tiền mặt' } });
   const pdf = goi(binh4, 'phieuBanHangPdf', b.SoDH);
   assert.match(pdf.ten, /^Phieu ban hang \d{3}-\d{4}-DH\.pdf$/);
   const noiDung = Buffer.from(pdf.base64, 'base64').toString('utf8'); // máy chủ thử: "PDF" giữ nguyên HTML
