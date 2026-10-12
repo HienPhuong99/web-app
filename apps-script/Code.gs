@@ -45,7 +45,7 @@ const TABLES = {
   PhieuKhoCT: ['SoPK', 'STT', 'MaHH', 'TenHang', 'Model', 'DVT', 'SoLuong', 'IMEI', 'GiaVon'], // GiaVon: giá nhập một đơn vị (dòng của phiếu nhập) để tính lợi nhuận
   ThuTien: ['SoPT', 'Ngay', 'MaKH', 'TenKH', 'SoDH', 'SoTien', 'HinhThuc', 'GhiChu', 'NguoiTao', 'NgayTao'],
   SuaChua: ['SoPN', 'NgayNhan', 'Loai', 'MaKH', 'TenKH', 'SDT', 'TenMay', 'IMEI', 'TinhTrang', 'PhuKien', 'MatKhauMay', 'NgayHen', 'TrangThai', 'ChiPhi', 'KetQua', 'NgayTra', 'SoDH', 'Anh', 'NguoiTao', 'NgayTao', 'NgaySua'], // phiếu nhận bảo hành – sửa chữa; DichVu.gs
-  PhieuChi: ['SoPC', 'Ngay', 'Loai', 'DoiTac', 'SoTien', 'HinhThuc', 'GhiChu', 'NguoiTao', 'NgayTao'], // sổ quỹ: tiền chi ra (trả nhà cung cấp, chi phí); SoQuy.gs
+  PhieuChi: ['SoPC', 'Ngay', 'Loai', 'DoiTac', 'SoTien', 'HinhThuc', 'GhiChu', 'NguoiTao', 'NgayTao', 'MaHH', 'IMEI'], // sổ quỹ: tiền chi ra (trả nhà cung cấp, chi phí); SoQuy.gs
   NhatKy: ['ThoiGian', 'NguoiDung', 'HanhDong', 'DoiTuong', 'ChiTiet'],
   // Hợp đồng: bên A = khách (các cột TenDN…NganHang), bên B = cửa hàng (lấy từ cài đặt cửa hàng khi tạo file)
   HopDong: ['SoHD', 'Ngay', 'LoaiHD', 'SoDH', 'MaKH', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang', 'SoCCCD', 'CCCDCap', 'IMEI',
@@ -66,7 +66,7 @@ const NGAN_HANG = [['970436', 'Vietcombank'], ['970415', 'VietinBank'], ['970418
 const SHARED = ['TaiKhoan', 'CaiDat', 'ThietBi']; // trang dùng chung cho mọi cửa hàng, không có tiền tố
 const NUMBER_COLS = ['Dot', 'BaoTruocNgay', 'ThangGiaHan', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien', 'GiaVon', 'ChiPhi', 'GiamGia'];
 const SESSION_TTL = 6 * 60 * 60; // giây; tối đa của CacheService, tự gia hạn khi còn dùng
-const SCHEMA = '14'; // tăng số này khi thêm bảng/cột ở TABLES (hoặc cần sửa dữ liệu một lần): app tự làm ở lần gọi đầu sau khi triển khai
+const SCHEMA = '15'; // tăng số này khi thêm bảng/cột ở TABLES (hoặc cần sửa dữ liệu một lần): app tự làm ở lần gọi đầu sau khi triển khai
 
 // Loại chứng từ có dòng hàng. Số chứng từ dạng 001-2026/DH, mỗi năm đánh lại từ 001 (riêng từng cửa hàng).
 const CT = {
@@ -164,7 +164,7 @@ function nangCap_(cache) {
   const p = PropertiesService.getScriptProperties();
   let ok = p.getProperty('schema') === SCHEMA;
   if (!ok) {
-    let boSung = false;
+    let boSung = false, tonMay = false;
     try {
       withLock_(() => {
         taoBang_(false);
@@ -173,12 +173,14 @@ function nangCap_(cache) {
         try { suaGioLech_(); } catch (e) { console.error('Không sửa được ngày giờ bị lệch: ' + e); }
         p.setProperty('schema', SCHEMA);
         if (!p.getProperty('boSung.10')) { p.setProperty('boSung.10', '1'); boSung = true; } // phần bổ sung của bản 10: chỉ một lần gọi làm
+        if (!p.getProperty('tonMay.15')) { p.setProperty('tonMay.15', '1'); tonMay = true; } // bản 15: tồn kho máy 2–3 máy mỗi mã, có IMEI (DuLieuThu.gs)
       });
       ok = true;
     }
     catch (e) { console.error('Không tự nâng cấp được Sheet: ' + e); }
     // Ngoài khóa (các hàm bên trong tự giữ khóa): thêm mẫu hợp đồng mặc định mới, hợp đồng mẫu mới cho Sheet đang có dữ liệu thử
     if (boSung) { try { boSungBanMoi_(); } catch (e) { console.error('Không bổ sung được mẫu / dữ liệu thử của bản mới: ' + e); } }
+    if (tonMay) { try { chuanHoaTonMay(); } catch (e) { console.error('Không chuẩn hóa được tồn kho máy (chạy chuanHoaTonMay trong trình soạn thảo): ' + e); } }
   }
   cache.put('schema', SCHEMA, ok ? SESSION_TTL : 600);
 }

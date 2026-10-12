@@ -567,7 +567,20 @@ const doiNgay = (bang, so, ngay) => { const sh = sheets['PS_' + bang], c = sh.ro
   assert.ok(goi(binh4, 'traHang', { SoDH: c.SoDH, lines: [{ MaHH: 'HH0002', IMEI: 'SQ0004' }], xemTruoc: true }).hanTra === today); // ngày thứ 7 vẫn trả được
   doiNgay('PhieuKho', c.thuCu[0].SoPK, ngayLui(8));
   const hX = c.thuCu[0].MaHH;
-  goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [{ MaHH: hX, SoLuong: 1, DonGia: 3500000, IMEI: '359999000000041' }] });
+  // Làm lại máy cũ (thay pin 200k): phiếu chi ghi IMEI máy trong kho, tiền chi cộng vào giá vốn
+  assert.throws(() => goi(binh4, 'luuPhieuChi', { Loai: 'Làm lại máy cũ', SoTien: 200000 }), /IMEI/);
+  assert.throws(() => goi(binh4, 'luuPhieuChi', { Loai: 'Làm lại máy cũ', SoTien: 200000, IMEI: '359999000000033' }), /không có trong kho/); // đã trả lại khách
+  const pin = goi(binh4, 'luuPhieuChi', { Loai: 'Làm lại máy cũ', SoTien: 200000, IMEI: '35-9999-000000041', GhiChu: 'Thay pin' });
+  assert.deepStrictEqual([pin.MaHH, pin.IMEI, pin.DoiTac, G.giaVonBQ_()[hX]], [hX, '359999000000041', 'iPhone X (máy cũ)', 3200000]);
+  const lnTruoc = G.loiNhuan(t, today, today);
+  const ban = goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [{ MaHH: hX, SoLuong: 1, DonGia: 3500000, IMEI: '359999000000041' }] });
+  assert.strictEqual(G.luuPhieuChi(t, Object.assign({}, pin, { SoTien: 250000 })).MaHH, hX); // máy đã bán vẫn sửa được phiếu chi
+  G.luuPhieuChi(t, Object.assign({}, pin, { SoTien: 200000 }));
+  // Lãi: dòng máy cũ −1 lãi 0 (đơn 12tr − 5tr: doanh thu 7tr, giá vốn 10,5tr − 5tr); bán lại máy cũ 3,5tr, vốn 3tr + 200k → lãi máy cũ 300k
+  const ln = G.loiNhuan(t, today, today), dR = ln.theoDon.find(x => x.SoDH === r.SoDH), dBan = ln.theoDon.find(x => x.SoDH === ban.SoDH);
+  assert.deepStrictEqual([dR.doanhThu, dR.giaVon, dR.lai, dBan.lai], [7000000, 5500000, 1500000, 300000]);
+  assert.deepStrictEqual([ln.tong.laiMayCu - lnTruoc.tong.laiMayCu, ln.tong.laiMayMoi + ln.tong.laiMayCu, ln.tong.laiMayMoi - lnTruoc.tong.laiMayMoi], [300000, ln.tong.lai, 0]);
+  assert.ok(ln.theoHang.some(x => x.TenHang === 'Máy cũ thu vào (trừ vào đơn)' && x.lai === 0 && x.soLuong >= 3));
   assert.throws(() => goi(binh4, 'traHang', { SoDH: c.SoDH, lines: [{ MaHH: 'HH0002', IMEI: 'SQ0004' }], xemTruoc: true }), /Máy cũ 359999000000041 không còn trong kho \(đã xuất ở phiếu/);
 }
 

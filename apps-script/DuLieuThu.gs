@@ -296,3 +296,86 @@ function boNhanThu_() {
   } finally { CUR_SHOP = cur; }
   return sua;
 }
+
+// ===== Tồn kho máy: 2–3 máy mỗi mã, máy nào cũng có IMEI =====
+/**
+ * Chạy trong trình soạn thảo (bản 15 cũng tự chạy một lần khi nâng cấp): mỗi mặt hàng đơn vị "Máy" (trừ máy cũ thu về) còn tồn 2 hoặc 3 máy,
+ * mỗi máy một IMEI mẫu (15 số, đúng số kiểm tra). Chỉ sửa dòng phiếu nhập từ nhà cung cấp / tồn đầu kỳ, không đụng phiếu thu máy cũ, khách trả hàng.
+ * Máy đã bán mà phiếu xuất không ghi IMEI vẫn tính là đã bán (dòng nhập của chúng giữ nguyên). Mã chưa từng nhập kho thì để nguyên.
+ */
+function chuanHoaTonMay() {
+  const cur = CUR_SHOP, kq = [];
+  try { Object.keys(SHOPS).forEach(shop => { CUR_SHOP = shop; kq.push(shop + ': ' + chuanTonMay_()); }); } finally { CUR_SHOP = cur; }
+  Logger.log('Chuẩn hóa tồn kho máy – ' + kq.join(' | '));
+  return kq;
+}
+
+function chuanTonMay_() {
+  return withLock_(() => {
+    const sh = sheet_('PhieuKhoCT'), vals = sh.getDataRange().getValues(), h = vals[0];
+    const cPK = h.indexOf('SoPK'), cMa = h.indexOf('MaHH'), cSL = h.indexOf('SoLuong'), cIM = h.indexOf('IMEI');
+    if (vals.length < 2 || [cPK, cMa, cSL, cIM].some(c => c < 0)) return 'không có phiếu kho';
+    const pk = {}, may = {};
+    readTable_('PhieuKho').forEach(p => { pk[p.SoPK] = p; });
+    readTable_('HangHoa').forEach(x => { if (laMay_(x) && x.NhomHang !== NHOM_MAY_CU) may[x.MaHH] = x; });
+    const laNguon = p => p && p.Loai === 'Nhập' && !p.SoDH && !laNhapThuCu_(p) && !/^Khách trả hàng/.test(String(p.GhiChu || ''));
+    // Máy còn trong kho theo IMEI = số lần nhập − số lần xuất > 0 (không xét ngày: dữ liệu mẫu có phiếu giao ghi ngày trước phiếu nhập)
+    const net = {}, daCo = new Set(), ton = tonKho_();
+    vals.forEach((r, i) => {
+      const p = i && pk[r[cPK]];
+      if (i) imeiList_(r[cIM]).forEach(x => { const g = gonMa_(x); daCo.add(g); if (p) net[g] = (net[g] || 0) + (p.Loai === 'Nhập' ? 1 : -1); });
+    });
+    let seq = 0;
+    const imeiMoi = ma => { // IMEI mẫu: 357 + số mã hàng + số thứ tự, chưa trùng máy nào
+      const so = String(String(ma).replace(/\D/g, '') || '0').slice(-5).padStart(5, '0');
+      for (;;) { const x = imeiLuhn_('357' + so + String(++seq % 1000000).padStart(6, '0')); if (!daCo.has(x)) { daCo.add(x); return x; } }
+    };
+    const dong = {}, coIMEI = {}; // dòng phiếu nhập nguồn của từng mã; IMEI còn trong kho của từng mã
+    vals.forEach((r, i) => {
+      if (!i || !may[r[cMa]] || !pk[r[cPK]] || pk[r[cPK]].Loai !== 'Nhập') return;
+      imeiList_(r[cIM]).forEach(x => { if (net[gonMa_(x)] > 0) (coIMEI[r[cMa]] = coIMEI[r[cMa]] || new Set()).add(gonMa_(x)); });
+      if (laNguon(pk[r[cPK]])) (dong[r[cMa]] = dong[r[cMa]] || []).push(i);
+    });
+    const thoi = i => String(pk[vals[i][cPK]].Ngay) + pk[vals[i][cPK]].NgayTao;
+    let sua = 0, gan = 0, bo = 0, them = 0;
+    Object.keys(dong).forEach(ma => {
+      const ds = dong[ma].sort((a, b) => thoi(b).localeCompare(thoi(a))); // phiếu mới trước
+      const t = ton[ma], soIMEI = coIMEI[ma] ? coIMEI[ma].size : 0;
+      const khongIMEI = Math.max(0, (t ? t.nhap - t.xuat : 0) - soIMEI), muc = 2 + (+String(ma).replace(/\D/g, '') || 0) % 2;
+      let canGan = Math.max(0, Math.min(muc - soIMEI, khongIMEI)), canBo = khongIMEI - canGan;
+      let thua = Math.max(0, soIMEI - muc), thieu = Math.max(0, muc - soIMEI - canGan);
+      const truoc = ds.map(i => vals[i][cSL] + '|' + vals[i][cIM]).join();
+      ds.forEach(i => {
+        const r = vals[i], im = imeiList_(r[cIM]);
+        let sl = +r[cSL] || 0, khong = Math.max(0, sl - im.length);
+        // máy không IMEI còn trong kho: gắn IMEI mẫu cho đủ mức, phần dư bỏ khỏi phiếu nhập
+        const g = Math.min(canGan, khong);
+        for (let k = 0; k < g; k++) im.push(imeiMoi(ma));
+        canGan -= g; khong -= g; gan += g;
+        const b = Math.min(canBo, khong); sl -= b; canBo -= b; bo += b;
+        // máy có IMEI còn trong kho nhiều hơn mức: bỏ bớt máy chưa bán của phiếu này
+        for (let k = im.length - 1; k >= 0 && thua > 0; k--) {
+          const x = gonMa_(im[k]);
+          if (net[x] > 0) { im.splice(k, 1); net[x]--; sl--; thua--; bo++; }
+        }
+        r[cSL] = sl; r[cIM] = im.join(', ');
+      });
+      if (thieu > 0) { // còn thiếu: thêm máy vào phiếu nhập mới nhất
+        const r = vals[ds[0]], im = imeiList_(r[cIM]);
+        for (let k = 0; k < thieu; k++) im.push(imeiMoi(ma));
+        r[cSL] = (+r[cSL] || 0) + thieu; r[cIM] = im.join(', '); them += thieu;
+      }
+      if (ds.map(i => vals[i][cSL] + '|' + vals[i][cIM]).join() !== truoc) sua++;
+    });
+    if (!sua) return 'không có gì cần sửa';
+    const n = vals.length - 1, nguon = new Set([].concat.apply([], Object.keys(dong).map(m => dong[m])));
+    sh.getRange(2, cIM + 1, n, 1).setNumberFormat('@');
+    sh.getRange(2, cSL + 1, n, 1).setValues(vals.slice(1).map(r => [r[cSL]]));
+    sh.getRange(2, cIM + 1, n, 1).setValues(vals.slice(1).map(r => [String(r[cIM])]));
+    for (let i = vals.length - 1; i >= 1; i--) if (nguon.has(i) && vals[i][cSL] === 0) sh.deleteRows(i + 1, 1); // dòng đã bỏ hết máy
+    daGhi_(sh);
+    const tt = sua + ' mã máy: gắn IMEI ' + gan + ' máy, bỏ ' + bo + ' máy, thêm ' + them + ' máy';
+    log_({ ten: 'Hệ thống', u: 'nang-cap' }, 'Chuẩn hóa tồn kho máy', '', tt);
+    return tt;
+  });
+}
