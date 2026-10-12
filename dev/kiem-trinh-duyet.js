@@ -234,6 +234,10 @@ BUOC.push(['Nhận máy sửa chữa, đổi trạng thái, trả máy lập đ�
     assert.match(await page.locator('#view tr.thu-cu [data-c="ThanhTien"]').innerText(), /-1\.000\.000/);
     assert.match(await page.locator('#view .side-cards').innerText(), /Còn nợ\s*500\.000/);
     assert.ok(!(await page.locator('#topActions .btn', { hasText: 'Hủy đơn' }).count()));
+    // Sửa ghi chú rồi lưu: dòng máy cũ giữ nguyên, máy chủ nhận
+    await page.fill('input[data-h="GhiChu"]', 'Khách lên đời');
+    await page.locator('#topActions .btn', { hasText: 'Lưu' }).click();
+    await page.waitForFunction(() => document.querySelector('#title').textContent === 'Đơn hàng', null, { timeout: 8000 });
   } finally { page.off('dialog', ghi); }
 }]);
 BUOC.push(['Giảm giá đơn hàng, kiểm kho theo IMEI, khách trả hàng (hủy đơn, trả lại tiền)', async page => {

@@ -60,7 +60,8 @@ function luuHopDong(token, doc) {
   if (head.NgayHieuLuc && head.NgayHetHan && head.NgayHetHan < head.NgayHieuLuc) throw new Error('Ngày hết hạn phải sau ngày hiệu lực.');
   const lines = (doc.lines || []).filter(l => String(l.TenHang || '').trim()).slice(0, 200).map((l, i) => {
     const o = { STT: i + 1, MaHH: str(l.MaHH, 20), TenHang: str(l.TenHang, 200), DVT: str(l.DVT, 30), SoLuong: +l.SoLuong || 0, DonGia: Math.round(+l.DonGia || 0) };
-    if (o.SoLuong <= 0) throw new Error('Dòng ' + o.STT + ': số lượng phải lớn hơn 0.');
+    // số lượng âm: máy cũ thu lại trừ vào hợp đồng (lập từ đơn lên đời), phải có mã hàng
+    if (o.SoLuong === 0 || (o.SoLuong < 0 && !o.MaHH)) throw new Error('Dòng ' + o.STT + ': số lượng phải lớn hơn 0' + (o.SoLuong < 0 ? ' (số âm chỉ dùng cho máy cũ thu lại có mã hàng)' : '') + '.');
     if (o.DonGia < 0) throw new Error('Dòng ' + o.STT + ': đơn giá không được âm.');
     const im = imeiList_(l.IMEI), sai = im.find(x => !/^[A-Z0-9][A-Z0-9._/-]{3,39}$/.test(x));
     if (sai) throw new Error('Dòng ' + o.STT + ': IMEI/serial "' + sai + '" không hợp lệ (4–40 chữ, số).');
@@ -72,6 +73,7 @@ function luuHopDong(token, doc) {
   head.TienHang = lines.reduce((t, l) => t + l.ThanhTien, 0);
   head.TienVAT = Math.round(head.TienHang * head.VAT / 100);
   head.TongCong = head.TienHang + head.TienVAT;
+  if (head.TongCong < 0) throw new Error('Giá máy cũ thu lại lớn hơn tiền hàng của hợp đồng.');
   head.BangChu = docTienChu_(head.TongCong);
   head.NgaySua = now_();
   return withLock_(() => {

@@ -2771,7 +2771,7 @@ async function saveHD(ve) {
   const d = Object.assign({}, S.hd), lines = d.lines.filter(l => String(l.TenHang).trim());
   if (!d.LoaiHD) throw new Error('Chọn loại hợp đồng.');
   if (!String(d.TenDN).trim()) throw new Error('Nhập tên khách hàng (bên A).');
-  if (lines.some(l => !(+l.SoLuong > 0))) throw new Error('Nhập số lượng lớn hơn 0 cho mọi dòng hàng.');
+  if (lines.some(l => !(+l.SoLuong > 0) && !(+l.SoLuong < 0 && l.MaHH))) throw new Error('Nhập số lượng lớn hơn 0 cho mọi dòng hàng.'); // số âm: máy cũ thu lại (lập từ đơn lên đời)
   if (d.NgayHieuLuc && d.NgayHetHan && d.NgayHetHan < d.NgayHieuLuc) throw new Error('Ngày hết hạn phải sau ngày hiệu lực.');
   if (d.lichSua) d.lich.forEach((r, i) => { if (!r.SoPT && !(r.NgayDen && +r.SoTien > 0)) throw new Error(`Lịch thanh toán: đợt ${i + 1} cần ngày đến hạn và số tiền lớn hơn 0.`); });
   if (lines.some(l => l.DonGia === '' || l.DonGia == null) && !confirm('Có dòng chưa có đơn giá (sẽ tính 0 ₫). Vẫn lưu?')) return;

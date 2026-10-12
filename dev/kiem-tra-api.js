@@ -518,6 +518,11 @@ const doiNgay = (bang, so, ngay) => { const sh = sheets['PS_' + bang], c = sh.ro
   assert.strictEqual(G.luuChungTu(t, 'DH', Object.assign(plain(don), { GhiChu: 'Khách hẹn lấy hộp sau', lines: dong })).doc.TongCong, 7000000); // sửa ghi chú vẫn được
   assert.throws(() => G.luuChungTu(t, 'BG', { Ngay: today, MaKH: kh.MaKH, TenKH: kh.TenKH, lines: [{ TenHang: 'x', SoLuong: -1, DonGia: 1 }] }), /lớn hơn 0/);
   assert.throws(() => G.xoaChungTu(t, 'DH', r.SoDH), /không xóa được|Xóa các phiếu/);
+  // Hợp đồng lập từ đơn lên đời: dòng máy cũ (−1, có mã hàng) trừ vào hợp đồng; số âm không có mã hàng thì không được
+  const hdLD = G.luuHopDong(t, { LoaiHD: 'Hợp đồng mua bán', TenDN: kh.TenKH, MaKH: kh.MaKH, SoDH: r.SoDH, VAT: 0, lines: dong.map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, DVT: l.DVT, SoLuong: l.SoLuong, DonGia: l.DonGia })) }).doc;
+  assert.strictEqual(hdLD.TongCong, 7000000);
+  assert.throws(() => G.luuHopDong(t, { LoaiHD: 'Hợp đồng mua bán', TenDN: kh.TenKH, lines: [{ TenHang: 'x', SoLuong: -1, DonGia: 1 }] }), /số âm chỉ dùng cho máy cũ/);
+  G.xoaHopDong(t, hdLD.SoHD);
   // Web: thu máy cũ cho đơn đã lập: thêm dòng −1, cùng tên máy dùng lại mặt hàng; không quá số còn nợ
   const dh = G.luuChungTu(t, 'DH', { Ngay: today, MaKH: kh.MaKH, TenKH: kh.TenKH, VAT: 0, lines: [{ MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', SoLuong: 1, DonGia: 12000000 }] }).doc;
   assert.throws(() => G.thuMayCu(t, { SoDH: dh.SoDH, TenHang: 'iPhone 12 64GB', IMEI: '359999000000025', GiaThu: 13000000 }), /còn nợ của đơn/);
