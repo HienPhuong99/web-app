@@ -1,17 +1,20 @@
 // Tổng quan: doanh số hôm nay (vòng lớn), đơn / đã thu / còn nợ, 7 ngày gần nhất và việc cần làm (cùng cách tính với email sáng).
 // Bấm số liệu nào cũng xem được chi tiết: doanh số, đơn, đã thu, cột 7 ngày → đơn và phiếu thu của ngày đó; còn nợ → mọi khách còn nợ;
 // mỗi việc cần làm → hồ sơ khách / thẻ kho; nhóm việc dài thì bấm để mở hết.
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/auth';
 import type { TongQuan } from '../../lib/api';
 import { loiChao, ngay, tien, tienGon } from '../../lib/dinhDang';
+import { maDuongDan } from '../../lib/phieuSua';
+import { useDuLieu } from '../../lib/useDuLieu';
 import { BieuDo7Ngay } from '../../ui/BieuDo7Ngay';
 import { Nen } from '../../ui/Nen';
 import { The } from '../../ui/The';
+import { DongCapNhat, KhungChoTongQuan, useKeo } from '../../ui/TrangThaiTai';
 import { VongSo } from '../../ui/VongSo';
 import { DEM_DUOI, mau } from '../../ui/theme';
 
@@ -21,14 +24,8 @@ const xemNo = () => router.push({ pathname: '/so-lieu', params: { loai: 'no' } }
 const moKhach = (ma: string) => { if (ma) router.push({ pathname: '/khach/[ma]', params: { ma } }); };
 
 export default function TongQuanMan() {
-  const { goi, user, tenCuaHang } = useAuth();
-  const [du, setDu] = useState<TongQuan | null>(null), [loi, setLoi] = useState(''), [dangTai, setDangTai] = useState(false);
-
-  const tai = useCallback(async () => {
-    setDangTai(true);
-    try { setDu(await goi<TongQuan>('tongQuanMay')); setLoi(''); } catch (e) { setLoi((e as Error).message); } finally { setDangTai(false); }
-  }, [goi]);
-  useFocusEffect(useCallback(() => { tai(); }, [tai])); // mỗi lần mở tab lấy số mới
+  const { user, tenCuaHang } = useAuth();
+  const dl = useDuLieu<TongQuan>('tongQuanMay', []), du = dl.du, keo = useKeo(dl.lamMoi); // hiện số lần trước ngay, mỗi lần mở tab lấy số mới ở nền
 
   const max7 = du ? Math.max(...du.ban7.map(x => x.tien), 1) : 1;
   const ten = du?.user.ten ?? user?.ten ?? '';
@@ -36,7 +33,7 @@ export default function TongQuanMan() {
     <View style={{ flex: 1 }}>
       <Nen />
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={s.khung} refreshControl={<RefreshControl refreshing={dangTai && !!du} onRefresh={tai} tintColor={mau.cam} />}>
+        <ScrollView contentContainerStyle={s.khung} refreshControl={<RefreshControl {...keo} />}>
           <View style={s.dau}>
             <View style={{ flex: 1 }}>
               <Text style={s.chao}>{loiChao(new Date().getHours())},</Text>
@@ -45,6 +42,7 @@ export default function TongQuanMan() {
             </View>
             <View style={s.anh}><Text style={s.anhChu}>{(ten || '?').trim().charAt(0).toUpperCase()}</Text></View>
           </View>
+          <DongCapNhat dl={dl} />
 
           <View style={s.phimTat}>
             <PhimTat bieuTuong="bag-add" chu="Bán nhanh" mauBT={mau.camDam} onPress={() => router.navigate('/ban')} testID="pt-ban" />
@@ -53,14 +51,14 @@ export default function TongQuanMan() {
             <PhimTat bieuTuong="document-text" chu="Hợp đồng" mauBT={mau.vang} onPress={() => router.push('/hop-dong')} />
           </View>
 
-          {loi ? (
+          {dl.loi && !du ? (
             <The nhan="Không tải được" mauNhan={mau.do} style={s.muc} testID="loi-tong-quan">
-              <Text style={s.chuThuong}>{loi}</Text>
-              <Pressable onPress={tai} style={{ marginTop: 10 }}><Text style={s.lienKet}>Thử lại</Text></Pressable>
+              <Text style={s.chuThuong}>{dl.loi}</Text>
+              <Pressable onPress={dl.lamMoi} style={{ marginTop: 10 }}><Text style={s.lienKet}>Thử lại</Text></Pressable>
             </The>
           ) : null}
 
-          {!du && !loi ? <The style={s.muc}><Text style={s.chuNhat}>Đang tải số liệu…</Text></The> : null}
+          {!du && !dl.loi ? <KhungChoTongQuan /> : null}
 
           {du ? (
             <>
@@ -74,6 +72,9 @@ export default function TongQuanMan() {
                   <So bieuTuong="wallet-outline" mauBT={mau.xanh} so={tienGon(du.thu)} nhan="Đã thu" onPress={() => xemNgay()} testID="so-thu" />
                   <So bieuTuong="time-outline" mauBT={mau.vang} so={tienGon(du.no.tong)} nhan="Khách còn nợ" onPress={xemNo} testID="so-no" />
                 </View>
+                {du.lai ? (
+                  <Text style={s.lai} testID="lai-hom-nay">Lãi gộp hôm nay <Text style={{ color: du.lai.lai >= 0 ? mau.xanh : mau.do }}>{tien(du.lai.lai)}</Text></Text>
+                ) : null}
                 <Text style={s.goiY}>Bấm vào số liệu để xem chi tiết</Text>
               </The>
 
@@ -87,9 +88,14 @@ export default function TongQuanMan() {
               <Text style={s.tieuDeMuc}>Cần làm{du.soMuc ? ` (${du.soMuc})` : ''}</Text>
               {!du.soMuc ? (
                 <The nhan="Ổn cả" mauNhan={mau.xanh} tieuDe="Chưa có việc cần chú ý" style={s.muc} testID="khong-co-viec">
-                  <Text style={s.chuThuong}>Không có hợp đồng sắp hết hạn, đợt thu đến hạn, đơn trễ giao hay hàng sắp hết.</Text>
+                  <Text style={s.chuThuong}>Không có máy sửa cần trả, hợp đồng sắp hết hạn, đợt thu đến hạn, đơn trễ giao hay hàng sắp hết.</Text>
                 </The>
               ) : null}
+              <NhomViec nhan="Máy sửa · cần trả khách" mauNhan={mau.xanh} bieuTuong="construct-outline" ds={(du.suaChua ?? []).map(x => ({
+                k: x.SoPN, chinh: `${x.TenKH} · ${x.TenMay}`, phu: x.SoPN + (x.SDT ? ' · ' + x.SDT : ''),
+                ben: x.TrangThai === 'Đã sửa xong' || x.TrangThai === 'Không sửa được' ? 'Chờ khách lấy' : x.n !== null && x.n < 0 ? `Quá ${-x.n} ngày` : 'Hẹn hôm nay',
+                gap: x.n !== null && x.n < 0, mo: () => router.push({ pathname: '/sua-chua/[so]', params: { so: maDuongDan(x.SoPN) } }),
+              }))} />
               <NhomViec nhan="Trả góp · cần thu" mauNhan={mau.cam} bieuTuong="calendar-outline" ds={du.dot.map(x => ({
                 k: x.SoHD + x.Nhan, chinh: x.TenDN, phu: `${x.Nhan} · ${tien(x.SoTien)}`,
                 ben: x.quaHan ? `Quá ${-x.n} ngày` : x.n === 0 ? 'Hôm nay' : `Còn ${x.n} ngày`, gap: x.quaHan, mo: x.MaKH ? () => moKhach(x.MaKH) : undefined,
@@ -106,6 +112,9 @@ export default function TongQuanMan() {
                 mo: () => router.push({ pathname: '/kho/[ma]', params: { ma: x.MaHH, ten: x.TenHang } }),
               }))} />
 
+              <NhomViec nhan="Sắp hết bảo hành · mời khách" mauNhan={mau.brand} bieuTuong="shield-checkmark-outline" ds={(du.sapHetBH ?? []).map(x => ({
+                k: x.IMEI + x.MaKH, chinh: x.TenKH, phu: `${x.TenHang}${x.SDT ? ' · ' + x.SDT : ''}`, ben: x.n === 0 ? 'Hết hôm nay' : `Còn ${x.n} ngày`, gap: false, mo: () => moKhach(x.MaKH),
+              }))} />
               {du.no.top.length ? (
                 <The nhan="Công nợ" mauNhan={mau.vang} tieuDe={`${du.no.soKhach} khách còn nợ ${tien(du.no.tong)}`} style={s.muc} testID="the-cong-no-tq">
                   {du.no.top.slice(0, TOI_DA).map(k => (
@@ -210,4 +219,5 @@ const s = StyleSheet.create({
   lienKet: { fontSize: 15, color: mau.camDam, fontWeight: '700' },
   lienKetNho: { color: mau.camDam, fontWeight: '700' },
   goiY: { fontSize: 12, color: mau.chuNhat, marginTop: 10 },
+  lai: { fontSize: 14, color: mau.chuPhu, fontWeight: '700', marginTop: 12 },
 });

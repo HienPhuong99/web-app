@@ -5,6 +5,7 @@ import type { MayBaoHanh } from '../lib/api';
 import { ngay, tinhTrangBaoHanh, type TinhTrangBH } from '../lib/dinhDang';
 import { linkGoi } from '../lib/lienHe';
 import { DongTT, Nhan, type MAU_NHAN } from './DanhSach';
+import { Nut } from './Nut';
 import { The } from './The';
 import { mau } from './theme';
 
@@ -24,6 +25,12 @@ export function TheMay({ x }: { x: MayBaoHanh }) {
       <DongTT nhan="Ngày giao" giaTri={ngay(x.Ngay)} />
       <DongTT nhan="Hết bảo hành" giaTri={x.HetHan ? ngay(x.HetHan) : 'Không bảo hành'} />
       <DongTT nhan="Chứng từ" giaTri={[x.SoDH && 'Đơn ' + x.SoDH, 'Phiếu ' + x.SoPK].filter(Boolean).join(' · ')} />
+      {x.SoDH && x.IMEI ? (
+        <Nut chu="Khách trả máy" phu bieuTuong="return-down-back" style={{ marginTop: 12, minHeight: 44 }} testID="nut-tra-may-ban"
+          onPress={() => router.push({ pathname: '/tra-hang', params: { don: x.SoDH, ma: x.MaHH, ten: x.TenHang, imei: x.IMEIKhop || x.IMEI.split(',')[0].trim(), kh: x.MaKH || undefined, tenKH: x.MaKH ? x.TenKH : undefined } })} />
+      ) : null}
+      <Nut chu={tt.loai === 'het' || tt.loai === 'khong' ? 'Nhận sửa chữa' : 'Nhận bảo hành'} phu bieuTuong="construct-outline" style={{ marginTop: 10, minHeight: 44 }} testID="nut-nhan-bh"
+        onPress={() => router.push({ pathname: '/sua-chua/[so]', params: { so: 'moi', loai: tt.loai === 'het' || tt.loai === 'khong' ? 'Sửa chữa' : 'Bảo hành', ma: x.MaKH || undefined, ten: x.MaKH ? x.TenKH : undefined, sdt: x.MaKH ? x.SDT : undefined, may: x.TenHang, imei: x.IMEIKhop || x.IMEI.split(',')[0]?.trim() } })} />
     </The>
   );
 }

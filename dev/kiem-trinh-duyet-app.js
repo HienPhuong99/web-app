@@ -193,6 +193,9 @@ buoc('Thu nốt tiền còn nợ của đơn vừa bán → hồ sơ khách hế
   await xong.waitFor({ timeout: 15000 });
   assert.match(await xong.textContent(), new RegExp('8\\.500\\.000 đ.*Tiền mặt.*' + c.soDH.replace('/', '\\/')));
   await v(page, 'nut-xong-thu').click();
+  await v(page, 'nut-xem-khach').waitFor();
+  // về màn Đã bán: không còn "Còn nợ" và nút Thu tiền (trước đây vẫn hiện số cũ, bấm lại là thu trùng)
+  await page.waitForFunction(() => ![...document.querySelectorAll('[data-testid="nut-thu-sau-ban"]')].some(e => e.offsetParent), null, { timeout: 15000 });
   await v(page, 'nut-xem-khach').click();
   await v(page, 'cong-no').getByText('Không còn nợ').waitFor({ timeout: 15000 });
   await v(page, 'the-may').getByText('356789012345680').waitFor();
@@ -220,9 +223,14 @@ buoc('Khách: tìm không dấu, mở hồ sơ; thêm khách mới', async page 
   await v(page, 'loc-khach-chua').click();
   await page.getByText('Không có khách nào chưa mua.').filter({ visible: true }).waitFor({ timeout: 15000 });
   await v(page, 'loc-khach-tat').click();
+  // Sắp theo tên: bấm lần đầu A → Z, bấm lại Z → A
+  const theoTen = chieu => page.waitForFunction(c => { const t = [...document.querySelectorAll('[data-testid^="khach-KH"]')].filter(e => e.offsetParent).map(e => e.innerText.split('\n')[0]); return t.length >= 2 && t.every((x, i) => !i || c * t[i - 1].localeCompare(x, 'vi') <= 0) && t[0] !== t[t.length - 1]; }, chieu, { timeout: 15000 });
   await v(page, 'sx-khach-ten').click();
-  await page.waitForFunction(() => { const t = [...document.querySelectorAll('[data-testid^="khach-KH"]')].filter(e => e.offsetParent).map(e => e.innerText.split('\n')[0]); return t.length >= 2 && t.every((x, i) => !i || t[i - 1].localeCompare(x, 'vi') <= 0); }, null, { timeout: 15000 });
+  await theoTen(1);
   await chup(page, '9a-khach-loc');
+  await v(page, 'sx-khach-ten').click();
+  await theoTen(-1);
+  assert.match(await v(page, 'sx-khach-ten').getAttribute('aria-label'), /giảm dần/);
   await v(page, 'sx-khach-gan').click();
   await v(page, 'nut-them-khach').click();
   await v(page, 'o-ten-khach').fill('Anh Phát');
@@ -245,12 +253,14 @@ buoc('Kho: tồn kho, kiểm tra IMEI, thẻ kho; Hợp đồng; Thêm: Face ID 
   await v(page, 'nut-kiem-imei').click();
   await v(page, 'tt-imei').getByText('Đã bán').waitFor({ timeout: 15000 });
   await khongTranNgang(page);
-  // Sắp theo tồn: iPhone 16 Pro Max (HH0001) nhiều máy hơn iPhone 15 (HH0002)
+  // Sắp theo tồn: iPhone 16 Pro Max (HH0001) nhiều máy hơn iPhone 15 (HH0002). Bấm lần đầu: ít trước; bấm lại: nhiều trước
   const dauKho = () => page.evaluate(() => [...document.querySelectorAll('[data-testid^="kho-HH"]')].filter(e => e.offsetParent).map(e => e.dataset.testid)[0]);
-  await v(page, 'sx-kho-tonNhieu').click();
-  assert.strictEqual(await dauKho(), 'kho-HH0001');
-  await v(page, 'sx-kho-tonIt').click();
+  await v(page, 'sx-kho-ton').click();
   assert.strictEqual(await dauKho(), 'kho-HH0002');
+  assert.match(await v(page, 'sx-kho-ton').getAttribute('aria-label'), /tồn, tăng dần/);
+  await v(page, 'sx-kho-ton').click();
+  assert.strictEqual(await dauKho(), 'kho-HH0001');
+  assert.match(await v(page, 'sx-kho-ton').getAttribute('aria-label'), /tồn, giảm dần/);
   await v(page, 'loc-kho-con').getByText(/Còn hàng \(\d+\)/).waitFor();
   await chup(page, '10-kho');
   await v(page, 'sx-kho-ten').click();
@@ -265,8 +275,8 @@ buoc('Kho: tồn kho, kiểm tra IMEI, thẻ kho; Hợp đồng; Thêm: Face ID 
   await v(page, 'the-kho').getByText('Chị Lan').waitFor();
   assert.strictEqual(await v(page, 'the-kho').getByText('Tồn đầu kỳ').count(), 0);
   await v(page, 'loc-phieu-tat').click();
-  await v(page, 'sx-phieu-slNhieu').click();
-  assert.match(await v(page, 'the-kho').innerText(), /^Tồn đầu kỳ/); // phiếu nhập 5 máy lên đầu
+  await v(page, 'sx-phieu-sl').click(); // số lượng: nhiều trước
+  assert.match(await v(page, 'the-kho').first().innerText(), /^Tồn đầu kỳ/); // phiếu nhập 5 máy lên đầu (mỗi dòng danh sách là một ô riêng)
   await chup(page, '10a-the-kho-loc');
   await v(page, 'nut-lui').click();
   await v(page, 'nut-lui').click();
@@ -290,9 +300,9 @@ buoc('Điện thoại đăng nhập: thấy "Máy này", đăng xuất từ xa m
   await v(page, 'loc-may-tb').click(); // chưa máy nào bật thông báo
   await page.getByText('Không có điện thoại nào phù hợp.').filter({ visible: true }).waitFor();
   await v(page, 'loc-may-tat').click();
-  await v(page, 'sx-may-lau').click(); // thứ tự đã kiểm ở test/loc.test.ts; ở đây hai máy cùng phút nên chỉ xem còn đủ
+  await v(page, 'sx-may-dung').click(); // đang chọn nên đảo chiều: lâu không dùng trước. Thứ tự đã kiểm ở test/loc.test.ts; ở đây hai máy cùng phút nên chỉ xem còn đủ
   assert.strictEqual(await v(page, 'ds-thiet-bi').getByTestId('thiet-bi').count(), 2);
-  await v(page, 'sx-may-gan').click();
+  await v(page, 'sx-may-dung').click();
   page.once('dialog', d => d.accept());
   await v(page, 'nut-xoa-thiet-bi').first().click();
   await page.waitForFunction(() => !document.body.innerText.includes('iPad quầy'), null, { timeout: 15000 });
@@ -310,7 +320,7 @@ buoc('Tổng quan: phím tắt Bán nhanh, bấm khách còn nợ mở hồ sơ'
 });
 
 buoc('Tổng quan động: bấm số đơn → đơn và phiếu thu hôm nay, lật ngày; bấm cột 7 ngày; khách còn nợ → hồ sơ', async page => {
-  const homNay = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  const homNay = new Date(Date.now() + 7 * 36e5).toISOString().slice(0, 10); // hôm nay theo giờ Việt Nam, như app và máy chủ
   const dmy = n => n.split('-').reverse().join('/');
   await page.getByTestId('tab-index').click();
   await v(page, 'so-don').click({ timeout: 15000 });
@@ -340,6 +350,130 @@ buoc('Tổng quan động: bấm số đơn → đơn và phiếu thu hôm nay, 
   await v(page, 'nut-lui').click();
   await v(page, 'nut-lui').click();
   await v(page, 'the-doanh-so').waitFor();
+});
+
+buoc('Sổ quỹ: tồn tiền mặt / ngân hàng, ghi phiếu chi; lãi gộp hôm nay trên Tổng quan (quản trị)', async page => {
+  await page.getByTestId('tab-index').click();
+  await v(page, 'lai-hom-nay').waitFor({ timeout: 15000 });
+  await page.getByTestId('tab-tai-khoan').click();
+  await v(page, 'mo-so-quy').click();
+  await v(page, 'ton-quy').waitFor({ timeout: 15000 });
+  await v(page, 'ds-quy').getByText('Tiền mặt', { exact: false }).first().waitFor(); // phiếu thu hôm nay của chay-thu --mau-app
+  assert.ok(await v(page, 'quy-sau').isDisabled(), 'Hôm nay: không lật sang ngày sau');
+  await v(page, 'nut-ghi-chi').click();
+  await v(page, 'nut-luu-chi').click();
+  await v(page, 'loi-chi').getByText('Nhập số tiền chi.').waitFor();
+  await v(page, 'loai-chi-Trả nhà cung cấp').click();
+  await v(page, 'o-tien-chi').fill('45000');
+  await v(page, 'nut-luu-chi').click();
+  await v(page, 'loi-chi').getByText('Nhập tên nhà cung cấp', { exact: false }).waitFor();
+  await v(page, 'loai-chi-Vận chuyển').click();
+  await v(page, 'nut-luu-chi').click();
+  await v(page, 'ds-quy').getByText('Vận chuyển').waitFor({ timeout: 15000 });
+  await v(page, 'ds-quy').getByText('−45.000', { exact: false }).waitFor();
+  await khongTranNgang(page);
+  await chup(page, '13-so-quy');
+  await v(page, 'quy-truoc').click();
+  await v(page, 'ds-quy').getByText('Không có phiếu thu, chi nào trong ngày.').waitFor({ timeout: 15000 });
+  await v(page, 'nut-lui').click();
+});
+
+buoc('Thu cũ đổi mới khi bán nhanh; nhận bảo hành từ kết quả tra, đổi trạng thái, trả máy', async (page, c) => {
+  await page.getByTestId('tab-ban').click();
+  await v(page, 'tieu-de-ban').waitFor();
+  await v(page, 'nut-them-hang').click();
+  await v(page, 'o-tim-hang').fill('Dán cường lực');
+  await v(page, 'o-gia-dv').fill('500000');
+  await v(page, 'nut-them-dv').click();
+  await v(page, 'o-tim-khach-ban').fill('Khách Đổi Máy');
+  await v(page, 'o-sdt-khach-moi').fill('0988 333 444');
+  await v(page, 'nut-khach-moi').click();
+  await v(page, 'nut-may-cu').click();
+  await v(page, 'o-ten-may-cu').fill('iPhone 8 64GB');
+  await v(page, 'o-imei-may-cu').fill('356000999888111');
+  await v(page, 'o-gia-may-cu').fill('300000');
+  await v(page, 'nut-them-may-cu').click();
+  await v(page, 'phai-tra').getByText('200.000 đ').waitFor();
+  assert.strictEqual(await v(page, 'o-khach-tra').inputValue(), '200.000');
+  page.once('dialog', d => d.accept());
+  await v(page, 'nut-ban').click();
+  await v(page, 'da-ban').waitFor({ timeout: 20000 });
+  const kq = await v(page, 'ket-qua-ban').textContent();
+  assert.match(kq, /Máy cũ thu về.*iPhone 8 64GB \(máy cũ\).*300\.000/);
+  assert.ok(!/Còn nợ/.test(kq), 'Trả đủ sau khi trừ máy cũ: ' + kq);
+  const may = await page.evaluate(() => localStorage.getItem('may'));
+  assert.strictEqual((await api(c, { may, fn: 'traMaKho', args: ['356000999888111'] })).result.trangThai, 'trongKho');
+  await chup(page, '13a-thu-may-cu');
+  await v(page, 'nut-ban-moi').click();
+  // Tra bảo hành → Nhận bảo hành: điền sẵn khách, máy, IMEI
+  await page.getByTestId('tab-quet').click();
+  await v(page, 'o-tra').fill('356789012345672');
+  await v(page, 'nut-tra').click();
+  await v(page, 'nut-nhan-bh').first().click({ timeout: 15000 });
+  await v(page, 'o-tinh-trang').fill('Loa rè');
+  assert.strictEqual(await v(page, 'o-imei-sua').inputValue(), '356789012345672');
+  await v(page, 'nut-luu-nhan-may').click();
+  await v(page, 'the-phieu-sua').waitFor({ timeout: 15000 });
+  assert.match(await v(page, 'the-phieu-sua').innerText(), /ĐÃ NHẬN.*Anh Minh.*Loa rè/s);
+  await v(page, 'tt-sua-3').click(); // Đã sửa xong
+  await v(page, 'the-phieu-sua').getByText('ĐÃ SỬA XONG').waitFor({ timeout: 15000 });
+  await khongTranNgang(page);
+  await chup(page, '14-phieu-sua');
+  await v(page, 'nut-tra-may').click();
+  await v(page, 'nut-xac-nhan-tra').click(); // bảo hành: chi phí 0
+  await v(page, 'the-phieu-sua').getByText('ĐÃ TRẢ KHÁCH').waitFor({ timeout: 15000 });
+  await v(page, 'nut-lui').click();
+});
+
+buoc('Kiểm kho theo IMEI; bán có giảm giá, gửi phiếu PDF; khách trả máy (nhập lại kho, trả lại tiền)', async (page, c) => {
+  await page.getByTestId('tab-tai-khoan').click();
+  await v(page, 'mo-kiem-kho').click();
+  const them = async ma => { await v(page, 'o-kiem').fill(ma); await v(page, 'nut-them-kiem').click(); };
+  await them('356789012345698');
+  await them('999999999999');
+  await them('356789012345698'); // trùng: không tính lại
+  await v(page, 'the-kiem-kho').getByText('ĐÃ QUÉT 2 MÁY').waitFor();
+  await v(page, 'nut-so-sanh').click();
+  await v(page, 'kq-kiem').waitFor({ timeout: 15000 });
+  await v(page, 'ds-la').getByText('Chưa nhập kho', { exact: false }).waitFor();
+  await v(page, 'ds-thieu').waitFor(); // máy khác trong kho chưa quét
+  await v(page, 'nut-luu-kiem').click();
+  await v(page, 'kq-kiem').getByText('Đã lưu vào nhật ký').waitFor({ timeout: 15000 });
+  await khongTranNgang(page);
+  await chup(page, '15-kiem-kho');
+  await v(page, 'nut-lui').click();
+  // Bán có giảm giá
+  await page.getByTestId('tab-ban').click();
+  await v(page, 'o-imei-ban').fill('356789012345698');
+  await v(page, 'nut-them-imei').click();
+  await v(page, 'dong-gio').getByText('iPhone 16 Pro Max', { exact: false }).waitFor({ timeout: 15000 });
+  assert.ok((await v(page, 'o-giam-gia').boundingBox()).width >= 120, 'Ô giảm giá phải đủ rộng (từng co lại còn phần đệm)');
+  await v(page, 'o-giam-gia').fill('200000');
+  await v(page, 'tong-cong').getByText('28.000.000 đ').waitFor();
+  await v(page, 'o-tim-khach-ban').fill('Khách Trả Máy');
+  await v(page, 'o-sdt-khach-moi').fill('0988 555 666');
+  await v(page, 'nut-khach-moi').click();
+  page.once('dialog', d => d.accept());
+  await v(page, 'nut-ban').click();
+  await v(page, 'da-ban').waitFor({ timeout: 20000 });
+  const [tai] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }), v(page, 'nut-gui-phieu').click()]);
+  assert.match(tai.suggestedFilename(), /^Phieu ban hang \d{3}-\d{4}-DH\.pdf$/);
+  // Khách trả máy vừa mua: nhập lại kho, trả lại 28.000.000
+  await v(page, 'nut-xem-khach').click();
+  await v(page, 'nut-tra-may-ban').click({ timeout: 15000 });
+  await v(page, 'xem-tra').getByText('hủy đơn', { exact: false }).waitFor({ timeout: 15000 });
+  assert.strictEqual(await v(page, 'o-hoan').inputValue(), '28.000.000');
+  await v(page, 'nut-nhan-tra').click();
+  await v(page, 'ket-qua-tra').waitFor({ timeout: 15000 });
+  assert.match(await v(page, 'ket-qua-tra').innerText(), /đã hủy.*28\.000\.000/s);
+  const may = await page.evaluate(() => localStorage.getItem('may'));
+  assert.strictEqual((await api(c, { may, fn: 'traMaKho', args: ['356789012345698'] })).result.trangThai, 'trongKho');
+  await chup(page, '16-tra-may');
+  await v(page, 'nut-xong-tra').click();
+  await v(page, 'cong-no').getByText('Không còn nợ').waitFor({ timeout: 15000 });
+  await v(page, 'nut-lui').click();
+  await page.getByTestId('tab-ban').click();
+  await v(page, 'nut-ban-moi').click();
 });
 
 buoc('Tài khoản → Đăng xuất: hỏi lại, về màn hình đăng nhập, mở lại vẫn phải đăng nhập', async (page, c) => {

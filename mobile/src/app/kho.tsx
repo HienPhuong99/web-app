@@ -1,58 +1,49 @@
 // Kho: kiểm tra một IMEI đang ở đâu (còn trong kho / đã bán / chưa nhập), tồn kho từng mặt hàng (lọc còn / sắp hết / hết, sắp theo tồn, bán chạy, giá); bấm mặt hàng xem thẻ kho.
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, TextInput, View } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../lib/auth';
 import type { HangKho, MaKho } from '../lib/api';
 import { ngay, tien } from '../lib/dinhDang';
-import { LOC_KHO, SX_KHO, demKho, locKho, sapHet, type LocKho, type SxKho } from '../lib/locDs';
+import { LOC_KHO, SX_KHO, demKho, locKho, sapHet, sxMacDinh, type LocKho, type SxKho } from '../lib/locDs';
 import { chuanHoaMa } from '../lib/maQuet';
-import { BoLoc } from '../ui/BoLoc';
-import { ChuLoi, ChuNhat, Dong, DongTT, KhungTrang, Nhan, OTim, Vach } from '../ui/DanhSach';
+import { useDuLieu } from '../lib/useDuLieu';
+import { BoLoc, BoSapXep } from '../ui/BoLoc';
+import { ChuLoi, ChuNhat, Dong, DongTT, KhungDanhSach, Nhan, OTim } from '../ui/DanhSach';
 import { DauTrang } from '../ui/DauTrang';
 import { HangLayMa } from '../ui/KhungQuet';
 import { The } from '../ui/The';
+import { DongCapNhat, KhungCho, useKeo } from '../ui/TrangThaiTai';
 import { mau } from '../ui/theme';
 
 export default function KhoMan() {
-  const { goi } = useAuth();
-  const [hang, setHang] = useState<HangKho[] | null>(null), [loi, setLoi] = useState(''), [dangTai, setDangTai] = useState(false);
-  const [q, setQ] = useState(''), [loc, setLoc] = useState<LocKho>('tat'), [sx, setSx] = useState<SxKho>('ten');
+  const dl = useDuLieu<HangKho[]>('khoMay', []), hang = dl.du, keo = useKeo(dl.lamMoi);
+  const [q, setQ] = useState(''), [loc, setLoc] = useState<LocKho>('tat'), [sx, setSx] = useState<SxKho>(sxMacDinh(SX_KHO));
 
-  const tai = useCallback(async () => {
-    setDangTai(true);
-    try { setHang(await goi<HangKho[]>('khoMay')); setLoi(''); } catch (e) { setLoi((e as Error).message); } finally { setDangTai(false); }
-  }, [goi]);
-  useFocusEffect(useCallback(() => { tai(); }, [tai]));
-
-  const ds = useMemo(() => locKho(hang ?? [], q, loc, sx), [hang, q, loc, sx]);
+  const ds = useMemo(() => (hang ? locKho(hang, q, loc, sx) : null), [hang, q, loc, sx]);
   const tongTon = (hang ?? []).reduce((s, h) => s + Math.max(0, h.ton), 0);
 
   return (
-    <KhungTrang coTab={false} refreshControl={<RefreshControl refreshing={dangTai && !!hang} onRefresh={tai} tintColor={mau.cam} />}>
-      <DauTrang tieuDe="Kho hàng" phu={hang ? `${hang.length} mặt hàng · ${tongTon} sản phẩm còn trong kho` : undefined} />
-      <KiemTraIMEI />
-      <OTim value={q} onChangeText={setQ} placeholder="Tìm hàng theo tên, mã, model" testID="o-tim-kho" />
-      <BoLoc ds={LOC_KHO} chon={loc} onChon={setLoc} dem={v => demKho(hang ?? [], v)} testID="loc-kho" />
-      <BoLoc ds={SX_KHO} chon={sx} onChon={setSx} sapXep testID="sx-kho" />
-      <View style={{ height: 12 }} />
-      <ChuLoi chu={loi} />
-      {!hang && !loi ? <ChuNhat chu="Đang tải…" /> : null}
-      {hang ? (
-        <The style={{ paddingVertical: 6 }} testID="ds-kho">
-          {!ds.length ? <ChuNhat chu="Không có mặt hàng nào phù hợp." style={{ marginVertical: 10 }} /> : null}
-          {ds.map((h, i) => (
-            <View key={h.MaHH}>
-              {i ? <Vach /> : null}
-              <Dong chinh={h.TenHang} phu={[h.GiaLe ? 'Lẻ ' + tien(h.GiaLe) : '', h.MaHH].filter(Boolean).join(' · ')}
-                ben={`Tồn ${h.ton}`} benMau={h.ton <= 0 ? mau.do : sapHet(h) ? mau.vang : mau.xanh} benPhu={h.DVT || undefined}
-                onPress={() => router.push({ pathname: '/kho/[ma]', params: { ma: h.MaHH, ten: h.TenHang } })} testID={'kho-' + h.MaHH} />
-            </View>
-          ))}
-        </The>
-      ) : null}
-    </KhungTrang>
+    <KhungDanhSach coTab={false} refreshControl={<RefreshControl {...keo} />} testID="ds-kho"
+      dau={
+        <View style={{ marginBottom: 12 }}>
+          <DauTrang tieuDe="Kho hàng" phu={hang ? `${hang.length} mặt hàng · ${tongTon} sản phẩm còn trong kho` : undefined} />
+          <DongCapNhat dl={dl} />
+          <KiemTraIMEI />
+          <OTim value={q} onChangeText={setQ} placeholder="Tìm hàng theo tên, mã, model" testID="o-tim-kho" />
+          <BoLoc ds={LOC_KHO} chon={loc} onChon={setLoc} dem={v => demKho(hang ?? [], v)} testID="loc-kho" />
+          <BoSapXep ds={SX_KHO} chon={sx} onChon={setSx} testID="sx-kho" />
+          {!hang ? <ChuLoi chu={dl.loi} /> : null}
+        </View>
+      }
+      ds={ds} khoa={h => h.MaHH} rong="Không có mặt hàng nào phù hợp." choTai={dl.loi ? null : <KhungCho dong={6} />}
+      ve={h => (
+        <Dong chinh={h.TenHang} phu={[h.GiaLe ? 'Lẻ ' + tien(h.GiaLe) : '', h.MaHH].filter(Boolean).join(' · ')}
+          ben={`Tồn ${h.ton}`} benMau={h.ton <= 0 ? mau.do : sapHet(h) ? mau.vang : mau.xanh} benPhu={h.DVT || undefined}
+          onPress={() => router.push({ pathname: '/kho/[ma]', params: { ma: h.MaHH, ten: h.TenHang } })} testID={'kho-' + h.MaHH} />
+      )}
+    />
   );
 }
 

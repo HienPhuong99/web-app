@@ -213,7 +213,10 @@ const ctx = vm.createContext({
     DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' },
     computeDigest: (alg, s) => [...crypto.createHash(alg).update(String(s), 'utf8').digest()].map(b => (b > 127 ? b - 256 : b)),
     base64Decode: s => { if (!/^[A-Za-z0-9+\/=\s]*$/.test(s)) throw new Error('Invalid argument'); return [...Buffer.from(s, 'base64')].map(b => (b > 127 ? b - 256 : b)); },
-    newBlob: (bytes, type, name) => ({ getBytes: () => bytes, getContentType: () => type, getName: () => name }),
+    newBlob: function blob(bytes, type, name) { // chuỗi (HTML) → mảng byte; getAs giả: giữ nội dung, đổi loại (đủ để kiểm tra luồng tạo PDF)
+      if (typeof bytes === 'string') bytes = [...Buffer.from(bytes, 'utf8')].map(b => (b > 127 ? b - 256 : b));
+      return { getBytes: () => bytes, getContentType: () => type, getName: () => name, getAs: t => blob(bytes, t, name) };
+    },
     base64Encode: bytes => Buffer.from(bytes.map(b => b & 255)).toString('base64'),
     formatDate: (d, tz, fmt) => {
       const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(d).map(x => [x.type, x.value]));
@@ -224,6 +227,18 @@ const ctx = vm.createContext({
 // Apps Script gộp mọi file .gs vào một phạm vi chung: nạp lần lượt như vậy (Code.gs trước)
 fs.readdirSync(ROOT).filter(f => f.endsWith('.gs')).sort((a, b) => (a === 'Code.gs' ? -1 : b === 'Code.gs' ? 1 : a.localeCompare(b)))
   .forEach(f => vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f }));
+// Trên Google mỗi lần gọi từ web / app / bộ hẹn giờ / trình soạn thảo là một lần chạy mới: biến toàn cục (bảng đã đọc, tiêu đề…) bắt đầu lại.
+// Ở đây mọi lần gọi dùng chung một ngữ cảnh, nên lần gọi hàm công khai từ ngoài (không lồng trong hàm khác) đặt lại các biến nhớ như lần chạy mới.
+let dangChay = 0;
+Object.keys(ctx).filter(k => typeof ctx[k] === 'function' && /^[a-z]\w*[A-Za-z0-9]$/.test(k)).forEach(k => {
+  const f = ctx[k];
+  ctx[k] = function (...a) {
+    const datLai = () => vm.runInContext('BANG_DA_DOC_ = null; TIEU_DE_DA_DOC_ = null; PHIEN_BAN_ = "";', ctx);
+    if (!dangChay) datLai();
+    dangChay++;
+    try { return f.apply(this, a); } finally { if (!--dangChay) datLai(); } // hết lần chạy: kiểm thử đọc thẳng (G.readTable_…) thấy dữ liệu mới
+  };
+});
 
 // ---- Dữ liệu
 const MAU_APP = process.argv.includes('--mau-app'); // thêm vài máy đã giao có IMEI để thử app điện thoại

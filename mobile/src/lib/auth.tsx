@@ -5,7 +5,11 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import { goiApi, LoiPhien, type DangNhapKQ, type NguoiDung } from './api';
+import { datNoiLuu, xoaHet } from './boNho';
 import { doc, ghi } from './luuTru';
+import { noiLuuMay } from './noiLuuMay';
+
+datNoiLuu(noiLuuMay);
 
 /** Máy chủ mặc định: EXPO_PUBLIC_API_URL (khi chạy thử với dev/chay-thu.js) hoặc link web app trong app.json */
 export const MAY_CHU_MAC_DINH: string = process.env.EXPO_PUBLIC_API_URL || (Constants.expoConfig?.extra?.apiUrl as string) || '';
@@ -16,6 +20,10 @@ type Auth = TrangThai & {
   dangXuat: () => Promise<void>;
   doiMayChu: (url: string) => Promise<void>;
   goi: <T>(fn: string, ...args: unknown[]) => Promise<T>;
+  /** Như goi nhưng máy chủ không dùng kết quả đã ghi nhớ (kéo xuống để làm mới) */
+  goiMoi: <T>(fn: string, ...args: unknown[]) => Promise<T>;
+  /** Lệnh ghi kèm mã lần gửi (taoMaGhi): giữ nguyên mã khi thử lại để không ghi trùng */
+  goiGhi: <T>(maGhi: string, fn: string, ...args: unknown[]) => Promise<T>;
 };
 
 const Ctx = createContext<Auth | null>(null);
@@ -33,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const xoaPhien = useCallback(async () => {
-    await Promise.all([ghi('may', null), ghi('user', null)]);
+    await Promise.all([ghi('may', null), ghi('user', null), xoaHet()]); // dữ liệu đã nhớ của tài khoản cũng xóa
     setTt(t => ({ ...t, may: null, user: null }));
   }, []);
 
@@ -59,12 +67,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setTt(t => ({ ...t, mayChu: v }));
   }, []);
 
-  const goi = useCallback(async <T,>(fn: string, ...args: unknown[]): Promise<T> => {
-    try { return await goiApi<T>(tt.mayChu, { fn, args, may: tt.may }); }
+  const goiVoi = useCallback(async <T,>(moi: boolean, fn: string, args: unknown[], maGhi?: string): Promise<T> => {
+    try { return await goiApi<T>(tt.mayChu, { fn, args, may: tt.may, moi, maGhi }); }
     catch (e) { if (e instanceof LoiPhien) await xoaPhien(); throw e; }
   }, [tt.mayChu, tt.may, xoaPhien]);
+  const goi = useCallback(<T,>(fn: string, ...args: unknown[]) => goiVoi<T>(false, fn, args), [goiVoi]);
+  const goiMoi = useCallback(<T,>(fn: string, ...args: unknown[]) => goiVoi<T>(true, fn, args), [goiVoi]);
+  const goiGhi = useCallback(<T,>(maGhi: string, fn: string, ...args: unknown[]) => goiVoi<T>(false, fn, args, maGhi), [goiVoi]);
 
-  const gt = useMemo<Auth>(() => ({ ...tt, dangNhap, dangXuat, doiMayChu, goi }), [tt, dangNhap, dangXuat, doiMayChu, goi]);
+  const gt = useMemo<Auth>(() => ({ ...tt, dangNhap, dangXuat, doiMayChu, goi, goiMoi, goiGhi }), [tt, dangNhap, dangXuat, doiMayChu, goi, goiMoi, goiGhi]);
   return <Ctx.Provider value={gt}>{children}</Ctx.Provider>;
 }
 

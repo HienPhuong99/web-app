@@ -189,6 +189,8 @@ function thuDotHopDong(token, soHD, dot, tt) {
     const f = timDongLich_(soHD, dot);
     if (!f.r) throw new Error('Không tìm thấy đợt ' + dot + ' của hợp đồng ' + soHD + '.');
     const row = rowObj_(f.sh, f.r);
+    // Lịch đánh số lại theo ngày khi sửa: máy đang mở bản cũ gửi kèm ngày / số tiền của đợt đang thấy để không thu nhầm đợt
+    if ((tt.kiemNgay != null && String(tt.kiemNgay) !== String(row.NgayDen)) || (tt.kiemTien != null && +tt.kiemTien !== +row.SoTien)) throw new Error(LICH_DOI_);
     if (row.SoPT) throw new Error('Đợt ' + dot + ' đã thu (phiếu ' + row.SoPT + ').');
     const hinhThuc = String(tt.HinhThuc || '').trim() || (cuaHang_(CUR_SHOP).congTy.hinhThuc || [])[0] || 'Chuyển khoản';
     const pt = ghiPhieuThu_(user, { Ngay: ngayHopLe_(tt.Ngay) || now_().slice(0, 10), SoDH: hd.SoDH, SoTien: row.SoTien, HinhThuc: hinhThuc,
@@ -200,12 +202,14 @@ function thuDotHopDong(token, soHD, dot, tt) {
 }
 
 /** Quản trị hủy ghi nhận thu của một đợt: xóa phiếu thu đã tạo và đưa đợt về chưa thu. */
-function huyThuDotHopDong(token, soHD, dot) {
+const LICH_DOI_ = 'Lịch thanh toán vừa thay đổi ở máy khác. Tải lại hợp đồng rồi thử lại.';
+function huyThuDotHopDong(token, soHD, dot, kiemSoPT) {
   const user = user_(token, true);
   return withLock_(() => {
     const f = timDongLich_(soHD, dot);
     if (!f.r) throw new Error('Không tìm thấy đợt ' + dot + ' của hợp đồng ' + soHD + '.');
     const row = rowObj_(f.sh, f.r);
+    if (kiemSoPT != null && String(kiemSoPT) !== String(row.SoPT)) throw new Error(LICH_DOI_); // đang thấy đợt khác (lịch đã đánh số lại)
     if (!row.SoPT) throw new Error('Đợt ' + dot + ' chưa thu tiền.');
     deleteWhere_('ThuTien', row.SoPT);
     writeRow_(f.sh, f.r, Object.assign({}, row, { SoPT: '', NgayThu: '' }));
@@ -884,7 +888,7 @@ function nhanBanHopDong(token, soNguon, loaiMoi, taoFile) {
   if (!goc) throw new Error('Không tìm thấy hợp đồng ' + soNguon + '.');
   const doc = { LoaiHD: String(loaiMoi || '').trim() || goc.LoaiHD, Ngay: now_().slice(0, 10), TrangThai: HD_TRANG_THAI[0], VAT: goc.VAT, NguoiPhuTrach: goc.NguoiPhuTrach,
     SoDH: goc.SoDH && findObj_('DonHang', goc.SoDH) ? goc.SoDH : '', lines: dongHopDong_(soNguon) };
-  ['MaKH', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang'].forEach(k => { doc[k] = goc[k]; });
+  ['MaKH', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'SoCCCD', 'CCCDCap', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang'].forEach(k => { doc[k] = goc[k]; });
   const kq = { nguon: soNguon, doc: luuHopDong(token, doc).doc };
   if (taoFile) {
     try { const f = taoFileHopDong(token, kq.doc.SoHD); kq.doc = f.doc; kq.conSot = f.conSot; }
