@@ -466,6 +466,8 @@ assert.match(api({ may: binh4, fn: 'noiDungThongBao_' }).error, /Không có ch�
   const thuNay = G.readTable_('ThuTien').filter(p => String(p.Ngay).slice(0, 10) === today);
   const thuTM = thuNay.filter(p => p.HinhThuc === 'Tiền mặt').reduce((s, p) => s + p.SoTien, 0), thuNH = thuNay.reduce((s, p) => s + p.SoTien, 0) - thuTM;
   let sq = goi(binh4, 'soQuyMay', '');
+  // gợi ý ô "Chi cho": nhà cung cấp đã dùng, không gồm tồn đầu kỳ / kiểm kê / máy cũ thu của khách
+  assert.ok(sq.ncc.includes('NCC Minh Phát') && !sq.ncc.some(x => /đầu kỳ|kiểm kê/i.test(x)) && new Set(sq.ncc).size === sq.ncc.length, JSON.stringify(sq.ncc));
   assert.deepStrictEqual(sq.ton, { tienMat: 1000000 + thuTM - 50000, nganHang: 2000000 + thuNH - 30000000 });
   assert.deepStrictEqual(sq.trongNgay, { thu: thuTM + thuNH, chi: 30050000 });
   assert.ok(sq.ds.some(x => x.loai === 'chi' && x.so === pc.SoPC) && sq.ds.some(x => x.loai === 'thu'));

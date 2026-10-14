@@ -1,6 +1,6 @@
 // Sổ quỹ: tiền mặt tại quầy và tiền trong ngân hàng cuối ngày, thu – chi trong ngày (lật ngày trước / sau), từng phiếu thu / chi.
 // Ghi phiếu chi ngay trên máy: trả nhà cung cấp, ship, điện nước… (sửa / xóa phiếu chi làm trên web, chỉ quản trị).
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Platform, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -9,6 +9,7 @@ import { useAuth } from '../lib/auth';
 import type { PhieuChi, SoQuy } from '../lib/api';
 import { ngay as dmy, thu, tien, tienGon } from '../lib/dinhDang';
 import { docTien, soTienNhap } from '../lib/gioHang';
+import { timKiem } from '../lib/timKiem';
 import { useDuLieu, useSuaBoNho } from '../lib/useDuLieu';
 import { Chip } from '../ui/Chip';
 import { ChuLoi, ChuNhat, Dong, KhungTrang, TieuDeMuc, Vach } from '../ui/DanhSach';
@@ -75,6 +76,9 @@ function PhieuChiMoi({ sq, onXong, onHuy }: { sq: SoQuy; onXong: () => void; onH
   const [loai, setLoai] = useState(sq.loaiChi[sq.loaiChi.length - 1] || 'Chi khác'), [soTien, setSoTien] = useState<number | null>(null);
   const [hinhThuc, setHinhThuc] = useState(sq.hinhThuc.includes('Tiền mặt') ? 'Tiền mặt' : sq.hinhThuc[0] || 'Tiền mặt');
   const [doiTac, setDoiTac] = useState(''), [ghiChu, setGhiChu] = useState(''), [loi, setLoi] = useState(''), [dang, setDang] = useState(false), [imei, setImei] = useState('');
+  // Gợi ý tên nhà cung cấp đã dùng theo chữ đang gõ (tìm kiếm thông minh: không dấu, viết tắt, gõ sai một chữ)
+  const [goiY, setGoiY] = useState(false);
+  const nccKhop = useMemo(() => (doiTac.trim() ? timKiem(sq.ncc ?? [], doiTac, x => x).filter(x => x !== doiTac.trim()).slice(0, 5) : []), [sq.ncc, doiTac]);
   const traNCC = loai === sq.loaiChi[0], lamLai = loai === 'Làm lại máy cũ'; // làm lại máy: ghi IMEI, tiền chi vào giá vốn máy đó
   const luu = async () => {
     setLoi('');
@@ -104,7 +108,11 @@ function PhieuChiMoi({ sq, onXong, onHuy }: { sq: SoQuy; onXong: () => void; onH
       <Text style={s.nhanO}>Hình thức</Text>
       <View style={s.chips}>{sq.hinhThuc.map(x => <Chip key={x} chu={x} chon={x === hinhThuc} onPress={() => setHinhThuc(x)} />)}</View>
       {lamLai ? <TextInput style={s.o} value={imei} onChangeText={setImei} placeholder="IMEI máy làm lại * (máy đang trong kho)" placeholderTextColor={mau.xam} autoCapitalize="characters" autoCorrect={false} testID="o-imei-chi" /> : null}
-      <TextInput style={s.o} value={doiTac} onChangeText={setDoiTac} placeholder={traNCC ? 'Tên nhà cung cấp *' : 'Chi cho ai (không bắt buộc)'} placeholderTextColor={mau.xam} testID="o-doi-tac-chi" />
+      <TextInput style={s.o} value={doiTac} onChangeText={t => { setDoiTac(t); setGoiY(true); }} onBlur={() => setTimeout(() => setGoiY(false), 200)}
+        placeholder={traNCC ? 'Tên nhà cung cấp *' : 'Chi cho ai (không bắt buộc)'} placeholderTextColor={mau.xam} testID="o-doi-tac-chi" />
+      {goiY && nccKhop.length ? (
+        <View style={s.chips} testID="goi-y-ncc">{nccKhop.map(x => <Chip key={x} chu={x} chon={false} onPress={() => { setDoiTac(x); setGoiY(false); }} testID={'ncc-' + x} />)}</View>
+      ) : null}
       <TextInput style={s.o} value={ghiChu} onChangeText={setGhiChu} placeholder="Ghi chú, vd: ship giao máy cho anh Minh" placeholderTextColor={mau.xam} />
       <ChuLoi chu={loi} testID="loi-chi" />
       <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>

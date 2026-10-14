@@ -537,9 +537,19 @@ function timKiem_(ds, q, text, o) {
 const words = q => phanTichTim_(q);
 // Bản ghi đã chuẩn hóa để tìm tính 1 lần cho mỗi bản ghi; bản ghi mới từ máy chủ tự tính lại
 const searchCache = new WeakMap();
-const banCua = (obj, text) => { let b = searchCache.get(obj); if (b === undefined) { b = banTim_(text(obj)); searchCache.set(obj, b); } return b; };
+const banCua = (obj, text) => {
+  if (obj === null || typeof obj !== 'object') return banTim_(text(obj)); // chuỗi (danh sách gợi ý): không ghi nhớ được trong WeakMap
+  let b = searchCache.get(obj);
+  if (b === undefined) { b = banTim_(text(obj)); searchCache.set(obj, b); }
+  return b;
+};
 const diemCua = (w, obj, text, ganDung) => diemTim_(w, banCua(obj, text), ganDung);
 const matches = (w, obj, text, ganDung) => diemCua(w, obj, text, ganDung) > 0;
+// Lọc giữ thứ tự (danh sách theo ngày…); không thấy gì thì thử gần đúng
+function locTim(ds, q, text) {
+  const w = words(q), dung = ds.filter(x => matches(w, x, text));
+  return dung.length || !w.length ? dung : ds.filter(x => matches(w, x, text, true));
+}
 // Ô gợi ý: xếp theo độ khớp (cộng thêm diemThem(x) nếu có), không thấy gì thì thử gần đúng (gõ sai chính tả)
 function xepTim(ds, q, text, n, diemThem) {
   const w = words(q);
@@ -863,7 +873,7 @@ function closeModal() { const m = $('#modal'); m.classList.add('hidden'); m.inne
 function formHtml(fields, o) {
   return '<div class="fgrid">' + fields.map(([k, label, opt = {}]) => {
     const v = o[k] ?? '';
-    const a = `name="${k}"${opt.ro ? ' readonly' : ''}${opt.ph ? ` placeholder="${esc(opt.ph)}"` : ''}${opt.list ? ` list="${opt.list}"` : ''}`;
+    const a = `name="${k}"${opt.ro ? ' readonly' : ''}${opt.ph ? ` placeholder="${esc(opt.ph)}"` : ''}${opt.list ? ` data-goi-y="${opt.list}" autocomplete="off"` : ''}`;
     const input = opt.area ? `<textarea ${a} rows="3">${esc(v)}</textarea>`
       : opt.options ? `<select ${a}${opt.ro ? ' disabled' : ''}>${opt.options.map(x => { const [val, txt] = Array.isArray(x) ? x : [x, x]; return `<option value="${esc(val)}"${String(val) === String(v) ? ' selected' : ''}>${esc(txt)}</option>`; }).join('')}</select>`
       : `<input ${a} type="${opt.type || 'text'}"${opt.money ? ' class="money num" inputmode="numeric"' : ''} value="${esc(opt.money ? money(v) : v)}">`;
@@ -875,7 +885,22 @@ function formData(root) {
   root.querySelectorAll('.box-b [name]').forEach(i => { o[i.name] = i.type === 'checkbox' ? i.checked : i.classList.contains('money') ? parseMoney(i.value) : i.value.trim(); });
   return o;
 }
-const datalist = (id, list) => `<datalist id="${id}">${[...new Set(list.filter(Boolean))].map(x => `<option value="${esc(x)}">`).join('')}</datalist>`;
+// Ô có gợi ý (nhóm hàng, ĐVT, ngân hàng, nhà cung cấp…): ghi danh sách theo tên, ô nào có data-goi-y="tên" thì hiện ô gợi ý chung
+// (tìm kiếm thông minh như mọi ô tìm khác) thay cho datalist của trình duyệt (chỉ so khớp đầu chữ, phải gõ đúng dấu). Trả '' để chèn vào HTML như cũ.
+const GOI_Y = {};
+const datalist = (id, list) => { GOI_Y[id] = [...new Set(list.map(x => String(x ?? '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')); return ''; };
+const goiYSource = id => q => (String(q).trim() ? xepTim(GOI_Y[id] || [], q, x => x, 30) : (GOI_Y[id] || []).slice(0, 50)).map(x => ({ item: x, html: `<b>${esc(x)}</b>` }));
+let dangChonGoiY = false;
+function hienGoiY(t) {
+  const id = t.dataset && t.dataset.goiY;
+  if (!id || dangChonGoiY || t.readOnly || t.disabled || !(GOI_Y[id] || []).length) return;
+  showPicker(t, goiYSource(id), x => { // báo cho form như khi gõ tay (chứng từ, hợp đồng nghe sự kiện input; form khác đọc lúc lưu)
+    t.value = x; dangChonGoiY = true;
+    try { t.dispatchEvent(new Event('input', { bubbles: true })); t.dispatchEvent(new Event('change', { bubbles: true })); } finally { dangChonGoiY = false; }
+  }, true);
+}
+document.addEventListener('focusin', e => hienGoiY(e.target));
+document.addEventListener('input', e => hienGoiY(e.target));
 
 // Ô tiền: bỏ dấu chấm khi sửa (chọn sẵn cả số để gõ số mới là thay luôn), hiện dấu chấm khi rời ô
 document.addEventListener('focusin', e => { const t = e.target; if (t.classList && t.classList.contains('money')) { t.value = parseMoney(t.value); if (!t.readOnly) t.select(); } });
@@ -1808,7 +1833,7 @@ function vDoc(el) {
     fld('Ghi chú', inp('GhiChu', 'placeholder="In ngay dưới bảng hàng"'), 'full'),
   ] : [
     soField, fld('Ngày', inp('Ngay', 'type="date"')),
-    fld(L === 'NK' ? 'Nhà cung cấp / nguồn hàng' : 'Người nhận / công trình', inp('DoiTac', L === 'NK' ? 'placeholder="vd: tên nhà cung cấp, Tồn đầu kỳ, Kiểm kê"' : '')),
+    fld(L === 'NK' ? 'Nhà cung cấp / nguồn hàng' : 'Người nhận / công trình', inp('DoiTac', L === 'NK' ? 'placeholder="vd: tên nhà cung cấp, Tồn đầu kỳ, Kiểm kê" data-goi-y="dsNCC" autocomplete="off"' : '') + (L === 'NK' ? datalist('dsNCC', dsNCC()) : '')),
     L === 'XK' ? fld('Theo đơn hàng', `<input value="${esc(d.SoDH || '')}" readonly placeholder="Không theo đơn (xuất công trình, hàng mẫu…)">`) : '',
     fld('Ghi chú', inp('GhiChu'), 'full'),
   ];
@@ -2680,7 +2705,7 @@ function vHD(el) {
     ${fld('Chức vụ', inp('ChucVu'))}
     ${fld('Số điện thoại', inp('SDT'))}
     ${fld('Số tài khoản', inp('SoTK'))}
-    ${fld('Ngân hàng', inp('NganHang', 'list="dl-nh"'))}${datalist('dl-nh', S.nganHang.map(b => b[1]))}
+    ${fld('Ngân hàng', inp('NganHang', 'data-goi-y="dl-nh" autocomplete="off"'))}${datalist('dl-nh', S.nganHang.map(b => b[1]))}
     <p class="muted full" style="grid-column:1/-1;margin:0;font-size:12.5px">Chỉ ghi số CCCD/CMND khi hợp đồng cần (vd. thu mua máy cũ, bán cho khách cá nhân). Hãy báo mục đích cho khách và xin sự đồng ý trước khi ghi (Nghị định 13/2023/NĐ-CP); mẫu hợp đồng đã có điều khoản đồng ý xử lý dữ liệu cá nhân.</p>
   </div></div>
   <div class="card" style="margin-top:16px"><div class="card-h"><h3>3. Bảng hàng hóa</h3>${khoa ? '<span class="muted" style="margin-left:auto;font-size:12.5px">Hợp đồng đã hiệu lực: chỉ quản trị sửa hàng và số tiền</span>' : ''}</div>
@@ -2899,7 +2924,7 @@ function openHDHangLoat() {
   });
   const q = $('[data-q]', m), list = $('[data-list]', m);
   const hien = () => {
-    const w = words(q.value), ds = S.hopDong.filter(h => matches(w, h, hdText));
+    const ds = locTim(S.hopDong, q.value, hdText);
     list.innerHTML = ds.length ? ds.slice(0, 200).map(h => `<label class="check" style="display:flex;gap:8px;padding:5px 2px"><input type="checkbox" data-so="${esc(h.SoHD)}"${sel.has(h.SoHD) ? ' checked' : ''}>
       <span><b>${esc(h.SoHD)}</b> · ${esc(h.TenDN)}<span class="sub">${esc(h.LoaiHD)} · ${money(h.TongCong)} ₫</span></span></label>`).join('') : '<p class="muted">Không có hợp đồng phù hợp.</p>';
     $('[data-n]', m).textContent = sel.size;
@@ -3469,6 +3494,7 @@ function vSoQuy(el) {
 const NGUON_KHONG_NO = /tồn đầu|đầu kỳ|kiểm kê|chuyển kho/i;
 // Phiếu nhập từ khách (thu cũ đổi mới, khách trả hàng: Đối tác là tên khách) không phải mua của nhà cung cấp; nhận theo số đơn hoặc ghi chú server tự ghi
 const NHAP_TU_KHACH = /^(Thu cũ đổi mới|Khách trả hàng)/i;
+const dsNCC = () => S.phieuKho.filter(laNhapNCC).map(p => String(p.DoiTac).trim()).concat(S.phieuChi.map(c => c.DoiTac)); // tên nhà cung cấp đã dùng (gợi ý)
 const laNhapNCC = p => p.Loai === 'Nhập' && !p.SoDH && String(p.DoiTac || '').trim() && !NGUON_KHONG_NO.test(p.DoiTac) && !NHAP_TU_KHACH.test(String(p.GhiChu || '').trim()); // phiếu nhập gắn đơn hàng (trả hàng) là từ khách
 function noNCC() {
   const m = {}, row = k => m[k] || (m[k] = { ten: k, nhap: 0, soPhieu: 0, tra: 0, cuoi: '' });
@@ -3505,13 +3531,13 @@ function openChi(pc) {
   const isNew = !pc || !pc.SoPC, sua = isNew || isAdmin(), loai = S.loaiChi.length ? S.loaiChi : ['Chi khác'];
   const hinhThuc = S.congTy.hinhThuc || ['Tiền mặt', 'Chuyển khoản'];
   pc = Object.assign({ Ngay: today(), Loai: loai[loai.length - 1], DoiTac: '', SoTien: '', HinhThuc: hinhThuc.includes('Tiền mặt') ? 'Tiền mặt' : hinhThuc[0], GhiChu: '' }, pc || {});
-  const ncc = [...new Set(S.phieuKho.filter(laNhapNCC).map(p => String(p.DoiTac).trim()).concat(S.phieuChi.map(c => c.DoiTac)).filter(Boolean))];
+  const ncc = dsNCC();
   const ro = sua ? '' : ' disabled', chon = (ds, v) => ds.concat(ds.includes(v) ? [] : [v]).map(x => `<option${x === v ? ' selected' : ''}>${esc(x)}</option>`).join('');
   modal({
     title: isNew ? 'Lập phiếu chi' : 'Phiếu chi ' + pc.SoPC,
     body: `<div class="fgrid">
       <label class="field"><span class="lb">Loại chi *</span><select name="Loai"${ro}>${chon(loai, pc.Loai)}</select></label>
-      <label class="field"><span class="lb">Chi cho (nhà cung cấp, người nhận)</span><input name="DoiTac" list="dsNCC" value="${esc(pc.DoiTac)}" autocomplete="off"${ro}>${datalist('dsNCC', ncc)}</label>
+      <label class="field"><span class="lb">Chi cho (nhà cung cấp, người nhận)</span><input name="DoiTac" data-goi-y="dsNCC" value="${esc(pc.DoiTac)}" autocomplete="off"${ro}>${datalist('dsNCC', ncc)}</label>
       <label class="field"><span class="lb">Số tiền *</span><input name="SoTien" class="money num" inputmode="numeric" value="${money(pc.SoTien)}"${ro}></label>
       <label class="field"><span class="lb">Ngày chi</span><input name="Ngay" type="date" value="${esc(pc.Ngay)}"${ro}></label>
       <label class="field"><span class="lb">Hình thức</span><select name="HinhThuc"${ro}>${chon(hinhThuc, pc.HinhThuc)}</select></label>

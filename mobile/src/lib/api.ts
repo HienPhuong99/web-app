@@ -76,7 +76,7 @@ export type SoQuy = {
   ngay: string; homNay: string; truoc: string; sau: string; batDau: string;
   ton: { tienMat: number; nganHang: number }; trongNgay: { thu: number; chi: number };
   ds: { loai: 'thu' | 'chi'; so: string; noiDung: string; SoTien: number; HinhThuc: string; MaKH: string; luc: string }[];
-  loaiChi: string[]; hinhThuc: string[];
+  loaiChi: string[]; hinhThuc: string[]; ncc?: string[]; // ncc: tên nhà cung cấp / người nhận đã dùng (gợi ý ô Chi cho)
 };
 export type PhieuChi = { SoPC: string; Ngay: string; Loai: string; DoiTac: string; SoTien: number; HinhThuc: string; GhiChu: string };
 

@@ -386,6 +386,9 @@ buoc('Sổ quỹ: tồn tiền mặt / ngân hàng, ghi phiếu chi; lãi gộp 
   await v(page, 'o-tien-chi').fill('45000');
   await v(page, 'nut-luu-chi').click();
   await v(page, 'loi-chi').getByText('Nhập tên nhà cung cấp', { exact: false }).waitFor();
+  await v(page, 'o-doi-tac-chi').fill('nha cung cao'); // gợi ý nhà cung cấp đã dùng: không dấu, sai một chữ vẫn ra
+  await v(page, 'ncc-Nhà cung cấp').click();
+  assert.strictEqual(await v(page, 'o-doi-tac-chi').inputValue(), 'Nhà cung cấp');
   await v(page, 'loai-chi-Vận chuyển').click();
   await v(page, 'nut-luu-chi').click();
   await v(page, 'ds-quy').getByText('Vận chuyển').waitFor({ timeout: 15000 });

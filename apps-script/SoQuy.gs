@@ -122,7 +122,16 @@ function soQuyMay(token, ngay) {
   ds.sort((a, b) => b.luc.localeCompare(a.luc) || b.so.localeCompare(a.so));
   const lech = k => Utilities.formatDate(new Date(Date.parse(n + 'T12:00:00Z') + k * 864e5), 'UTC', 'yyyy-MM-dd');
   return { ngay: n, homNay: homNay, truoc: lech(-1), sau: n < homNay ? lech(1) : '', batDau: dau.ngay, ton: ton, trongNgay: trong, ds: ds,
-    loaiChi: LOAI_CHI, hinhThuc: (cuaHang_(CUR_SHOP).congTy.hinhThuc || ['Tiền mặt']).slice() };
+    loaiChi: LOAI_CHI, hinhThuc: (cuaHang_(CUR_SHOP).congTy.hinhThuc || ['Tiền mặt']).slice(), ncc: dsNCC_() };
+}
+
+// Tên nhà cung cấp / người nhận đã dùng (gợi ý ô "Chi cho"): bên giao ở phiếu nhập từ nhà cung cấp (không phải tồn đầu kỳ, kiểm kê,
+// máy cũ thu của khách, khách trả hàng) và người nhận ở phiếu chi. Cùng cách lọc với màn Nợ nhà cung cấp của web (laNhapNCC).
+const NGUON_KHONG_NO_ = /tồn đầu|đầu kỳ|kiểm kê|chuyển kho/i, NHAP_TU_KHACH_ = /^(Thu cũ đổi mới|Khách trả hàng)/i;
+function dsNCC_() {
+  const ten = readTable_('PhieuKho').filter(p => p.Loai === 'Nhập' && !p.SoDH && String(p.DoiTac || '').trim() && !NGUON_KHONG_NO_.test(p.DoiTac) && !NHAP_TU_KHACH_.test(String(p.GhiChu || '').trim()))
+    .map(p => String(p.DoiTac).trim()).concat(readTable_('PhieuChi').map(c => String(c.DoiTac || '').trim()));
+  return ten.filter((x, i) => x && ten.indexOf(x) === i).sort((a, b) => a.localeCompare(b, 'vi'));
 }
 
 // ===== Lợi nhuận =====

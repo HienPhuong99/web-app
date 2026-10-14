@@ -217,6 +217,34 @@ BUOC.push(['Xuất kho: gõ vài số cuối là ra máy trong kho, bấm ô IME
     await page.fill('#view .search input', '');
   } finally { page.off('dialog', ghi); }
 }]);
+BUOC.push(['Ô gợi ý dùng tìm kiếm thông minh: nhà cung cấp ở phiếu chi / phiếu nhập, nhóm hàng', async page => {
+  const ghi = d => d.accept();
+  page.on('dialog', ghi);
+  try {
+    // phiếu chi: gõ không dấu, sai một chữ vẫn ra "NCC Thử Một" (nhập ở bước Tài chính)
+    await page.click('#nav a[data-go="soquy"]');
+    await page.locator('#topActions .btn', { hasText: 'Lập phiếu chi' }).click();
+    await page.locator('#modal [name=DoiTac]').pressSequentially('ncc thu mott');
+    await page.locator('#picker:not(.hidden) [data-i]:has-text("NCC Thử Một")').click();
+    assert.strictEqual(await page.inputValue('#modal [name=DoiTac]'), 'NCC Thử Một');
+    await page.locator('#modal [data-close]').first().click();
+    // phiếu nhập: ô nhà cung cấp có gợi ý, chọn xong chứng từ nhận tên
+    await page.click('#nav a[data-go="kho"]');
+    await page.locator('#topActions .btn', { hasText: 'Nhập kho' }).click();
+    await page.locator('input[data-h="DoiTac"]').pressSequentially('thu mot');
+    await page.locator('#picker:not(.hidden) [data-i]:has-text("NCC Thử Một")').click();
+    assert.strictEqual(await page.evaluate(() => S.doc.DoiTac), 'NCC Thử Một');
+    // mặt hàng: bấm vào ô nhóm hàng hiện các nhóm đã có, gõ không dấu để lọc
+    await page.click('#nav a[data-go="hang"]');
+    await page.locator('#topActions .btn', { hasText: 'Thêm mặt hàng' }).click();
+    await page.locator('#modal [name=DVT]').click();
+    await page.waitForSelector('#picker:not(.hidden) [data-i]');
+    await page.locator('#modal [name=DVT]').pressSequentially('may');
+    await page.locator('#picker:not(.hidden) [data-i]:has-text("Máy")').first().click();
+    assert.strictEqual(await page.inputValue('#modal [name=DVT]'), 'Máy');
+    await page.locator('#modal [data-close]').first().click();
+  } finally { page.off('dialog', ghi); }
+}]);
 BUOC.push(['Nhận máy sửa chữa, đổi trạng thái, trả máy lập đơn dịch vụ; thu máy cũ trừ vào đơn', async page => {
   const hoi = [];
   const ghi = d => { hoi.push(d.message()); if (/In phiếu/.test(d.message())) d.dismiss(); else d.accept(); };
