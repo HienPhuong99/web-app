@@ -7,7 +7,7 @@
 | # | Lỗi | Kết luận | Đã làm |
 |---|---|---|---|
 | BUG-01 | App: tra bảo hành theo tên khách bị nuốt dấu cách | **Đúng.** Gõ "Minh Anh" thì app gửi "MINHANH", tìm không ra khách "Anh Minh". | Ô tra giữ dấu cách khi gõ tên nhiều từ. IMEI, serial, số điện thoại vẫn được bỏ cách như cũ. |
-| BUG-02 | Khách trả một phần đơn có giảm giá thì món còn lại thành 0 đ | **Đúng.** Ví dụ máy 30tr + ốp 500k, giảm 600k: khách trả máy thì đơn còn 0 đ và được hoàn đủ 29,9tr. | Giảm giá được chia theo tiền hàng, nên trong ví dụ này đơn còn 490.164 đ và hoàn tối đa 29.409.836 đ. Cột GiamGia của đơn cũng được cập nhật theo. |
+| BUG-02 | Khách trả một phần đơn có giảm giá thì món còn lại thành 0 đ | **Đúng.** Ví dụ máy 30tr + ốp 500k, giảm 600k: khách trả máy thì đơn còn 0 đ và được hoàn đủ 29,9tr. | Đợt 1 chia giảm giá theo tiền hàng; **đợt 2 theo lựa chọn của bạn: trả máy thì mất hết giảm giá** (ốp còn 500k, hoàn tối đa 29,4tr), chỉ trả phụ kiện thì vẫn chia theo tiền hàng. Cột GiamGia của đơn cập nhật theo. |
 | BUG-03A | Máy cũ cùng tên nhưng giá thu khác nhau thì lãi bị sai | **Đúng.** | Máy có IMEI giờ tính **giá vốn đích danh**: giá nhập của chính máy đó cộng phiếu chi "Làm lại máy cũ" của máy đó. |
 | BUG-03B | Nhập hàng tháng sau làm thay đổi lãi các tháng trước | **Đúng.** | Hàng không có IMEI (phụ kiện) tính bình quân **chỉ gồm các lần nhập đến ngày bán**. |
 | BUG-03C | Máy cũ đã trả lại khách vẫn bị tính vào bình quân | **Đúng**, nhưng ảnh hưởng nhỏ. | Phiếu nhập của máy cũ đã trả lại khách không còn được tính vào bình quân. |
@@ -25,20 +25,21 @@
 - **Mã code trích dẫn trong báo cáo** (ví dụ `hdTuDon`) không khớp hẳn với mã thật. Kết luận thì vẫn đúng.
 - **"499/500 kịch bản fuzzing lệch"** là số tự sinh từ một kịch bản ngẫu nhiên. Đó không phải số liệu thật của cửa hàng.
 
-## 3. Cần bạn quyết định
+## 3. Quyết định của bạn và việc đã làm theo (đợt 2)
 
-1. **Chia giảm giá khi khách trả một phần (BUG-02).** Hiện đã làm: giảm giá **chia theo tiền hàng**. Cách khác là khách trả món chính thì **mất toàn bộ giảm giá**, và món còn lại tính giá gốc 500k. Bạn muốn cách nào?
-2. **Hợp đồng từ đơn có giảm giá (BUG-05).** Hiện đã làm: thêm dòng "Giảm giá" với đơn giá âm. Hợp đồng in ra sẽ có dòng `Giảm giá | 1 | -1.000.000`. Cách khác là thêm hẳn cột "Giảm giá" vào hợp đồng và mẫu Google Docs (sửa nhiều hơn). Dòng âm như hiện tại có ổn không?
-3. **"Trả góp", "Quẹt thẻ" đang cộng thẳng vào "Tiền trong ngân hàng" (BUG-06, phần 2).** Đây là thiết kế có chủ ý, không phải lỗi: mọi hình thức khác "Tiền mặt" đều tính là ngân hàng. Nếu bạn có bán trả góp qua công ty tài chính hoặc quẹt thẻ mất phí, có thể làm thêm quỹ "Chờ giải ngân" và trừ phí POS. Bạn có cần không?
-4. **Tính năng mới trong mục 4 của báo cáo** (đây là đề xuất, không phải lỗi). Bạn chọn cái nào cần làm:
-   - Thanh toán kết hợp tiền mặt + chuyển khoản trong một lần Bán nhanh.
-   - Sửa chữa có thay linh kiện thì trừ kho và tính giá vốn linh kiện.
-   - Xem ảnh máy sửa và xuất PDF phiếu nhận máy ngay trên app.
-   - Kiểm kho trên app: lưu tạm danh sách đã quét, xóa từng mã quét nhầm, hỏi lại trước khi bấm "Làm lại".
-   - Thu mua máy cũ lẻ (khách bán đứt lấy tiền, không mua máy mới).
-   - Ô xác nhận bắt buộc "Đã thoát iCloud" khi thu máy cũ, và in tem dán lưng máy.
+| Việc | Bạn chọn | Đã làm |
+|---|---|---|
+| Giảm giá khi khách trả một phần | Trả **máy** thì mất hết giảm giá | Trả máy: món còn lại tính giá gốc (máy 30tr + ốp 500k giảm 600k, trả máy → ốp còn 500k). Chỉ trả phụ kiện: giảm giá vẫn chia theo tiền hàng. |
+| Hợp đồng từ đơn có giảm giá | Giữ dòng "Giảm giá" âm | Giữ nguyên như đợt 1. |
+| Trả góp / quẹt thẻ | Thêm quỹ "Chờ giải ngân" + phí, tự cài | **Cài đặt → Thông tin cửa hàng → "Hình thức chờ giải ngân, % phí"** (mỗi dòng, vd `Trả góp, 0` / `Thẻ tín dụng, 1.8`). Tiền thu bằng các hình thức này vào quỹ **Chờ giải ngân**. Khi tiền về, bấm **Ghi nhận tiền về** (web: Sổ quỹ; app: Sổ quỹ): app gợi ý số thực nhận đã trừ % phí, sửa được theo sao kê; phần chênh tính là chi trong ngày. Chưa cài gì thì sổ quỹ chạy như cũ. |
+| Thanh toán kết hợp | Làm | App **Bán nhanh → "+ Trả thêm hình thức khác"**: vd 10tr tiền mặt + phần còn lại chuyển khoản (mã QR đúng phần chuyển khoản). Mỗi hình thức một phiếu thu, sổ quỹ vào đúng quỹ. |
+| Sửa chữa đầy đủ hơn | Làm | **Linh kiện thay lấy từ kho** (web và app): trả máy thì linh kiện xuất kho theo đơn dịch vụ, giá vốn tính vào lãi; bảo hành miễn phí cũng xuất kho (đơn 0 đ, lãi âm đúng giá vốn linh kiện). **App xem ảnh máy ngay** (bấm để xem to). **App gửi phiếu nhận máy PDF** qua Zalo… |
+| Kiểm kho trên app | Làm | Danh sách mã đã quét **lưu trên máy** (thoát ra, tắt app vẫn còn), **bỏ từng mã quét nhầm**, "Làm lại" hỏi trước (báo cáo cũ nói thiếu chỗ này là sai: đã có hỏi từ trước). |
+| Thu mua máy cũ lẻ, iCloud | Chưa chọn | Không làm. |
 
-## 4. Kiểm thử đã chạy (tất cả đạt)
+**Lưu ý khi triển khai đợt 2:** Sheet tự thêm trang `GiaiNgan` và cột `LinhKien` (trang Sửa chữa) ở lần mở đầu tiên, không cần chạy `caiDat`. Linh kiện xuất kho không chặn khi tồn = 0 (giống phiếu xuất hiện nay); app hiện số tồn khi chọn.
+
+## 4. Kiểm thử đã chạy (tất cả đạt, cả đợt 1 và đợt 2)
 
 - `node dev/kiem-tra.js`: chạy cả bộ test máy chủ, API, tìm kiếm, HTML và dữ liệu thử.
 - `node dev/kiem-tra-api.js`: có thêm test cho BUG-02, BUG-03A/B/C và dòng giảm giá của hợp đồng.
@@ -46,3 +47,4 @@
 - `node dev/kiem-trinh-duyet.js`: test trình duyệt cho web. Có thêm bước hợp đồng từ đơn có giảm giá + IMEI, và bước nợ nhà cung cấp viết khác hoa/thường.
 - `node dev/kiem-trinh-duyet-app.js`: test app điện thoại (bản web). Có thêm bước tra bảo hành theo tên "Minh Anh".
 - `mobile`: `npm run kiem-tra` (typecheck + 34 test) và lint đều sạch.
+- Đợt 2 thêm test: trả máy mất giảm giá, thanh toán kết hợp, quỹ chờ giải ngân (cài đặt, giải ngân trừ phí, xóa), linh kiện sửa chữa (xuất kho, lãi gộp, bảo hành 0 đ), xem ảnh, PDF phiếu nhận máy, kiểm kho lưu tạm / bỏ mã — cả máy chủ, web (trình duyệt) và app (bản web).

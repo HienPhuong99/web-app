@@ -5,7 +5,9 @@
 // máy cũ bằng 0; lãi máy cũ chỉ có khi bán lại máy đó. Khách trả máy mới trong NGAY_GIU_MAY_CU ngày thì nhận lại đúng máy cũ (traHang).
 // Đơn cũ ghi máy cũ bằng phiếu thu hình thức "Thu máy cũ" (bản trước) vẫn giữ nguyên: công nợ đúng, sổ quỹ bỏ qua phiếu đó.
 // Bảo hành – sửa chữa (trang SuaChua): phiếu nhận máy (lỗi, phụ kiện kèm, mật khẩu máy, ngày hẹn trả, ảnh), theo dõi trạng thái tới khi trả khách;
-// trả máy có chi phí thì lập đơn dịch vụ (bán nhanh) để có doanh thu, công nợ, phiếu thu như mọi đơn.
+// trả máy có chi phí thì lập đơn dịch vụ (bán nhanh) để có doanh thu, công nợ, phiếu thu như mọi đơn. Linh kiện lấy từ kho (pin, màn…) ghi vào phiếu;
+// khi trả máy thành các dòng của đơn đó (đơn giá 0, tiền khách trả nằm ở dòng công sửa) nên được xuất kho và tính giá vốn vào lãi gộp,
+// kể cả bảo hành miễn phí (đơn 0 đ, lãi âm đúng bằng giá vốn linh kiện).
 // File này dùng chung phạm vi với Code.gs, Api.gs (banNhanh, luuChungTu, luuThuTien…).
 
 const HT_MAY_CU = 'Thu máy cũ'; // hình thức của phiếu thu ghi giá trị máy cũ: không phải tiền, sổ quỹ bỏ qua
@@ -84,10 +86,33 @@ function thuMayCu(token, o) {
 // ===== Bảo hành – sửa chữa =====
 const homNayCong_ = n => Utilities.formatDate(new Date(Date.parse(homNay_() + 'T12:00:00Z') + n * 864e5), 'UTC', 'yyyy-MM-dd');
 
-/** Một phiếu gửi cho app / web: thêm còn bao nhiêu ngày tới hẹn (âm = quá hẹn), danh sách ảnh */
+/** Một phiếu gửi cho app / web: thêm còn bao nhiêu ngày tới hẹn (âm = quá hẹn), danh sách ảnh, linh kiện (mảng) */
 function phieuSua_(r, homNay) {
   const n = r.NgayHen && r.TrangThai !== 'Đã trả khách' ? Math.round((Date.parse(String(r.NgayHen).slice(0, 10)) - Date.parse(homNay)) / 864e5) : null;
-  return Object.assign({}, r, { ChiPhi: +r.ChiPhi || 0, SDT: String(r.SDT || ''), IMEI: String(r.IMEI || ''), Anh: String(r.Anh || '').split(',').filter(Boolean), conNgay: n });
+  return Object.assign({}, r, { ChiPhi: +r.ChiPhi || 0, SDT: String(r.SDT || ''), IMEI: String(r.IMEI || ''), Anh: String(r.Anh || '').split(',').filter(Boolean),
+    LinhKien: docLinhKien_(r.LinhKien), conNgay: n });
+}
+/** Ô LinhKien của phiếu (JSON) → [{ MaHH, TenHang, DVT, SoLuong }] */
+function docLinhKien_(v) {
+  if (Array.isArray(v)) return v;
+  try { const a = JSON.parse(String(v || '[]')); return Array.isArray(a) ? a : []; } catch (e) { return []; }
+}
+/** Kiểm tra linh kiện gửi lên: mặt hàng có trong danh mục, không phải máy (máy cần IMEI, bán bằng đơn), số lượng nguyên 1–99; cùng mặt hàng thì cộng */
+function chuanLinhKien_(ds) {
+  if (!Array.isArray(ds)) return [];
+  if (ds.length > 10) throw new Error('Mỗi phiếu tối đa 10 linh kiện.');
+  const hang = {}, kq = [];
+  readTable_('HangHoa').forEach(h => { hang[h.MaHH] = h; });
+  ds.forEach((l, i) => {
+    l = l || {};
+    const h = hang[l.MaHH], sl = +l.SoLuong;
+    if (!h) throw new Error('Linh kiện ' + (i + 1) + ': không tìm thấy mặt hàng ' + (l.MaHH || '') + '.');
+    if (laMay_(h)) throw new Error(h.TenHang + ' là máy (cần IMEI): bán bằng đơn hàng, không ghi làm linh kiện.');
+    if (!(sl >= 1 && sl <= 99) || Math.round(sl) !== sl) throw new Error('Linh kiện ' + h.TenHang + ': số lượng từ 1 đến 99.');
+    const co = kq.find(x => x.MaHH === h.MaHH);
+    if (co) co.SoLuong += sl; else kq.push({ MaHH: h.MaHH, TenHang: h.TenHang, DVT: h.DVT || '', SoLuong: sl });
+  });
+  return kq;
 }
 
 /**
@@ -116,7 +141,8 @@ function chiTietSuaChua(token, soPN) {
 }
 
 /**
- * Nhận máy / sửa phiếu. p = { SoPN?, Loai, MaKH | khachMoi: { TenKH, SDT }, TenMay, IMEI, TinhTrang, PhuKien, MatKhauMay, NgayHen, TrangThai, ChiPhi, KetQua }.
+ * Nhận máy / sửa phiếu. p = { SoPN?, Loai, MaKH | khachMoi: { TenKH, SDT }, TenMay, IMEI, TinhTrang, PhuKien, MatKhauMay, NgayHen, TrangThai, ChiPhi, KetQua,
+ * LinhKien: [{ MaHH, SoLuong }] (bỏ trống = giữ như cũ) }.
  * Phiếu mới: ngày nhận hôm nay, trạng thái "Đã nhận". Trả máy dùng traMaySua (để lập đơn dịch vụ, thu tiền).
  */
 function luuSuaChua(token, p) {
@@ -132,6 +158,9 @@ function luuSuaChua(token, p) {
     NgayHen: p.NgayHen === '' ? '' : ngayHopLe_(p.NgayHen) || (cu ? cu.NgayHen : homNayCong_(3)), KetQua: s('KetQua', 500),
     ChiPhi: p.ChiPhi == null ? (cu ? +cu.ChiPhi || 0 : 0) : Math.max(0, Math.round(+p.ChiPhi || 0)),
   };
+  // linh kiện: đã trả máy (đã xuất kho theo đơn dịch vụ) thì không đổi nữa
+  const lk = p.LinhKien == null || (cu && cu.TrangThai === 'Đã trả khách') ? docLinhKien_(cu ? cu.LinhKien : '') : chuanLinhKien_(p.LinhKien);
+  o.LinhKien = lk.length ? JSON.stringify(lk) : '';
   if (!o.TenMay && !o.IMEI) throw new Error('Nhập tên máy hoặc IMEI/serial.');
   if (!o.TinhTrang) throw new Error('Nhập tình trạng / lỗi máy khách báo.');
   const tt = p.TrangThai || (cu ? cu.TrangThai : TT_SUA[0]);
@@ -161,8 +190,8 @@ function luuSuaChua(token, p) {
 }
 
 /**
- * Trả máy cho khách. o = { ChiPhi, KetQua, thu: { SoTien, HinhThuc } }. Có chi phí: lập đơn dịch vụ (bán nhanh, có phiếu thu nếu khách trả ngay),
- * số đơn ghi vào phiếu. Bảo hành miễn phí: chỉ đổi trạng thái.
+ * Trả máy cho khách. o = { ChiPhi, KetQua, thu: { SoTien, HinhThuc } }. Có chi phí hoặc có linh kiện: lập đơn dịch vụ (bán nhanh: xuất kho linh kiện,
+ * phiếu thu nếu khách trả ngay), số đơn ghi vào phiếu. Bảo hành miễn phí, không linh kiện: chỉ đổi trạng thái.
  */
 function traMaySua(token, soPN, o) {
   const user = user_(token);
@@ -185,13 +214,14 @@ function giuCho_(khoa) {
 }
 function boGiu_(khoa) { try { CacheService.getScriptCache().remove(khoa); } catch (e) {} }
 function traMaySuaDaGiu_(token, user, soPN, o, r) {
-  const chiPhi = Math.max(0, Math.round(+(o.ChiPhi == null ? r.ChiPhi : o.ChiPhi) || 0));
+  const chiPhi = Math.max(0, Math.round(+(o.ChiPhi == null ? r.ChiPhi : o.ChiPhi) || 0)), lk = docLinhKien_(r.LinhKien);
   let don = null;
-  if (chiPhi > 0) {
-    if (!r.MaKH) throw new Error('Phiếu chưa có khách trong danh sách: không lập được đơn thu tiền.');
+  if (chiPhi > 0 || lk.length) {
+    if (!r.MaKH) throw new Error('Phiếu chưa có khách trong danh sách: không lập được đơn ' + (chiPhi ? 'thu tiền' : 'xuất linh kiện') + '.');
     const thu = o.thu || {};
     don = banNhanh(token, { MaKH: r.MaKH, VAT: 0, GhiChu: 'Phiếu ' + r.Loai.toLowerCase() + ' ' + soPN,
-      lines: [{ TenHang: (r.Loai === 'Bảo hành' ? 'Bảo hành' : 'Sửa chữa') + ' ' + (r.TenMay || r.IMEI) + ' – phiếu ' + soPN, SoLuong: 1, DonGia: chiPhi, DVT: 'Lần' }],
+      lines: [{ TenHang: (r.Loai === 'Bảo hành' ? 'Bảo hành' : 'Sửa chữa') + ' ' + (r.TenMay || r.IMEI) + ' – phiếu ' + soPN, SoLuong: 1, DonGia: chiPhi, DVT: 'Lần' }]
+        .concat(lk.map(l => ({ MaHH: l.MaHH, SoLuong: l.SoLuong, DonGia: 0 }))), // linh kiện: xuất kho, giá vốn vào lãi gộp; tiền đã gồm ở dòng trên
       thu: { SoTien: Math.min(chiPhi, Math.max(0, Math.round(+thu.SoTien || 0))), HinhThuc: thu.HinhThuc || 'Tiền mặt' } });
   }
   return withLock_(() => {
@@ -201,6 +231,41 @@ function traMaySuaDaGiu_(token, user, soPN, o, r) {
     log_(user, 'Trả máy cho khách', soPN, [cur.TenKH, cur.TenMay, chiPhi ? chiPhi + ' đ · đơn ' + cur.SoDH : 'không tính phí'].join(' · '));
     return Object.assign(phieuSua_(cur, homNay_()), { don: don });
   });
+}
+
+/** Ảnh thứ i của phiếu (app xem ngay trên máy): { base64, mime } */
+function anhSuaChua(token, soPN, i) {
+  user_(token);
+  const r = findObj_('SuaChua', soPN);
+  if (!r) throw new Error('Không tìm thấy phiếu ' + soPN + '.');
+  const id = String(r.Anh || '').split(',').filter(Boolean)[+i];
+  if (!id) throw new Error('Phiếu ' + soPN + ' không có ảnh thứ ' + (+i + 1) + '.');
+  let b;
+  try { b = DriveApp.getFileById(id).getBlob(); } catch (e) { throw new Error('Không mở được ảnh trên Google Drive (ảnh đã bị xóa, hoặc script chưa có quyền Drive). ' + (e && e.message || e)); }
+  return { base64: Utilities.base64Encode(b.getBytes()), mime: b.getContentType() || 'image/jpeg' };
+}
+
+/** Phiếu nhận máy (PDF) gửi khách qua Zalo…: khách, máy, tình trạng, phụ kiện, hẹn trả, chi phí dự kiến. Trả { ten, base64 } */
+function phieuNhanMayPdf(token, soPN) {
+  user_(token);
+  const r = findObj_('SuaChua', soPN);
+  if (!r) throw new Error('Không tìm thấy phiếu ' + soPN + '.');
+  const ch = cuaHang_(CUR_SHOP), c = ch.congTy, e = s => String(s == null ? '' : s).replace(/[&<>"]/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[x]));
+  const dmy = s => /^\d{4}-\d{2}-\d{2}/.test(String(s)) ? String(s).slice(8, 10) + '/' + String(s).slice(5, 7) + '/' + String(s).slice(0, 4) : '';
+  const dong = (a, b) => '<tr><th style="width:32%;text-align:left">' + a + '</th><td>' + b + '</td></tr>', lk = docLinhKien_(r.LinhKien);
+  const html = '<html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;font-size:12px;color:#111}h1{font-size:18px;text-align:center;margin:12px 0 4px}'
+    + 'table{width:100%;border-collapse:collapse;margin-top:8px}td,th{border:1px solid #bbb;padding:5px 6px}th{background:#f2f4f7}.nho{color:#555;font-size:11px}</style></head><body>'
+    + '<div><b>' + e(c.ten || ch.ten) + '</b><br>' + e((c.diaChi || []).join(', ')) + '<br>' + e(c.lienHe) + '</div>'
+    + '<h1>PHIẾU NHẬN MÁY ' + e(String(r.Loai || '').toUpperCase()) + '</h1><div style="text-align:center">Số ' + e(r.SoPN) + ' · ngày ' + dmy(r.NgayNhan) + '</div>'
+    + '<table>' + dong('Khách hàng', '<b>' + e(r.TenKH) + '</b>' + (r.SDT ? ' · ' + e(r.SDT) : '')) + dong('Máy', e(r.TenMay)) + dong('IMEI / serial', e(r.IMEI))
+    + dong('Tình trạng, lỗi khách báo', e(r.TinhTrang)) + dong('Phụ kiện kèm theo', e(r.PhuKien || 'Không'))
+    + dong('Hẹn trả', r.NgayHen ? dmy(r.NgayHen) : '—') + dong('Chi phí dự kiến', +r.ChiPhi ? tien_(r.ChiPhi) + ' đ' : (r.Loai === 'Bảo hành' ? 'Bảo hành' : 'Báo sau'))
+    + (r.KetQua ? dong('Kết quả xử lý', e(r.KetQua)) : '') + (lk.length ? dong('Linh kiện thay', e(lk.map(l => l.TenHang + (l.SoLuong > 1 ? ' ×' + l.SoLuong : '')).join(', '))) : '')
+    + dong('Trạng thái', e(r.TrangThai)) + '</table>'
+    + '<p class="nho">Quý khách vui lòng giữ phiếu này (hoặc tin nhắn này) khi nhận lại máy. Cửa hàng không chịu trách nhiệm về dữ liệu trong máy; vui lòng sao lưu trước khi gửi.</p></body></html>';
+  const ten = 'Phieu nhan may ' + String(soPN).replace(/\//g, '-') + '.pdf';
+  const pdf = Utilities.newBlob(html, 'text/html', ten.replace('.pdf', '.html')).getAs('application/pdf');
+  return { ten: ten, base64: Utilities.base64Encode(pdf.getBytes()) };
 }
 
 /** Thêm một ảnh (JPEG base64) vào phiếu: lưu file trong thư mục Drive "Sửa chữa - <cửa hàng>", tối đa 6 ảnh mỗi phiếu */
@@ -383,10 +448,12 @@ function traHang_(token, o) {
     });
   }
   const conLai = moi.filter(l => l.SoLuong !== 0), huy = !conLai.some(l => l.SoLuong > 0);
-  // Giảm giá cả đơn chia theo tiền hàng: trả món nào thì bớt phần giảm giá của món đó (giảm 600k trên máy 30tr + ốp 500k, trả máy thì ốp không thành 0 đ)
+  // Giảm giá cả đơn: khách trả máy thì mất hết giảm giá, món còn lại tính giá gốc (máy 30tr + ốp 500k giảm 600k, trả máy: ốp còn 500k);
+  // chỉ trả phụ kiện thì giảm giá chia theo tiền hàng còn lại
+  const traMay = nhap.some(l => l.MaHH && laMay_(hang[l.MaHH]));
   const tienBan = ls => ls.reduce((s, l) => s + (l.SoLuong > 0 ? Math.round(l.SoLuong * (+l.DonGia || 0)) : 0), 0), banCu = tienBan(cu.map(l => ({ SoLuong: +l.SoLuong || 0, DonGia: l.DonGia })));
   const cong = conLai.reduce((s, l) => s + Math.round(l.SoLuong * (+l.DonGia || 0)), 0);
-  const giam = Math.min(Math.max(0, cong), banCu > 0 ? Math.round((+dh.GiamGia || 0) * tienBan(conLai) / banCu) : 0);
+  const giam = traMay ? 0 : Math.min(Math.max(0, cong), banCu > 0 ? Math.round((+dh.GiamGia || 0) * tienBan(conLai) / banCu) : 0);
   const tongMoi = huy ? 0 : (cong - giam) + Math.round((cong - giam) * (+dh.VAT || 0) / 100);
   if (tongMoi < 0) throw new Error('Phần đơn còn lại nhỏ hơn giá máy cũ đã trừ: khách trả cả máy thì cửa hàng trả lại máy cũ.');
   const daThu = readTable_('ThuTien').filter(p => String(p.SoDH) === String(dh.SoDH)).reduce((s, p) => s + (+p.SoTien || 0), 0);

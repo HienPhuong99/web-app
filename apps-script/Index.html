@@ -407,7 +407,7 @@ table.lines.hd { min-width: 980px; } /* hợp đồng */
 
 <script>
 // ===================== Trạng thái & tiện ích =====================
-const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], suaChua: [], ttSua: [], loaiSua: [], htMayCu: 'Thu máy cũ', phieuChi: [], soDuDau: { ngay: '', tienMat: 0, nganHang: 0 }, loaiChi: [], giaVon: {}, hopDong: [], hopDongLich: [], mauHD: [], loaiHD: [], nganHang: [], emailSang: null, hd: null, ton: {}, maTon: null,
+const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], suaChua: [], ttSua: [], loaiSua: [], htMayCu: 'Thu máy cũ', phieuChi: [], giaiNgan: [], soDuDau: { ngay: '', tienMat: 0, nganHang: 0 }, loaiChi: [], giaVon: {}, hopDong: [], hopDongLich: [], mauHD: [], loaiHD: [], nganHang: [], emailSang: null, hd: null, ton: {}, maTon: null,
   thongKe: { topHang: [], theoNhom: [] }, taiKhoan: null, baoHanh: null, nhatKy: null, view: 'home', loai: '', doc: null, extra: {}, dirty: false, q: {}, onNew: null };
 const D = { thuDH: {}, thuKH: {}, muaKH: {}, noKH: {}, dhBG: {} }; // số liệu suy ra: đã thu, công nợ, báo giá đã chốt
 const LG = { si: 'Giá sỉ', le: 'Giá lẻ', tuy: 'Giá tùy chọn' };
@@ -3299,7 +3299,10 @@ const conNgaySua = r => r.NgayHen && r.TrangThai !== 'Đã trả khách' ? Math.
 const MAU_SUA = { 'Đã nhận': 'b-gray', 'Đang sửa': 'b-blue', 'Chờ linh kiện': 'b-amber', 'Đã sửa xong': 'b-green', 'Không sửa được': 'b-red', 'Đã trả khách': 'b-violet' };
 const suaCanTra = () => S.suaChua.filter(r => r.TrangThai !== 'Đã trả khách');
 const henHtml = r => { const n = conNgaySua(r); return r.NgayHen ? `${dmy(r.NgayHen)}${n === null ? '' : n < 0 ? `<span class="sub red">quá ${-n} ngày</span>` : n === 0 ? '<span class="sub warn">hôm nay</span>' : `<span class="sub">còn ${n} ngày</span>`}` : '<span class="muted">—</span>'; };
-function luuSuaLocal(x) { upsertLocal('suaChua', 'SoPN', Object.assign({}, x, { Anh: anhSua(x).join(','), don: undefined, conNgay: undefined })); }
+// Linh kiện lấy từ kho của phiếu: [{ MaHH, TenHang, DVT, SoLuong }] (Sheet lưu JSON, máy chủ trả mảng)
+const lkSua = r => { if (Array.isArray(r.LinhKien)) return r.LinhKien; try { const a = JSON.parse(r.LinhKien || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+const laMayDVT = h => String(h && h.DVT || '').trim().toLowerCase() === 'máy'; // máy cần IMEI: bán bằng đơn, không làm linh kiện
+function luuSuaLocal(x) { upsertLocal('suaChua', 'SoPN', Object.assign({}, x, { Anh: anhSua(x).join(','), LinhKien: lkSua(x).length ? JSON.stringify(lkSua(x)) : '', don: undefined, conNgay: undefined })); }
 
 function vSuaChua(el) {
   setTop('Bán hàng', 'Bảo hành – sửa chữa', [{ t: 'Nhận máy', ic: 'plus', cls: 'primary', fn: () => openSuaChua() }]);
@@ -3330,7 +3333,7 @@ function openSuaChua(p) {
   const moi = !p || !p.SoPN, daTra = !moi && p.TrangThai === 'Đã trả khách', khoa = daTra && !isAdmin() ? ' disabled' : '';
   p = Object.assign({ Loai: 'Sửa chữa', MaKH: '', TenKH: '', SDT: '', TenMay: '', IMEI: '', TinhTrang: '', PhuKien: '', MatKhauMay: '', NgayHen: ngayCong(3), TrangThai: 'Đã nhận', ChiPhi: '', KetQua: '' }, p || {});
   const tt = (S.ttSua || []).filter(t => t !== 'Đã trả khách' || daTra), opt = (ds, v) => ds.map(x => `<option${x === v ? ' selected' : ''}>${esc(x)}</option>`).join('');
-  const anh = anhSua(p);
+  const anh = anhSua(p), lk = lkSua(p).map(l => Object.assign({}, l)), khoaLK = khoa || daTra ? ' disabled' : '';
   const m = modal({
     title: moi ? 'Nhận máy bảo hành – sửa chữa' : `Phiếu ${p.Loai.toLowerCase()} ${p.SoPN}`, wide: true,
     body: `<div class="fgrid">
@@ -3346,12 +3349,14 @@ function openSuaChua(p) {
       <label class="field"><span class="lb">Hẹn trả ngày</span><input name="NgayHen" type="date" value="${esc(String(p.NgayHen || '').slice(0, 10))}"${khoa}></label>
       <label class="field"><span class="lb">Chi phí (dự kiến)</span><input name="ChiPhi" class="money num" inputmode="numeric" value="${money(p.ChiPhi)}"${khoa}></label>
       <label class="field full"><span class="lb">Kết quả xử lý</span><input name="KetQua" value="${esc(p.KetQua)}" placeholder="vd: Thay pin, đổi máy mới"${khoa}></label>
+      <div class="field full"><span class="lb">Linh kiện thay (lấy từ kho: trả máy thì xuất kho theo đơn dịch vụ, giá vốn tính vào lãi)</span>
+        <div data-lk></div>${khoaLK ? '' : '<input data-lk-tim placeholder="Gõ tên linh kiện để thêm: pin, màn…" autocomplete="off">'}</div>
     </div>
     ${moi ? '' : `<p class="muted">Nhận ${dmy(p.NgayNhan)} bởi ${esc(p.NguoiTao)}${daTra ? ` · đã trả khách ${esc(p.NgayTra)}${p.SoDH ? ' · đơn ' + esc(p.SoDH) : ''}` : ''}${anh.length ? ' · Ảnh: ' + anh.map((id, i) => `<a href="${DRIVE_XEM}${encodeURIComponent(id)}/view" target="_blank" rel="noopener">ảnh ${i + 1}</a>`).join(', ') : ''}</p>`}`,
     buttons: [
       ...(khoa ? [] : [{ t: moi ? 'Nhận máy (F8)' : 'Lưu (F8)', ic: 'save', cls: 'primary', save: true, fn: run(async m => {
         const d = formData(m);
-        const gui = Object.assign({}, d, { SoPN: p.SoPN || '' });
+        const gui = Object.assign({}, d, { SoPN: p.SoPN || '' }, daTra ? {} : { LinhKien: lk.map(l => ({ MaHH: l.MaHH, SoLuong: +l.SoLuong || 0 })) });
         if (moi && !d.MaKH) gui.khachMoi = { TenKH: d.TenKH, SDT: d.SDT };
         const kq = await api('luuSuaChua', gui);
         luuSuaLocal(kq);
@@ -3363,6 +3368,22 @@ function openSuaChua(p) {
       ...(moi || daTra ? [] : [{ t: 'Trả máy cho khách', ic: 'check', cls: 'soft', fn: () => openTraMay(p) }]),
     ],
   });
+  const veLK = () => {
+    $('[data-lk]', m).innerHTML = lk.length ? lk.map((l, i) => `<div style="display:flex;gap:8px;align-items:center;margin:4px 0"><span style="flex:1">${esc(l.TenHang)}</span>
+      <input data-lk-sl="${i}" type="number" min="1" max="99" step="1" value="${esc(l.SoLuong)}" style="width:70px"${khoaLK} aria-label="Số lượng ${esc(l.TenHang)}">${khoaLK ? '' : `<button class="icon-btn" data-lk-bo="${i}" title="Bỏ" aria-label="Bỏ ${esc(l.TenHang)}">${icon('x')}</button>`}</div>`).join('')
+      : '<span class="muted">Chưa dùng linh kiện nào.</span>';
+  };
+  veLK();
+  const timLK = $('[data-lk-tim]', m);
+  if (timLK) {
+    timLK.oninput = () => showPicker(timLK, q => hangSource(q).filter(x => !laMayDVT(x.item)), h => {
+      const co = lk.find(l => l.MaHH === h.MaHH);
+      if (co) co.SoLuong = (+co.SoLuong || 0) + 1; else lk.push({ MaHH: h.MaHH, TenHang: h.TenHang, DVT: h.DVT || '', SoLuong: 1 });
+      timLK.value = ''; veLK();
+    });
+    $('[data-lk]', m).onclick = e => { const b = e.target.closest('[data-lk-bo]'); if (b) { lk.splice(+b.dataset.lkBo, 1); veLK(); } };
+    $('[data-lk]', m).oninput = e => { const i = e.target.dataset.lkSl; if (i != null) lk[+i].SoLuong = +e.target.value || 0; };
+  }
   if (moi) {
     const tk = $('[name=TenKH]', m), mk = $('[name=MaKH]', m), sdt = $('[name=SDT]', m);
     tk.oninput = () => { mk.value = ''; showPicker(tk, khachSource, kh => { tk.value = kh.TenKH; mk.value = kh.MaKH; sdt.value = kh.SDT || ''; $('[name=TenMay]', m).focus(); }); };
@@ -3373,7 +3394,7 @@ function openTraMay(p) {
   const hinhThuc = S.congTy.hinhThuc || ['Tiền mặt'];
   modal({
     title: 'Trả máy cho khách – ' + p.SoPN,
-    body: `<p class="muted" style="margin-top:0">${esc(p.TenKH)} · ${esc(p.TenMay)}${p.IMEI ? ' · ' + esc(p.IMEI) : ''}. Có chi phí thì app lập một đơn dịch vụ để tính doanh thu và công nợ; bảo hành miễn phí để chi phí 0.</p>
+    body: `<p class="muted" style="margin-top:0">${esc(p.TenKH)} · ${esc(p.TenMay)}${p.IMEI ? ' · ' + esc(p.IMEI) : ''}. Có chi phí thì app lập một đơn dịch vụ để tính doanh thu và công nợ; bảo hành miễn phí để chi phí 0.${lkSua(p).length ? ' Linh kiện xuất kho theo đơn đó: ' + esc(lkSua(p).map(l => l.TenHang + (l.SoLuong > 1 ? ' ×' + l.SoLuong : '')).join(', ')) + '.' : ''}</p>
       <div class="fgrid">
       <label class="field"><span class="lb">Chi phí</span><input name="ChiPhi" class="money num" inputmode="numeric" value="${money(+p.ChiPhi || 0)}"></label>
       <label class="field"><span class="lb">Khách trả ngay</span><input name="SoTien" class="money num" inputmode="numeric" value="${money(+p.ChiPhi || 0)}"></label>
@@ -3381,7 +3402,7 @@ function openTraMay(p) {
       <label class="field"><span class="lb">Kết quả xử lý</span><input name="KetQua" value="${esc(p.KetQua)}"></label></div>`,
     buttons: [{ t: 'Trả máy (F8)', ic: 'check', cls: 'primary', save: true, fn: run(async m => {
       const d = formData(m);
-      if (!(d.ChiPhi > 0) && !confirm('Trả máy không tính phí?')) return;
+      if (!(d.ChiPhi > 0) && !confirm(lkSua(p).length ? 'Trả máy không tính phí? Linh kiện vẫn xuất kho (đơn dịch vụ 0 đ).' : 'Trả máy không tính phí?')) return;
       const kq = await api('traMaySua', p.SoPN, { ChiPhi: d.ChiPhi || 0, KetQua: d.KetQua, thu: { SoTien: d.SoTien || 0, HinhThuc: d.HinhThuc } });
       if (kq.don) await loadAll(); else luuSuaLocal(kq); // có đơn dịch vụ: tải lại đơn hàng, phiếu thu
       closeModal(); render(); toast(`Đã trả máy ${p.SoPN}${kq.don ? ' · đơn ' + kq.don.SoDH : ''}.`);
@@ -3392,7 +3413,8 @@ function openTraMay(p) {
 function suaPrintHtml(p) {
   return `<div class="p-page">${letterhead('PHIẾU NHẬN MÁY ' + String(p.Loai || '').toUpperCase())}
     ${infoTable([['Số phiếu:', p.SoPN, 'Ngày nhận:', dmy(p.NgayNhan)], ['Khách hàng:', p.TenKH, 'Điện thoại:', p.SDT], ['Máy:', p.TenMay, 'IMEI / serial:', p.IMEI],
-      ['Tình trạng:', p.TinhTrang, 'Phụ kiện kèm:', p.PhuKien || 'Không'], ['Hẹn trả:', p.NgayHen ? dmy(p.NgayHen) : '—', 'Chi phí dự kiến:', +p.ChiPhi ? money(p.ChiPhi) + ' đ' : 'Báo sau']])}
+      ['Tình trạng:', p.TinhTrang, 'Phụ kiện kèm:', p.PhuKien || 'Không'], ['Hẹn trả:', p.NgayHen ? dmy(p.NgayHen) : '—', 'Chi phí dự kiến:', +p.ChiPhi ? money(p.ChiPhi) + ' đ' : 'Báo sau']]
+      .concat(lkSua(p).length ? [['Linh kiện thay:', lkSua(p).map(l => l.TenHang + (l.SoLuong > 1 ? ' ×' + l.SoLuong : '')).join(', '), '', '']] : []))}
     <p style="font-size:13px">Quý khách vui lòng mang phiếu này khi nhận lại máy. Cửa hàng không chịu trách nhiệm về dữ liệu trong máy; vui lòng sao lưu trước khi gửi.</p>
     ${signs(['Khách hàng', 'Nhân viên nhận máy'])}</div>`;
 }
@@ -3451,18 +3473,32 @@ function laiDonHtml(d) {
 }
 
 const laTienMat = ht => String(ht || '').trim().toLowerCase() === 'tiền mặt';
-// Mỗi phiếu thu / chi thành một dòng sổ quỹ
+// Quỹ của một hình thức: tiền mặt, chờ giải ngân (trả góp, thẻ… cài trong Thông tin cửa hàng) hoặc ngân hàng – như SoQuy.gs quyCua_
+const phiCho = () => { const m = {}; (S.congTy.choGiaiNgan || []).forEach(x => { m[x.HinhThuc] = +x.Phi || 0; }); return m; };
+const quyCua = ht => laTienMat(ht) ? 'tienMat' : Object.prototype.hasOwnProperty.call(phiCho(), String(ht || '').trim()) ? 'cho' : 'nganHang';
+// Mỗi phiếu thu / chi thành một dòng sổ quỹ; phiếu giải ngân: rời quỹ chờ, số thực nhận vào ngân hàng, phần chênh (phí) là chi
 const dongQuy = () => S.thuTien.filter(p => p.HinhThuc !== S.htMayCu).map(p => ({ loai: +p.SoTien < 0 ? 'Chi' : 'Thu', so: p.SoPT, Ngay: p.Ngay, NgayTao: p.NgayTao, noiDung: (+p.SoTien < 0 ? 'Trả lại tiền · ' : '') + p.TenKH + (p.SoDH ? ' · đơn ' + p.SoDH : ''), ghiChu: p.GhiChu, HinhThuc: p.HinhThuc, thu: Math.max(0, +p.SoTien || 0), chi: Math.max(0, -(+p.SoTien || 0)), NguoiTao: p.NguoiTao, goc: p }))
-  .concat(S.phieuChi.map(c => ({ loai: 'Chi', so: c.SoPC, Ngay: c.Ngay, NgayTao: c.NgayTao, noiDung: c.Loai + (c.DoiTac ? ' · ' + c.DoiTac : ''), nhom: c.Loai, ghiChu: c.GhiChu, HinhThuc: c.HinhThuc, thu: 0, chi: +c.SoTien || 0, NguoiTao: c.NguoiTao, goc: c })));
+  .concat(S.phieuChi.map(c => ({ loai: 'Chi', so: c.SoPC, Ngay: c.Ngay, NgayTao: c.NgayTao, noiDung: c.Loai + (c.DoiTac ? ' · ' + c.DoiTac : ''), nhom: c.Loai, ghiChu: c.GhiChu, HinhThuc: c.HinhThuc, thu: 0, chi: +c.SoTien || 0, NguoiTao: c.NguoiTao, goc: c })))
+  .concat((S.giaiNgan || []).map(g => ({ loai: 'Giải ngân', so: g.SoGN, Ngay: g.Ngay, NgayTao: g.NgayTao, noiDung: 'Giải ngân ' + g.HinhThuc + ' về ngân hàng · thực nhận ' + money(g.ThucNhan) + ' ₫',
+    ghiChu: g.GhiChu, HinhThuc: g.HinhThuc, thu: 0, chi: (+g.SoTien || 0) - (+g.ThucNhan || 0), NguoiTao: g.NguoiTao, goc: g, giaiNgan: true })));
 // Tồn quỹ tới hết ngày den (mặc định hôm nay): số dư đầu + thu − chi, tách tiền mặt / ngân hàng
 function tonQuy(den) {
-  const dau = S.soDuDau || {}, t = { tienMat: +dau.tienMat || 0, nganHang: +dau.nganHang || 0 }, d = den || today();
-  dongQuy().forEach(r => { const n = String(r.Ngay).slice(0, 10); if ((dau.ngay && n < dau.ngay) || n > d) return; t[laTienMat(r.HinhThuc) ? 'tienMat' : 'nganHang'] += r.thu - r.chi; });
+  const dau = S.soDuDau || {}, t = { tienMat: +dau.tienMat || 0, nganHang: +dau.nganHang || 0, cho: 0, choHT: {} }, d = den || today();
+  Object.keys(phiCho()).forEach(h => { t.choHT[h] = 0; });
+  dongQuy().forEach(r => {
+    const n = String(r.Ngay).slice(0, 10), ht = String(r.HinhThuc || '').trim();
+    if ((dau.ngay && n < dau.ngay) || n > d) return;
+    if (r.giaiNgan) { t.cho -= +r.goc.SoTien || 0; t.nganHang += +r.goc.ThucNhan || 0; t.choHT[ht] = (t.choHT[ht] || 0) - (+r.goc.SoTien || 0); return; }
+    const q = quyCua(ht);
+    t[q] += r.thu - r.chi;
+    if (q === 'cho') t.choHT[ht] += r.thu - r.chi;
+  });
   return t;
 }
 
 function vSoQuy(el) {
   setTop('Tài chính', 'Sổ quỹ', [{ t: 'Lập phiếu chi', ic: 'plus', cls: 'primary', fn: () => openChi() }, { t: 'Thu tiền', ic: 'card', fn: () => openThu() }]
+    .concat(Object.keys(phiCho()).length ? [{ t: 'Ghi nhận tiền về', ic: 'card', fn: () => openGiaiNgan() }] : [])
     .concat(isAdmin() ? [{ t: 'Số dư đầu kỳ', ic: 'settings', fn: openSoDuDau }] : []));
   S.onNew = () => openChi();
   const t = tonQuy(), dau = S.soDuDau || {}, hn = today();
@@ -3472,20 +3508,21 @@ function vSoQuy(el) {
   box.className = 'card'; box.style.marginBottom = '16px';
   box.innerHTML = `<div class="card-b"><div class="stats" style="margin-top:0" data-ton>
     ${stat('Tiền mặt tại quầy', money(t.tienMat) + ' ₫', t.tienMat < 0 ? 'red' : '')}${stat('Tiền trong ngân hàng', money(t.nganHang) + ' ₫', t.nganHang < 0 ? 'red' : '', 'chuyển khoản, thẻ, ví…')}
+    ${Object.keys(t.choHT).length ? stat('Chờ giải ngân', money(t.cho) + ' ₫', '', Object.keys(t.choHT).map(h => esc(h) + ' ' + money(t.choHT[h])).join(' · ')) : ''}
     ${stat('Thu hôm nay', money(sum(homNay, r => r.thu)) + ' ₫', 'green')}${stat('Chi hôm nay', money(sum(homNay, r => r.chi)) + ' ₫', 'red')}</div>
     <p class="muted" style="margin:10px 0 0">${dau.ngay ? `Tính từ ngày ${dmy(dau.ngay)} với số dư đầu: tiền mặt ${money(dau.tienMat)} ₫, ngân hàng ${money(dau.nganHang)} ₫.` : 'Chưa đặt số dư đầu kỳ: đang tính từ phiếu đầu tiên với số dư 0.' + (isAdmin() ? ' Bấm "Số dư đầu kỳ" để nhập số tiền đang có.' : '')}
-    Tiền thu, chi bằng "Tiền mặt" tính vào quỹ tiền mặt, các hình thức khác vào ngân hàng.</p></div>`;
+    Tiền thu, chi bằng "Tiền mặt" tính vào quỹ tiền mặt${Object.keys(t.choHT).length ? ', ' + esc(Object.keys(t.choHT).join(', ')) + ' vào quỹ chờ giải ngân (tới khi ghi nhận tiền về)' : ''}, các hình thức khác vào ngân hàng.</p></div>`;
   el.append(box);
   listCard(el, {
     id: 'soquy', ph: 'Tìm số phiếu, khách, nhà cung cấp, ghi chú…',
-    filters: [{ id: 'loai', options: [['', 'Thu và chi'], ['Thu', 'Chỉ phiếu thu'], ['Chi', 'Chỉ phiếu chi']] },
-      { id: 'quy', options: [['', 'Mọi quỹ'], ['tm', 'Tiền mặt'], ['nh', 'Ngân hàng']] },
+    filters: [{ id: 'loai', options: [['', 'Thu và chi'], ['Thu', 'Chỉ phiếu thu'], ['Chi', 'Chỉ phiếu chi']].concat((S.giaiNgan || []).length ? [['Giải ngân', 'Chỉ phiếu giải ngân']] : []) },
+      { id: 'quy', options: [['', 'Mọi quỹ'], ['tienMat', 'Tiền mặt'], ['nganHang', 'Ngân hàng']].concat(Object.keys(phiCho()).length ? [['cho', 'Chờ giải ngân']] : []) },
       locGiaTri('nhom', 'Mọi loại chi', (S.loaiChi || []).concat(S.phieuChi.map(c => c.Loai))), { id: 'ngay', type: 'dates' }],
-    filter: (r, f) => (!f.loai || r.loai === f.loai) && (!f.quy || (f.quy === 'tm') === laTienMat(r.HinhThuc)) && (!f.nhom || r.nhom === f.nhom) && inRange(r.Ngay, f, 'ngay'),
+    filter: (r, f) => (!f.loai || r.loai === f.loai) && (!f.quy || (r.giaiNgan ? f.quy !== 'tienMat' : quyCua(r.HinhThuc) === f.quy)) && (!f.nhom || r.nhom === f.nhom) && inRange(r.Ngay, f, 'ngay'),
     sorts: [TC_NGAY, ['tien', 'Số tiền', soCua(r => r.thu + r.chi), 'giam']],
     cols: [
       { t: 'Số phiếu', k: 'so', cls: 'code' }, { t: 'Ngày', f: r => dmy(r.Ngay) },
-      { t: 'Loại', f: r => r.loai === 'Thu' ? badge('Thu', 'b-green') : badge('Chi', 'b-red') },
+      { t: 'Loại', f: r => r.giaiNgan ? badge('Giải ngân', 'b-blue') : r.loai === 'Thu' ? badge('Thu', 'b-green') : badge('Chi', 'b-red') },
       { t: 'Nội dung', cls: 'wrap', f: r => `${esc(r.noiDung)}${r.ghiChu ? `<span class="sub">${esc(r.ghiChu)}</span>` : ''}` },
       { t: 'Hình thức', k: 'HinhThuc' },
       { t: 'Thu', cls: 'num', f: r => r.thu ? `<b class="green">${money(r.thu)}</b>` : '' }, { t: 'Chi', cls: 'num', f: r => r.chi ? `<b class="red">${money(r.chi)}</b>` : '' },
@@ -3493,7 +3530,7 @@ function vSoQuy(el) {
     ],
     data: () => dongQuy().sort((a, b) => String(b.Ngay + b.NgayTao).localeCompare(String(a.Ngay + a.NgayTao))),
     text: r => [r.so, r.noiDung, r.ghiChu, r.HinhThuc, r.NguoiTao].join(' '),
-    open: r => r.goc.SoPT ? openThu(r.goc) : openChi(r.goc),
+    open: r => r.giaiNgan ? openGiaiNgan(r.goc) : r.goc.SoPT ? openThu(r.goc) : openChi(r.goc),
     foot: rs => `<span>${rs.length} phiếu</span><span>Thu <b class="green">${money(sum(rs, r => r.thu))} ₫</b></span><span>Chi <b class="red">${money(sum(rs, r => r.chi))} ₫</b></span><span>Chênh lệch <b>${money(sum(rs, r => r.thu - r.chi))} ₫</b></span>`,
   });
 }
@@ -3568,6 +3605,53 @@ function openChi(pc) {
   });
   const m = $('#modal') || document.querySelector('.modal');
   if (m) m.onchange = e => { if (e.target.name === 'Loai') { const f = $('[data-imei-chi]', m); if (f) f.style.display = e.target.value === LAM_LAI ? '' : 'none'; } };
+}
+
+// Ghi nhận tiền chờ giải ngân đã về tài khoản (trả góp, thẻ…): số rời quỹ chờ, số thực nhận vào ngân hàng (mặc định trừ % phí đã cài), chênh = phí.
+// g có SoGN: xem phiếu đã ghi (quản trị xóa được)
+function openGiaiNgan(g) {
+  const phi = phiCho(), ds = Object.keys(phi), t = tonQuy(), xem = !!(g && g.SoGN);
+  g = Object.assign({ Ngay: today(), HinhThuc: ds.find(h => t.choHT[h] > 0) || ds[0] || '', SoTien: '', ThucNhan: '', GhiChu: '' }, g || {});
+  if (!xem) { g.SoTien = Math.max(0, t.choHT[g.HinhThuc] || 0); g.ThucNhan = Math.round(g.SoTien * (100 - (phi[g.HinhThuc] || 0)) / 100); }
+  const ro = xem ? ' disabled' : '';
+  modal({
+    title: xem ? 'Phiếu giải ngân ' + g.SoGN : 'Ghi nhận tiền về tài khoản',
+    body: `<div class="fgrid">
+      <label class="field"><span class="lb">Hình thức *</span><select name="HinhThuc"${ro}>${(ds.includes(g.HinhThuc) ? ds : ds.concat([g.HinhThuc])).map(h => `<option${h === g.HinhThuc ? ' selected' : ''}>${esc(h)}</option>`).join('')}</select></label>
+      <label class="field"><span class="lb">Ngày tiền về</span><input name="Ngay" type="date" value="${esc(g.Ngay)}"${ro}></label>
+      <label class="field"><span class="lb">Số tiền giải ngân (rời quỹ chờ) *</span><input name="SoTien" class="money num" inputmode="numeric" value="${money(g.SoTien)}"${ro}></label>
+      <label class="field"><span class="lb">Thực nhận vào tài khoản</span><input name="ThucNhan" class="money num" inputmode="numeric" value="${money(g.ThucNhan)}"${ro}></label>
+      <label class="field full"><span class="lb">Ghi chú</span><input name="GhiChu" value="${esc(g.GhiChu)}" placeholder="vd: HD Saison chuyển, sao kê ngày…"${ro}></label>
+    </div><p class="muted" data-gn-con>${xem ? `Phí ${money((+g.SoTien || 0) - (+g.ThucNhan || 0))} ₫ · lập bởi ${esc(g.NguoiTao)} lúc ${esc(g.NgayTao)}` : ''}</p>`,
+    buttons: xem ? (isAdmin() ? [{ t: 'Xóa', ic: 'trash', cls: 'danger', fn: run(async () => {
+      if (!confirm(`Xóa phiếu giải ngân ${g.SoGN}? Số tiền quay lại quỹ chờ giải ngân.`)) return;
+      await api('xoaGiaiNgan', g.SoGN);
+      S.giaiNgan = S.giaiNgan.filter(x => x.SoGN !== g.SoGN);
+      closeModal(); render(); toast('Đã xóa phiếu giải ngân.');
+    }) }] : []) : [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', save: true, fn: run(async m => {
+      const d = formData(m);
+      if (!(d.SoTien > 0)) throw new Error('Nhập số tiền giải ngân.');
+      const saved = await api('luuGiaiNgan', d);
+      (S.giaiNgan = S.giaiNgan || []).push(saved);
+      closeModal(); render(); toast(`Đã ghi nhận ${saved.SoGN}: ${money(saved.ThucNhan)} ₫ về ngân hàng, phí ${money(saved.SoTien - saved.ThucNhan)} ₫.`);
+    }) }],
+  });
+  const m = $('#modal');
+  const goiY = () => { // đổi hình thức / số tiền: gợi ý số thực nhận theo % phí, hiện số đang chờ
+    const ht = $('[name=HinhThuc]', m).value, so = parseMoney($('[name=SoTien]', m).value) || 0;
+    $('[data-gn-con]', m).textContent = `${ht} đang chờ ${money(t.choHT[ht] || 0)} ₫ · phí đã cài ${phi[ht] || 0}%.`;
+    return { ht, so };
+  };
+  if (!xem && m) {
+    goiY();
+    m.oninput = e => {
+      if (e.target.name === 'HinhThuc') $('[name=SoTien]', m).value = money(Math.max(0, t.choHT[e.target.value] || 0));
+      if (e.target.name !== 'HinhThuc' && e.target.name !== 'SoTien') return;
+      const { ht, so } = goiY();
+      $('[name=ThucNhan]', m).value = money(Math.round(so * (100 - (phi[ht] || 0)) / 100));
+    };
+    m.onchange = m.oninput;
+  }
 }
 
 function openSoDuDau() {
@@ -3694,7 +3778,7 @@ function vCaiDat(el) {
     <div class="card"><div class="card-h"><h3>Thông tin cửa hàng</h3>${isAdmin() ? '<a class="more" data-act="shop">Sửa</a>' : ''}</div><div class="card-b">
       <b>${esc(c.ten)}</b><span class="sub">${esc(c.khauHieu)}</span>
       ${(c.diaChi || []).map(x => `<div>${esc(x)}</div>`).join('')}<div class="muted">${esc(c.lienHe)}</div>
-      <p class="muted" style="margin-bottom:0">${c.mst ? 'MST ' + esc(c.mst) + ' · ' : ''}Thuế GTGT mặc định ${esc(c.vatMacDinh)}% · Bảo hành ${esc(c.baoHanhThang)} tháng · Hình thức thu: ${esc((c.hinhThuc || []).join(', '))}</p>
+      <p class="muted" style="margin-bottom:0">${c.mst ? 'MST ' + esc(c.mst) + ' · ' : ''}Thuế GTGT mặc định ${esc(c.vatMacDinh)}% · Bảo hành ${esc(c.baoHanhThang)} tháng · Hình thức thu: ${esc((c.hinhThuc || []).join(', '))}${(c.choGiaiNgan || []).length ? ' · Chờ giải ngân: ' + esc(c.choGiaiNgan.map(x => x.HinhThuc + (x.Phi ? ' (phí ' + x.Phi + '%)' : '')).join(', ')) : ''}</p>
       ${c.qrSoTK ? `<div class="qr-box"><img alt="Mã QR tài khoản nhận tiền" src="${esc(qrUrl(0, ''))}"><div>Mã QR chuyển khoản đang bật: in trên báo giá, đơn hàng và hiện khi thu tiền. <b>Quét thử một lần</b> bằng app ngân hàng để chắc tên chủ tài khoản hiện đúng.</div></div>`
         : `<p class="muted" style="margin-bottom:0">Chưa bật mã QR chuyển khoản${isAdmin() ? ' – bấm Sửa, chọn ngân hàng và nhập số tài khoản.' : '.'}</p>`}
     </div></div>
@@ -3796,11 +3880,13 @@ function openCuaHang() {
       ['chuHo', 'Chủ hộ / người đại diện (in trên sổ doanh thu)'], ['mst', 'Mã số thuế'],
       ['vatMacDinh', 'Thuế GTGT mặc định (%)', { type: 'number' }], ['baoHanhThang', 'Bảo hành mặc định (tháng)', { type: 'number' }],
       ['hinhThuc', 'Hình thức thu tiền (mỗi dòng một hình thức)', { area: true }],
+      ['choGiaiNgan', 'Hình thức chờ giải ngân, % phí (mỗi dòng, vd: Trả góp, 0 – Thẻ tín dụng, 1.8). Tiền thu vào quỹ "Chờ giải ngân" tới khi ghi nhận tiền về', { area: true }],
       ['qrNganHang', 'Mã QR chuyển khoản – ngân hàng', { options: [['', '— Không dùng mã QR —'], ...S.nganHang] }], ['qrSoTK', 'Số tài khoản nhận tiền', { ph: 'Viết liền, không dấu cách' }],
       ['qrChuTK', 'Tên chủ tài khoản (không dấu)'], ['kyTen', 'Chức danh người ký báo giá'],
       ['nganHang', 'Dòng thông tin thanh toán in trên chứng từ', { full: true }],
       ['loiMo', 'Lời mở đầu báo giá', { area: true }], ['dieuKien', 'Điều kiện thương mại (mỗi dòng một ý)', { area: true }], ['gioiThieu', 'Giới thiệu cuối báo giá', { area: true }],
-    ], Object.assign({}, c, { tenNgan: S.cuaHang.ten, moTa: S.cuaHang.moTa, diaChi: lines(c.diaChi), hinhThuc: lines(c.hinhThuc), dieuKien: lines(c.dieuKien) })),
+    ], Object.assign({}, c, { tenNgan: S.cuaHang.ten, moTa: S.cuaHang.moTa, diaChi: lines(c.diaChi), hinhThuc: lines(c.hinhThuc), dieuKien: lines(c.dieuKien),
+      choGiaiNgan: lines((c.choGiaiNgan || []).map(x => x.HinhThuc + ', ' + x.Phi)) })),
     buttons: [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', save: true, fn: run(async m => {
       const r = await api('luuCuaHang', formData(m));
       S.congTy = r.congTy;

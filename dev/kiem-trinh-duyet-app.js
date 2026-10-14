@@ -373,7 +373,11 @@ buoc('Tổng quan động: bấm số đơn → đơn và phiếu thu hôm nay, 
   await v(page, 'the-doanh-so').waitFor();
 });
 
-buoc('Sổ quỹ: tồn tiền mặt / ngân hàng, ghi phiếu chi; lãi gộp hôm nay trên Tổng quan (quản trị)', async page => {
+buoc('Sổ quỹ: tồn tiền mặt / ngân hàng, ghi phiếu chi; lãi gộp hôm nay trên Tổng quan (quản trị)', async (page, c) => {
+  // Trả góp là hình thức chờ giải ngân (phí 2%, cài trên web): khách trả góp 3tr vào quỹ chờ, tiền về thì ghi nhận trên app
+  const t = (await rpc(c, 'dangNhap', 'admin', c.matKhau)).token, d = await rpc(c, 'taiDuLieu', t);
+  await rpc(c, 'luuCuaHang', t, Object.assign({}, d.congTy, { tenNgan: d.cuaHang.ten, moTa: d.cuaHang.moTa, choGiaiNgan: 'Trả góp, 2' }));
+  await rpc(c, 'luuThuTien', t, { MaKH: 'KH00001', TenKH: 'Anh Minh', SoTien: 3000000, HinhThuc: 'Trả góp' });
   await page.getByTestId('tab-index').click();
   await v(page, 'lai-hom-nay').waitFor({ timeout: 15000 });
   await page.getByTestId('tab-tai-khoan').click();
@@ -395,11 +399,18 @@ buoc('Sổ quỹ: tồn tiền mặt / ngân hàng, ghi phiếu chi; lãi gộp 
   await v(page, 'nut-luu-chi').click();
   await v(page, 'ds-quy').getByText('Vận chuyển').waitFor({ timeout: 15000 });
   await v(page, 'ds-quy').getByText('−45.000', { exact: false }).waitFor();
+  await v(page, 'quy-cho').getByText('Trả góp 3.000.000 đ').waitFor();
+  await v(page, 'nut-giai-ngan').click();
+  assert.deepStrictEqual([await v(page, 'o-tien-gn').inputValue(), await v(page, 'o-thuc-nhan').inputValue()], ['3.000.000', '2.940.000']); // trừ phí 2%
+  await v(page, 'nut-luu-gn').click();
+  await v(page, 'ds-quy').getByText('Giải ngân Trả góp về ngân hàng', { exact: false }).waitFor({ timeout: 15000 });
+  await v(page, 'quy-cho').getByText('Trả góp 0 đ').waitFor();
   await khongTranNgang(page);
   await chup(page, '13-so-quy');
   await v(page, 'quy-truoc').click();
   await v(page, 'ds-quy').getByText('Không có phiếu thu, chi nào trong ngày.').waitFor({ timeout: 15000 });
   await v(page, 'nut-lui').click();
+  await rpc(c, 'luuCuaHang', t, Object.assign({}, d.congTy, { tenNgan: d.cuaHang.ten, moTa: d.cuaHang.moTa, choGiaiNgan: '' }));
 });
 
 buoc('Thu cũ đổi mới khi bán nhanh; nhận bảo hành từ kết quả tra, đổi trạng thái, trả máy', async (page, c) => {
@@ -442,11 +453,31 @@ buoc('Thu cũ đổi mới khi bán nhanh; nhận bảo hành từ kết quả t
   assert.match(await v(page, 'the-phieu-sua').innerText(), /ĐÃ NHẬN.*Anh Minh.*Loa rè/s);
   await v(page, 'tt-sua-3').click(); // Đã sửa xong
   await v(page, 'the-phieu-sua').getByText('ĐÃ SỬA XONG').waitFor({ timeout: 15000 });
+  // Linh kiện lấy từ kho; ảnh xem ngay trên app; gửi phiếu nhận máy PDF
+  const t = (await rpc(c, 'dangNhap', 'admin', c.matKhau)).token;
+  const lkHang = await rpc(c, 'luuHang', t, { TenHang: 'Cáp sạc thử sửa', DVT: 'Sợi', GiaLe: 100000 });
+  await rpc(c, 'luuChungTu', t, 'NK', { Ngay: '2026-01-02', DoiTac: 'NCC', lines: [{ MaHH: lkHang.MaHH, TenHang: lkHang.TenHang, SoLuong: 3, GiaVon: 40000 }] });
+  const pn = (await api(c, { may, fn: 'dsSuaChua', args: ['Loa rè', {}] })).result.ds[0].SoPN;
+  await rpc(c, 'luuAnhSuaChua', t, pn, 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
+  await v(page, 'nut-them-lk').click();
+  await v(page, 'o-tim-lk').fill('cap sac');
+  await v(page, 'lk-' + lkHang.MaHH).click({ timeout: 15000 });
+  await v(page, 'bo-lk-' + lkHang.MaHH).waitFor({ timeout: 15000 });
+  await v(page, 'anh-sua-0').locator('img').first().waitFor({ state: 'attached', timeout: 15000 }); // ảnh tải từ máy chủ
+  await v(page, 'anh-sua-0').click();
+  await v(page, 'dong-anh-sua').click();
+  await page.getByTestId('dong-anh-sua').waitFor({ state: 'hidden' }); // xem ảnh to đã đóng
+  const [taiPN] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }), v(page, 'nut-gui-phieu-sua').click()]);
+  assert.match(taiPN.suggestedFilename(), /^Phieu nhan may \d{3}-\d{4}-PN\.pdf$/);
   await khongTranNgang(page);
   await chup(page, '14-phieu-sua');
   await v(page, 'nut-tra-may').click();
-  await v(page, 'nut-xac-nhan-tra').click(); // bảo hành: chi phí 0
+  await v(page, 'form-tra-may').getByText('Linh kiện xuất kho: Cáp sạc thử sửa', { exact: false }).waitFor();
+  await v(page, 'nut-xac-nhan-tra').click(); // bảo hành: chi phí 0, linh kiện vẫn xuất kho theo đơn dịch vụ 0 đ
   await v(page, 'the-phieu-sua').getByText('ĐÃ TRẢ KHÁCH').waitFor({ timeout: 15000 });
+  await v(page, 'the-phieu-sua').getByText('Linh kiện đã thay').waitFor();
+  const tonLK = (await api(c, { may, fn: 'khoMay', args: [] })).result.find(h => h.MaHH === lkHang.MaHH).ton;
+  assert.strictEqual(tonLK, 2);
   await v(page, 'nut-lui').click();
 });
 
@@ -466,6 +497,19 @@ buoc('Kiểm kho theo IMEI; bán có giảm giá, gửi phiếu PDF; khách tr�
   await v(page, 'kq-kiem').getByText('Đã lưu vào nhật ký').waitFor({ timeout: 15000 });
   await khongTranNgang(page);
   await chup(page, '15-kiem-kho');
+  // Quét nhầm: bỏ từng mã; thoát ra rồi vào lại vẫn còn danh sách đang quét; Làm lại hỏi trước khi xóa
+  await them('888888888888');
+  await v(page, 'the-kiem-kho').getByText('ĐÃ QUÉT 3 MÁY').waitFor();
+  await v(page, 'bo-ma-888888888888').click();
+  await v(page, 'the-kiem-kho').getByText('ĐÃ QUÉT 2 MÁY').waitFor();
+  await v(page, 'nut-lui').click();
+  await v(page, 'mo-kiem-kho').click();
+  await v(page, 'the-kiem-kho').getByText('ĐÃ QUÉT 2 MÁY').waitFor();
+  let hoiXoa = '';
+  page.once('dialog', d => { hoiXoa = d.message(); d.accept(); });
+  await v(page, 'the-kiem-kho').getByText('Làm lại').click();
+  await v(page, 'the-kiem-kho').getByText('ĐÃ QUÉT 0 MÁY').waitFor();
+  assert.match(hoiXoa, /Kiểm lại từ đầu\?[\s\S]*Xóa 2 mã/);
   await v(page, 'nut-lui').click();
   // Bán có giảm giá
   await page.getByTestId('tab-ban').click();
@@ -478,9 +522,22 @@ buoc('Kiểm kho theo IMEI; bán có giảm giá, gửi phiếu PDF; khách tr�
   await v(page, 'o-tim-khach-ban').fill('Khách Trả Máy');
   await v(page, 'o-sdt-khach-moi').fill('0988 555 666');
   await v(page, 'nut-khach-moi').click();
-  page.once('dialog', d => d.accept());
+  // Trả kết hợp: 10tr tiền mặt + phần còn lại chuyển khoản (QR đúng phần chuyển khoản), mỗi hình thức một phiếu thu
+  await v(page, 'nut-tach').click();
+  await v(page, 'o-khach-tra').fill('10000000');
+  await v(page, 'ht-tien-mat').click();
+  await v(page, 'ht2-chuyen-khoan').click();
+  assert.strictEqual(await v(page, 'o-khach-tra-2').inputValue(), '18.000.000');
+  const qr2 = page.locator('img[src*="img.vietqr.io"]').filter({ visible: true });
+  await qr2.waitFor({ timeout: 10000 });
+  assert.match(await qr2.getAttribute('src'), /amount=18000000&/);
+  assert.strictEqual(await page.getByTestId('con-no').filter({ visible: true }).count(), 0);
+  let hoiBan = '';
+  page.once('dialog', d => { hoiBan = d.message(); d.accept(); });
   await v(page, 'nut-ban').click();
   await v(page, 'da-ban').waitFor({ timeout: 20000 });
+  assert.match(hoiBan, /Khách trả 28\.000\.000 đ \(10\.000\.000 đ tiền mặt \+ 18\.000\.000 đ chuyển khoản\)/);
+  assert.match(await v(page, 'ket-qua-ban').textContent(), /10\.000\.000 đ · Tiền mặt.*18\.000\.000 đ · Chuyển khoản/);
   const [tai] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }), v(page, 'nut-gui-phieu').click()]);
   assert.match(tai.suggestedFilename(), /^Phieu ban hang \d{3}-\d{4}-DH\.pdf$/);
   // Khách trả máy vừa mua: nhập lại kho, trả lại 28.000.000

@@ -42,6 +42,8 @@ export default function BanMan() {
   const [chonMay, setChonMay] = useState<HangKho | null>(null); // đã chọn mặt hàng máy: chọn tiếp máy (IMEI) trong kho
   const boNho = useSuaBoNho();
   const [vat, setVat] = useState(0), [soThu, setSoThu] = useState<number | null>(null), [hinhThuc, setHinhThuc] = useState('Tiền mặt'), [ghiChu, setGhiChu] = useState('');
+  // Trả kết hợp: phần thứ hai bằng hình thức khác (vd 10tr tiền mặt + phần còn lại chuyển khoản); soThu2 null = phần còn lại
+  const [tach, setTach] = useState(false), [soThu2, setSoThu2] = useState<number | null>(null), [hinhThuc2, setHinhThuc2] = useState('');
   const [camera, setCamera] = useState(false), [focus, setFocus] = useState(false);
   const [maGo, setMaGo] = useState(''), [loiMa, setLoiMa] = useState(''), [dangTraMa, setDangTraMa] = useState(false);
   const [maChuaCo, setMaChuaCo] = useState(''); // IMEI chưa từng nhập kho: chờ chọn mặt hàng
@@ -66,7 +68,11 @@ export default function BanMan() {
   // Đơn lên đời: máy cũ trừ vào tiền hàng trước giảm giá, VAT; tổng đơn là số khách phải trả thật (như máy chủ)
   const tongCu = mayCu.reduce((s, m) => s + m.GiaThu, 0);
   const tong = useMemo(() => tongGio(gio, vat, giamGia, tongCu), [gio, vat, giamGia, tongCu]), phaiTra = tong.tong;
-  const thu = soThu ?? phaiTra; // chưa sửa thì khách trả đủ
+  const thu1 = soThu ?? phaiTra; // chưa sửa thì khách trả đủ
+  const ht2 = tach ? hinhThuc2 || (ch?.hinhThuc ?? ['Tiền mặt', 'Chuyển khoản']).find(h => h !== hinhThuc) || 'Chuyển khoản' : '';
+  const thu2 = tach ? soThu2 ?? Math.max(0, phaiTra - thu1) : 0, thu = thu1 + thu2;
+  const phanThu = [{ SoTien: thu1, HinhThuc: hinhThuc }, ...(tach ? [{ SoTien: thu2, HinhThuc: ht2 }] : [])].filter(x => x.SoTien > 0);
+  const tienCK = phanThu.filter(x => /chuyen khoan/.test(boDau(x.HinhThuc))).reduce((t, x) => t + x.SoTien, 0);
 
   const themTheoMa = async (raw: string) => {
     const ma = chuanHoaMa(raw);
@@ -124,7 +130,8 @@ export default function BanMan() {
     if (may) return setLoi(`${may.TenHang} là máy: quét hoặc gõ IMEI của từng máy để thêm vào đơn.`);
     if (tongCu > tong.cong) return setLoi('Giá máy cũ lớn hơn tiền hàng.');
     if (thu > tong.tong) return setLoi('Số tiền khách trả lớn hơn tổng đơn.');
-    const ten = khach.TenKH, cau = `${tong.soMay} sản phẩm${tongCu ? `, tiền hàng ${tien(tong.cong)}, máy cũ trừ ${tien(tongCu)}` : ''}, tổng ${tien(tong.tong)}.\nKhách trả ${tien(thu)}${thu ? ' (' + hinhThuc + ')' : ''}${thu < phaiTra ? ', còn nợ ' + tien(phaiTra - thu) : ''}.`;
+    if (tach && ht2 === hinhThuc) return setLoi('Hai phần thanh toán phải khác hình thức.');
+    const ten = khach.TenKH, cau = `${tong.soMay} sản phẩm${tongCu ? `, tiền hàng ${tien(tong.cong)}, máy cũ trừ ${tien(tongCu)}` : ''}, tổng ${tien(tong.tong)}.\nKhách trả ${tien(thu)}${phanThu.length ? ' (' + phanThu.map(x => (phanThu.length > 1 ? tien(x.SoTien) + ' ' : '') + x.HinhThuc.toLowerCase()).join(' + ') + ')' : ''}${thu < phaiTra ? ', còn nợ ' + tien(phaiTra - thu) : ''}.`;
     if (!(await hoi(`Bán cho ${ten}?`, cau, 'Bán'))) return;
     setDangLuu(true);
     try {
@@ -132,7 +139,7 @@ export default function BanMan() {
       if (!maGhi.current) maGhi.current = taoMaGhi(); // thử lại sau lỗi mạng giữ mã cũ: máy chủ không lập đơn thứ hai
       const r = await goiGhi<BanNhanhKQ>(maGhi.current, 'banNhanh', {
         ...('moi' in khach ? { khachMoi: { TenKH: khach.TenKH, SDT: khach.SDT } } : { MaKH: khach.MaKH }),
-        lines, VAT: vat, GiamGia: tong.giam, GhiChu: ghiChu.trim(), thu: { SoTien: thu, HinhThuc: hinhThuc },
+        lines, VAT: vat, GiamGia: tong.giam, GhiChu: ghiChu.trim(), thu: tach ? phanThu : { SoTien: thu1, HinhThuc: hinhThuc },
         thuCu: mayCu.map(m => ({ TenHang: m.TenHang, IMEI: m.IMEI, GiaThu: m.GiaThu })),
       });
       maGhi.current = '';
@@ -149,11 +156,16 @@ export default function BanMan() {
 
   const donMoi = () => {
     maGhi.current = '';
-    setGio([]); setKhach(null); setSoThu(null); setMayCu([]); setGiamGia(0); setGhiChu(''); setKq(null); setLoi(''); setLoiMa(''); setMaGo(''); setMaChuaCo(''); setChonMay(null);
+    setGio([]); setKhach(null); setSoThu(null); setTach(false); setSoThu2(null); setHinhThuc2(''); setMayCu([]); setGiamGia(0); setGhiChu(''); setKq(null); setLoi(''); setLoiMa(''); setMaGo(''); setMaChuaCo(''); setChonMay(null);
     setVat(ch?.vat ?? 0); router.setParams({ ma: undefined, ten: undefined });
   };
 
   if (kq) return <KetQua kq={kq} qr={ch?.qr ?? null} hinhThuc={hinhThuc} onMoi={donMoi} />;
+  const chonHT = (chon: string, dat: (h: string) => void, tienTo: string) => (
+    <View style={s.chips}>
+      {(ch?.hinhThuc ?? ['Tiền mặt', 'Chuyển khoản']).map(h => <Chip key={h} chu={h} chon={chon === h} onPress={() => dat(h)} testID={tienTo + boDau(h).replace(/\s+/g, '-')} />)}
+    </View>
+  );
 
   const goiY = maGo ? goiYMa(chuanHoaMa(maGo)) : '';
   return (
@@ -238,19 +250,27 @@ export default function BanMan() {
         <Vach />
         <Text style={[s.nhanTien, { marginTop: 12 }]}>Khách trả</Text>
         <View style={s.hangNhap}>
-          <TextInput style={[s.o, { fontWeight: '800' }]} value={soTienNhap(thu)} onChangeText={t => setSoThu(docTien(t))} keyboardType="number-pad"
+          <TextInput style={[s.o, { fontWeight: '800' }]} value={soTienNhap(thu1)} onChangeText={t => setSoThu(docTien(t))} keyboardType="number-pad"
             placeholder="0" placeholderTextColor={mau.xam} testID="o-khach-tra" />
-          <Chip chu="Đủ" chon={soThu === null} onPress={() => setSoThu(null)} testID="tra-du" />
-          <Chip chu="Nợ hết" chon={soThu === 0} onPress={() => setSoThu(0)} testID="no-het" />
+          {tach ? null : <Chip chu="Đủ" chon={soThu === null} onPress={() => setSoThu(null)} testID="tra-du" />}
+          {tach ? null : <Chip chu="Nợ hết" chon={soThu === 0} onPress={() => setSoThu(0)} testID="no-het" />}
         </View>
+        {thu1 > 0 || tach ? chonHT(hinhThuc, setHinhThuc, 'ht-') : null}
+        {tach ? (
+          <View testID="phan-thu-2">
+            <Text style={[s.nhanTien, { marginTop: 12 }]}>Phần còn lại trả bằng</Text>
+            <View style={s.hangNhap}>
+              <TextInput style={[s.o, { fontWeight: '800' }]} value={soTienNhap(thu2)} onChangeText={t => setSoThu2(docTien(t))} keyboardType="number-pad"
+                placeholder="0" placeholderTextColor={mau.xam} testID="o-khach-tra-2" />
+              <Chip chu="Còn lại" chon={soThu2 === null} onPress={() => setSoThu2(null)} testID="tra-con-lai" />
+              <Chip chu="Bỏ" chon={false} onPress={() => { setTach(false); setSoThu2(null); setHinhThuc2(''); }} testID="bo-tach" />
+            </View>
+            {chonHT(ht2, setHinhThuc2, 'ht2-')}
+          </View>
+        ) : thu1 > 0 && thu1 <= phaiTra ? <Chip chu="+ Trả thêm hình thức khác" chon={false} onPress={() => { setTach(true); if (soThu === null) setSoThu(0); }} testID="nut-tach" /> : null}
         {thu < phaiTra ? <Text style={s.goiY} testID="con-no">Khách còn nợ {tien(phaiTra - thu)}</Text> : null}
         {thu > phaiTra ? <ChuLoi chu="Số tiền khách trả lớn hơn tổng đơn." /> : null}
-        {thu > 0 ? (
-          <View style={s.chips}>
-            {(ch?.hinhThuc ?? ['Tiền mặt', 'Chuyển khoản']).map(h => <Chip key={h} chu={h} chon={hinhThuc === h} onPress={() => setHinhThuc(h)} testID={'ht-' + boDau(h).replace(/\s+/g, '-')} />)}
-          </View>
-        ) : null}
-        {thu > 0 && /chuyen khoan/.test(boDau(hinhThuc)) ? <MaQR qr={ch?.qr ?? null} soTien={thu} noiDung={`${khach?.TenKH ?? ''} mua hang`} /> : null}
+        {tienCK > 0 ? <MaQR qr={ch?.qr ?? null} soTien={tienCK} noiDung={`${khach?.TenKH ?? ''} mua hang`} /> : null}
         <TextInput style={[s.o, { marginTop: 12, flex: 0 }]} value={ghiChu} onChangeText={setGhiChu} placeholder="Ghi chú (không bắt buộc)" placeholderTextColor={mau.xam} />
       </The>
 
@@ -427,6 +447,8 @@ function ChonKhach({ khach, setKhach }: { khach: Khach | null; setKhach: (k: Kha
 function KetQua({ kq, qr, hinhThuc, onMoi }: { kq: BanNhanhKQ; qr: CauHinh['qr']; hinhThuc: string; onMoi: () => void }) {
   const phieu = useGuiPhieu();
   const cu = kq.thuCu ?? [], tienMat = kq.daThu; // TongCong đã trừ máy cũ, daThu là tiền thật khách trả
+  const dsPT = kq.dsPT ?? (kq.SoPT ? [{ SoPT: kq.SoPT, SoTien: kq.daThu, HinhThuc: hinhThuc }] : []);
+  const tienCK = dsPT.filter(x => /chuyen khoan/.test(boDau(x.HinhThuc))).reduce((t, x) => t + x.SoTien, 0);
   const [them, setThem] = useState(() => daThuThem(kq.SoDH));
   useFocusEffect(useCallback(() => { setThem(daThuThem(kq.SoDH)); }, [kq.SoDH])); // quay về từ Thu tiền: còn nợ theo số vừa thu
   const no = Math.max(0, kq.TongCong - kq.daThu - them);
@@ -438,12 +460,12 @@ function KetQua({ kq, qr, hinhThuc, onMoi }: { kq: BanNhanhKQ; qr: CauHinh['qr']
       <The style={s.muc} testID="ket-qua-ban">
         <DongTT nhan="Đơn hàng" giaTri={kq.SoDH} dam />
         <DongTT nhan="Phiếu xuất" giaTri={kq.SoPK} />
-        <DongTT nhan="Phiếu thu" giaTri={kq.SoPT ? `${kq.SoPT} · ${tien(tienMat)}` : 'Chưa thu'} />
+        {dsPT.length ? dsPT.map(x => <DongTT key={x.SoPT} nhan="Phiếu thu" giaTri={`${x.SoPT} · ${tien(x.SoTien)}${dsPT.length > 1 ? ' · ' + x.HinhThuc : ''}`} />) : <DongTT nhan="Phiếu thu" giaTri={tienMat ? tien(tienMat) : 'Chưa thu'} />}
         {cu.map(m => <DongTT key={m.IMEI} nhan="Máy cũ thu về" giaTri={`${m.TenHang} · ${tien(m.GiaThu)} · nhập kho ${m.SoPK}`} />)}
         {no > 0 ? <DongTT nhan="Còn nợ" giaTri={tien(no)} dam /> : null}
       </The>
       {kq.loiThu ? <The nhan="Chưa ghi được tiền thu" mauNhan={mau.do} style={s.muc}><Text style={s.phu}>{kq.loiThu} Đơn và phiếu xuất đã lưu; bấm Thu tiền để ghi lại.</Text></The> : null}
-      {tienMat > 0 && /chuyen khoan/.test(boDau(hinhThuc)) && qr ? <The nhan="Mã QR chuyển khoản" style={s.muc}><MaQR qr={qr} soTien={tienMat} noiDung={kq.SoDH} /></The> : null}
+      {tienCK > 0 && qr ? <The nhan="Mã QR chuyển khoản" style={s.muc}><MaQR qr={qr} soTien={tienCK} noiDung={kq.SoDH} /></The> : null}
       <TieuDeMuc chu="Hàng đã giao" />
       <The style={s.muc}>
         {kq.lines.map((l, i) => (

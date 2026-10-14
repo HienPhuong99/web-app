@@ -12,6 +12,81 @@ const LOAI_CHI = ['Trả nhà cung cấp', 'Làm lại máy cũ', 'Mặt bằng'
 const TRA_NCC = LOAI_CHI[0], LAM_LAI_MAY = LOAI_CHI[1];
 const laTienMat_ = ht => String(ht || '').trim().toLowerCase() === 'tiền mặt';
 
+// ===== Quỹ chờ giải ngân =====
+// Hình thức thu mà tiền chưa về tài khoản ngay (trả góp qua công ty tài chính, quẹt thẻ T+1…) do quản trị chọn trong Cài đặt cửa hàng, kèm % phí
+// ước tính. Thu bằng các hình thức đó vào quỹ "Chờ giải ngân"; khi tiền về, ghi nhận giải ngân (trang GiaiNgan): số rời quỹ chờ, số thực nhận
+// vào ngân hàng, phần chênh là phí (chi trong ngày).
+/** Cài đặt cửa hàng: "Trả góp, 0\nThẻ tín dụng, 1.8" (hoặc mảng { HinhThuc, Phi }) → [{ HinhThuc, Phi }]; chỉ hình thức thu đang dùng, không gồm tiền mặt */
+function docChoGiaiNgan_(v, hinhThuc) {
+  const dong = Array.isArray(v) ? v : String(v == null ? '' : v).split('\n');
+  const kq = [];
+  dong.forEach(x => {
+    let ten, phi;
+    if (x && typeof x === 'object') { ten = x.HinhThuc; phi = x.Phi; }
+    else { const m = /^(.*?)(?:[,;:|]\s*([\d.,]+)\s*%?)?\s*$/.exec(String(x || '').trim()); ten = m[1]; phi = m[2]; }
+    ten = String(ten || '').trim();
+    if (!ten) return;
+    const htDung = (hinhThuc || []).find(h => h.toLowerCase() === ten.toLowerCase());
+    if (!htDung) throw new Error('Chờ giải ngân: "' + ten + '" không có trong danh sách hình thức thu tiền.');
+    if (laTienMat_(htDung)) throw new Error('Chờ giải ngân: tiền mặt luôn vào quỹ tiền mặt.');
+    const p = +String(phi == null ? '0' : phi).replace(',', '.');
+    if (!(p >= 0 && p < 100)) throw new Error('Chờ giải ngân: phí của ' + htDung + ' phải từ 0 đến dưới 100%.');
+    if (!kq.some(y => y.HinhThuc === htDung)) kq.push({ HinhThuc: htDung, Phi: Math.round(p * 100) / 100 });
+  });
+  return kq;
+}
+/** { hình thức: % phí } của các hình thức chờ giải ngân của cửa hàng đang làm việc */
+function choGiaiNgan_(cd) {
+  const m = {};
+  (cuaHang_(CUR_SHOP, cd).congTy.choGiaiNgan || []).forEach(x => { m[x.HinhThuc] = +x.Phi || 0; });
+  return m;
+}
+/** Quỹ của một hình thức thu / chi: 'tienMat', 'cho' (chờ giải ngân) hoặc 'nganHang' */
+const quyCua_ = (ht, cho) => (laTienMat_(ht) ? 'tienMat' : cho && Object.prototype.hasOwnProperty.call(cho, String(ht || '').trim()) ? 'cho' : 'nganHang');
+
+/** Tiền đang chờ giải ngân theo hình thức (từ ngày bắt đầu sổ quỹ tới hết ngày den): { hình thức: số tiền } */
+function dangCho_(den, dau, cho) {
+  const n10 = v => String(v == null ? '' : v).slice(0, 10), trong = d => !((dau.ngay && d < dau.ngay) || (den && d > den)), kq = {};
+  Object.keys(cho).forEach(h => { kq[h] = 0; });
+  readTable_('ThuTien').forEach(p => { const h = String(p.HinhThuc || '').trim(); if (quyCua_(h, cho) === 'cho' && trong(n10(p.Ngay))) kq[h] += +p.SoTien || 0; });
+  readTable_('PhieuChi').forEach(c => { const h = String(c.HinhThuc || '').trim(); if (quyCua_(h, cho) === 'cho' && trong(n10(c.Ngay))) kq[h] -= +c.SoTien || 0; });
+  readTable_('GiaiNgan').forEach(g => { const h = String(g.HinhThuc || '').trim(); if (trong(n10(g.Ngay))) kq[h] = (kq[h] || 0) - (+g.SoTien || 0); });
+  return kq;
+}
+
+/**
+ * Ghi nhận tiền chờ giải ngân đã về tài khoản. g = { HinhThuc, SoTien (số rời quỹ chờ), ThucNhan (số vào ngân hàng; bỏ trống = trừ phí % đã cài), Ngay, GhiChu }.
+ * Ai cũng ghi được (thu ngân xem sao kê); xóa chỉ quản trị.
+ */
+function luuGiaiNgan(token, g) {
+  const user = user_(token);
+  g = g || {};
+  const cho = choGiaiNgan_(), ht = String(g.HinhThuc || '').trim();
+  if (!Object.prototype.hasOwnProperty.call(cho, ht)) throw new Error('"' + ht + '" không phải hình thức chờ giải ngân (cài trong Cài đặt cửa hàng).');
+  const ngay = ngayHopLe_(g.Ngay) || homNay_(), soTien = Math.round(+g.SoTien || 0);
+  if (soTien <= 0) throw new Error('Nhập số tiền giải ngân.');
+  const thucNhan = g.ThucNhan === '' || g.ThucNhan == null ? Math.round(soTien * (100 - cho[ht]) / 100) : Math.round(+g.ThucNhan);
+  if (!(thucNhan >= 0 && thucNhan <= soTien)) throw new Error('Số thực nhận phải từ 0 đến ' + soTien + ' đ.');
+  return withLock_(() => {
+    const con = dangCho_('', soDuDau_(), cho)[ht] || 0; // đọc trong khóa: hai máy cùng ghi không giải ngân quá số đang chờ
+    if (soTien > con) throw new Error(ht + ' đang chờ giải ngân ' + Math.max(0, con) + ' đ, không ghi được ' + soTien + ' đ.');
+    const o = { Ngay: ngay, HinhThuc: ht, SoTien: soTien, ThucNhan: thucNhan, GhiChu: String(g.GhiChu || '').trim().slice(0, 300), NguoiTao: user.ten, NgayTao: now_() };
+    upsert_('GiaiNgan', o, () => nextSo_('GiaiNgan', 'GN', ngay), []);
+    log_(user, 'Ghi nhận giải ngân', o.SoGN, ht + ' · ' + soTien + ' đ · thực nhận ' + thucNhan + ' đ');
+    return o;
+  });
+}
+
+function xoaGiaiNgan(token, soGN) {
+  const user = user_(token, true);
+  withLock_(() => {
+    const g = findObj_('GiaiNgan', soGN);
+    if (!g) throw new Error('Không tìm thấy phiếu giải ngân ' + soGN + '.');
+    deleteWhere_('GiaiNgan', soGN);
+    log_(user, 'Xóa phiếu giải ngân', soGN, g.HinhThuc + ' · ' + g.SoTien + ' đ');
+  });
+}
+
 /** Số dư đầu kỳ: { ngay ('' = từ đầu), tienMat, nganHang }. cd = CaiDat đã đọc sẵn. */
 function soDuDau_(cd) {
   let o = {};
@@ -186,16 +261,17 @@ function xoaPhieuChi(token, soPC) {
 
 // ===== Sổ quỹ =====
 /**
- * Sổ quỹ một ngày cho app: tồn quỹ cuối ngày (tiền mặt, ngân hàng), tổng thu / chi trong ngày và từng phiếu.
+ * Sổ quỹ một ngày cho app: tồn quỹ cuối ngày (tiền mặt, ngân hàng, chờ giải ngân), tổng thu / chi trong ngày và từng phiếu (cả phiếu giải ngân).
+ * choGiaiNgan: các hình thức chờ giải ngân, % phí, số đang chờ tới hết ngày đó.
  * ngay = yyyy-MM-dd (mặc định hôm nay); truoc / sau để lật ngày (sau rỗng khi là hôm nay).
  */
 function soQuyMay(token, ngay) {
   user_(token);
   const homNay = homNay_(), n = ngay == null || ngay === '' ? homNay : ngayHopLe_(ngay);
   if (!n) throw new Error('Ngày không hợp lệ.');
-  const dau = soDuDau_(), ngay10 = v => String(v == null ? '' : v).slice(0, 10);
-  const ton = { tienMat: dau.tienMat, nganHang: dau.nganHang }, trong = { thu: 0, chi: 0 }, ds = [];
-  const cong = (ht, tien) => { if (laTienMat_(ht)) ton.tienMat += tien; else ton.nganHang += tien; };
+  const dau = soDuDau_(), ngay10 = v => String(v == null ? '' : v).slice(0, 10), cho = choGiaiNgan_();
+  const ton = { tienMat: dau.tienMat, nganHang: dau.nganHang, cho: 0 }, trong = { thu: 0, chi: 0 }, ds = [];
+  const cong = (ht, tien) => { ton[quyCua_(ht, cho)] += tien; };
   readTable_('ThuTien').forEach(p => {
     const d = ngay10(p.Ngay), tien = +p.SoTien || 0;
     if ((dau.ngay && d < dau.ngay) || d > n || p.HinhThuc === HT_MAY_CU) return; // máy cũ thu về không phải tiền
@@ -212,10 +288,21 @@ function soQuyMay(token, ngay) {
     trong.chi += tien;
     ds.push({ loai: 'chi', so: c.SoPC, noiDung: c.Loai + (c.DoiTac ? ' · ' + c.DoiTac : '') + (c.GhiChu ? ' · ' + c.GhiChu : ''), SoTien: tien, HinhThuc: c.HinhThuc || '', MaKH: '', luc: String(c.NgayTao || '') });
   });
+  readTable_('GiaiNgan').forEach(g => { // tiền chờ về ngân hàng: rời quỹ chờ, vào ngân hàng số thực nhận; phần chênh là phí, tính vào chi trong ngày
+    const d = ngay10(g.Ngay), tien = +g.SoTien || 0, nhan = +g.ThucNhan || 0;
+    if ((dau.ngay && d < dau.ngay) || d > n) return;
+    ton.cho -= tien; ton.nganHang += nhan;
+    if (d !== n) return;
+    trong.chi += tien - nhan;
+    ds.push({ loai: 'giaiNgan', so: g.SoGN, noiDung: 'Giải ngân ' + g.HinhThuc + ' về ngân hàng' + (tien > nhan ? ' · phí ' + (tien - nhan) + ' đ' : '') + (g.GhiChu ? ' · ' + g.GhiChu : ''),
+      SoTien: nhan, HinhThuc: g.HinhThuc || '', MaKH: '', luc: String(g.NgayTao || '') });
+  });
   ds.sort((a, b) => b.luc.localeCompare(a.luc) || b.so.localeCompare(a.so));
+  const conCho = dangCho_(n, dau, cho);
   const lech = k => Utilities.formatDate(new Date(Date.parse(n + 'T12:00:00Z') + k * 864e5), 'UTC', 'yyyy-MM-dd');
   return { ngay: n, homNay: homNay, truoc: lech(-1), sau: n < homNay ? lech(1) : '', batDau: dau.ngay, ton: ton, trongNgay: trong, ds: ds,
-    loaiChi: LOAI_CHI, hinhThuc: (cuaHang_(CUR_SHOP).congTy.hinhThuc || ['Tiền mặt']).slice(), ncc: dsNCC_() };
+    loaiChi: LOAI_CHI, hinhThuc: (cuaHang_(CUR_SHOP).congTy.hinhThuc || ['Tiền mặt']).slice(), ncc: dsNCC_(),
+    choGiaiNgan: Object.keys(cho).map(h => ({ HinhThuc: h, Phi: cho[h], con: conCho[h] || 0 })) };
 }
 
 // Tên nhà cung cấp / người nhận đã dùng (gợi ý ô "Chi cho"): bên giao ở phiếu nhập từ nhà cung cấp (không phải tồn đầu kỳ, kiểm kê,

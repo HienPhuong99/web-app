@@ -1,15 +1,19 @@
 // Một phiếu bảo hành – sửa chữa. so = 'moi': nhận máy mới (có thể điền sẵn khách / máy / IMEI từ tra bảo hành, hồ sơ khách).
-// Phiếu đã có: gọi khách, đổi trạng thái, ghi kết quả / chi phí, thêm ảnh, trả máy cho khách (có phí thì máy chủ lập đơn dịch vụ).
-import { useRef, useState } from 'react';
-import { Linking, Platform, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+// Phiếu đã có: gọi khách, đổi trạng thái, ghi kết quả / chi phí, linh kiện thay lấy từ kho, xem / thêm ảnh, gửi phiếu nhận máy (PDF),
+// trả máy cho khách (có phí hoặc có linh kiện thì máy chủ lập đơn dịch vụ: thu tiền, xuất kho linh kiện).
+import { useMemo, useRef, useState } from 'react';
+import { Linking, Platform, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../lib/auth';
-import { TT_SUA, type CauHinh, type PhieuSua } from '../../lib/api';
+import { TT_SUA, type CauHinh, type HangKho, type PhieuSua } from '../../lib/api';
 import { congNgay, ngay, tien } from '../../lib/dinhDang';
 import { docTien, soTienNhap } from '../../lib/gioHang';
 import { linkGoi, linkZalo, soDienThoai } from '../../lib/lienHe';
+import { useGuiPhieuSua } from '../../lib/pdf';
+import { timKiem } from '../../lib/timKiem';
+import { AnhSua } from '../../ui/AnhSua';
 import { luu } from '../../lib/boNho';
 import { taoMaGhi } from '../../lib/ghiMotLan';
 import { useDuLieu, useKhoaBoNho } from '../../lib/useDuLieu';
@@ -104,6 +108,15 @@ function ChiTiet({ so }: { so: string }) {
   const [loi, setLoi] = useState(''), [dang, setDang] = useState(''), [moTra, setMoTra] = useState(false);
   const [ketQua, setKetQua] = useState<string | null>(null), [chiPhi, setChiPhi] = useState<number | null>(null), [khachTra, setKhachTra] = useState<number | null>(null), [ht, setHt] = useState('');
   const capNhat = (kq: PhieuSua) => luu(taoKhoa('chiTietSuaChua', so), kq);
+  const phieu = useGuiPhieuSua();
+  // Linh kiện: tìm trong kho (không gồm máy), thêm / bớt là lưu ngay vào phiếu
+  const [timLK, setTimLK] = useState<string | null>(null);
+  const kho = useDuLieu<HangKho[]>('khoMay', [], { bat: timLK !== null }).du;
+  const lkKhop = useMemo(() => (timLK !== null && kho ? timKiem(kho.filter(h => !/^máy$/i.test(h.DVT.trim())), timLK, h => h.TenHang + ' ' + h.Model + ' ' + h.MaHH).slice(0, 8) : []), [kho, timLK]);
+  const lk = p?.LinhKien ?? [];
+  const luuLK = (ds: { MaHH: string; SoLuong: number }[]) => chay('lk', async () => { capNhat(await goi<PhieuSua>('luuSuaChua', { SoPN: so, LinhKien: ds })); });
+  const themLK = (h: HangKho) => { setTimLK(null); luuLK([...lk.map(l => ({ MaHH: l.MaHH, SoLuong: l.SoLuong })), { MaHH: h.MaHH, SoLuong: 1 }]); };
+  const boLK = (ma: string) => luuLK(lk.filter(l => l.MaHH !== ma).map(l => ({ MaHH: l.MaHH, SoLuong: l.SoLuong })));
   const chay = async (viec: string, fn: () => Promise<void>) => {
     setLoi(''); setDang(viec);
     try { await fn(); } catch (e) { setLoi((e as Error).message); } finally { setDang(''); }
@@ -147,7 +160,8 @@ function ChiTiet({ so }: { so: string }) {
             <DongTT nhan={daTra ? 'Đã trả' : 'Hẹn trả'} giaTri={daTra ? p.NgayTra : [p.NgayHen ? ngay(p.NgayHen) : '—', p.conNgay !== null && p.conNgay > 0 ? `còn ${p.conNgay} ngày` : moTaHen(p)].filter(Boolean).join(' · ')} />
             {p.ChiPhi ? <DongTT nhan="Chi phí" giaTri={tien(p.ChiPhi)} dam /> : null}
             {p.SoDH ? <DongTT nhan="Đơn dịch vụ" giaTri={p.SoDH} /> : null}
-            {p.Anh.length ? <DongTT nhan="Ảnh" giaTri={`${p.Anh.length} ảnh (xem trên web)`} /> : null}
+            {p.Anh.length ? <View style={{ marginTop: 10 }}><AnhSua so={p.SoPN} anh={p.Anh} /></View> : null}
+            {daTra && lk.length ? <DongTT nhan="Linh kiện đã thay" giaTri={lk.map(l => l.TenHang + (l.SoLuong > 1 ? ' ×' + l.SoLuong : '')).join(', ')} /> : null}
             {sdt ? (
               <View style={[s.chips, { marginTop: 12 }]}>
                 <Nut chu="Gọi" phu bieuTuong="call" onPress={() => Linking.openURL(linkGoi(sdt))} style={{ flex: 1, minHeight: 44 }} />
@@ -168,13 +182,35 @@ function ChiTiet({ so }: { so: string }) {
                 <TextInput style={s.o} value={cp ? soTienNhap(cp) : ''} onChangeText={t => setChiPhi(docTien(t))} keyboardType="number-pad" placeholder="Chi phí" placeholderTextColor={mau.xam} testID="o-chi-phi-ct" />
                 {ketQua !== null || chiPhi !== null ? <Nut chu="Lưu" phu bieuTuong="save-outline" onPress={luuKQ} dangChay={dang === 'kq'} style={{ marginTop: 10, minHeight: 46 }} testID="nut-luu-kq" /> : null}
               </The>
+              <The nhan="Linh kiện thay (lấy từ kho)" style={s.muc} testID="the-linh-kien">
+                {lk.map(l => (
+                  <View key={l.MaHH} style={s.dongLK}>
+                    <Text style={[s.chinh, { flex: 1, fontSize: 15 }]}>{l.TenHang}{l.SoLuong > 1 ? ` ×${l.SoLuong}` : ''}</Text>
+                    <Chip chu="Bỏ" chon={false} onPress={() => boLK(l.MaHH)} testID={'bo-lk-' + l.MaHH} />
+                  </View>
+                ))}
+                {timLK === null ? <Chip chu="+ Thêm linh kiện" chon={false} onPress={() => setTimLK('')} testID="nut-them-lk" /> : (
+                  <>
+                    <TextInput style={s.o} value={timLK} onChangeText={setTimLK} placeholder="Gõ tên linh kiện: pin, màn…" placeholderTextColor={mau.xam} autoFocus testID="o-tim-lk" />
+                    {lkKhop.map(h => (
+                      <Pressable key={h.MaHH} onPress={() => themLK(h)} style={s.dongTim} accessibilityRole="button" accessibilityLabel={'Thêm ' + h.TenHang} testID={'lk-' + h.MaHH}>
+                        <Text style={[s.chinh, { flex: 1, fontSize: 15 }]}>{h.TenHang}</Text>
+                        <Text style={{ color: h.ton > 0 ? mau.chuNhat : mau.do, fontSize: 14 }}>tồn {h.ton}</Text>
+                        <Text style={{ color: mau.brand, fontSize: 22, fontWeight: '800' }}>+</Text>
+                      </Pressable>
+                    ))}
+                    <Chip chu="Đóng" chon={false} onPress={() => setTimLK(null)} />
+                  </>
+                )}
+                <Text style={s.phu}>{lk.length ? 'Trả máy thì linh kiện xuất kho theo đơn dịch vụ, giá vốn tính vào lãi (bảo hành miễn phí cũng vậy).' : 'Thay pin, màn… lấy từ kho thì thêm ở đây để kho tự trừ và tính đúng lãi.'}</Text>
+              </The>
               <View style={[s.chips, s.muc]}>
                 {Platform.OS !== 'web' ? <Nut chu="Chụp ảnh" phu bieuTuong="camera-outline" onPress={() => themAnh(true)} dangChay={dang === 'anh'} style={{ flex: 1, minHeight: 46 }} /> : null}
                 <Nut chu="Chọn ảnh" phu bieuTuong="image-outline" onPress={() => themAnh(false)} dangChay={dang === 'anh'} style={{ flex: 1, minHeight: 46 }} />
               </View>
               {moTra ? (
                 <The nhan="Trả máy cho khách" mauNhan={mau.xanh} style={s.muc} testID="form-tra-may">
-                  <Text style={s.phu}>Chi phí {tien(cp)}{cp ? '. App lập đơn dịch vụ để tính doanh thu, công nợ.' : ' (bảo hành miễn phí).'}</Text>
+                  <Text style={s.phu}>Chi phí {tien(cp)}{cp ? '. App lập đơn dịch vụ để tính doanh thu, công nợ.' : ' (bảo hành miễn phí).'}{lk.length ? ` Linh kiện xuất kho: ${lk.map(l => l.TenHang).join(', ')}.` : ''}</Text>
                   {cp ? (
                     <>
                       <TextInput style={s.o} value={soTienNhap(tra)} onChangeText={t => setKhachTra(docTien(t))} keyboardType="number-pad" placeholder="Khách trả" placeholderTextColor={mau.xam} testID="o-khach-tra-sua" />
@@ -190,7 +226,8 @@ function ChiTiet({ so }: { so: string }) {
               ) : <Nut chu="Trả máy cho khách" bieuTuong="checkmark-done-outline" onPress={() => setMoTra(true)} style={s.muc} testID="nut-tra-may" />}
             </>
           ) : p.KetQua ? <The nhan="Kết quả" style={s.muc}><Text style={s.chinh}>{p.KetQua}</Text></The> : null}
-          <ChuLoi chu={loi} testID="loi-phieu-sua" />
+          <Nut chu="Gửi phiếu nhận máy cho khách (PDF)" phu bieuTuong="share-outline" onPress={() => phieu.gui(p.SoPN)} dangChay={!!phieu.dang} style={s.muc} testID="nut-gui-phieu-sua" />
+          <ChuLoi chu={loi || phieu.loi} testID="loi-phieu-sua" />
         </>
       ) : null}
     </KhungTrang>
@@ -201,6 +238,8 @@ const s = StyleSheet.create({
   muc: { marginBottom: 14 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chinh: { fontSize: 16, fontWeight: '700', color: mau.chu },
+  dongLK: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  dongTim: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: mau.vach },
   phu: { fontSize: 14, color: mau.chuNhat, marginTop: 10, lineHeight: 20 },
   o: { backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 14, borderWidth: 1, borderColor: mau.vach, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: mau.chu, marginTop: 10 },
 });
