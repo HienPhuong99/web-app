@@ -13,7 +13,7 @@ function apiHam_() {
     taiDuLieu: taiDuLieu, tongQuanMay: tongQuanMay, traBaoHanh: traBaoHanh, dsBaoHanh: dsBaoHanh,
     layChungTu: layChungTu, theKho: theKho, baoCaoHang: baoCaoHang, layHopDong: layHopDong,
     luuKhach: luuKhach, luuChungTu: luuChungTu, luuThuTien: luuThuTien, doiMatKhau: doiMatKhau,
-    cauHinhMay: cauHinhMay, khoMay: khoMay, traMaKho: traMaKho, dsKhachMay: dsKhachMay, chiTietKhach: chiTietKhach, banNhanh: banNhanh,
+    cauHinhMay: cauHinhMay, khoMay: khoMay, traMaKho: traMaKho, dsMaTon: dsMaTon, dsKhachMay: dsKhachMay, chiTietKhach: chiTietKhach, banNhanh: banNhanh,
     dsHopDongMay: dsHopDongMay, taiPdfHopDong: taiPdfHopDong, dsThietBi: dsThietBi, xoaThietBi: xoaThietBi, thuThongBao: thuThongBao, chiTietTongQuan: chiTietTongQuan,
     soQuyMay: soQuyMay, luuPhieuChi: luuPhieuChi, loiNhuan: loiNhuan,
     kiemKho: kiemKho, traHang: traHang, phieuBanHangPdf: phieuBanHangPdf, dsSuaChua: dsSuaChua, chiTietSuaChua: chiTietSuaChua, luuSuaChua: luuSuaChua, traMaySua: traMaySua, luuAnhSuaChua: luuAnhSuaChua,
@@ -21,7 +21,7 @@ function apiHam_() {
 }
 
 // Hàm chỉ đọc: kết quả được ghi nhớ (ketQuaNho_ trong Code.gs) tới khi có dữ liệu mới. App gửi moi: true (kéo xuống làm mới) để lấy số mới nhất.
-const DOC_NHO = ['tongQuanMay', 'chiTietTongQuan', 'khoMay', 'dsKhachMay', 'chiTietKhach', 'dsHopDongMay', 'theKho', 'cauHinhMay', 'traMaKho', 'traBaoHanh', 'soQuyMay', 'loiNhuan', 'dsSuaChua', 'chiTietSuaChua'];
+const DOC_NHO = ['tongQuanMay', 'chiTietTongQuan', 'khoMay', 'dsKhachMay', 'chiTietKhach', 'dsHopDongMay', 'theKho', 'cauHinhMay', 'traMaKho', 'dsMaTon', 'traBaoHanh', 'soQuyMay', 'loiNhuan', 'dsSuaChua', 'chiTietSuaChua'];
 
 let MAY_HIEN_TAI_ = ''; // mã băm của điện thoại đang gọi API: để đánh dấu "máy này" và gửi thông báo thử
 
@@ -194,6 +194,15 @@ function chiTietTongQuan(token, loai, ngay) {
     tong: { don: song.length, tien: song.reduce((s, d) => s + d.TongCong, 0), thu: tienNgay.thu, traLai: tienNgay.traLai, mayCu: tienNgay.mayCu, huy: don.length - song.length } };
 }
 
+// Lọc danh sách theo chữ gõ bằng tìm kiếm thông minh (TimKiem.gs): bỏ dấu, viết liền, viết tắt, chữ cái đầu. them(x): điều kiện khớp
+// riêng (số điện thoại, IMEI). Không có dòng nào khớp thì mới thử gần đúng (gõ sai chính tả). Giữ thứ tự ds.
+function locTim_(ds, raw, text, them) {
+  const pt = phanTichTim_(raw);
+  if (!pt.length) return ds;
+  const ban = ds.map(x => banTim_(text(x)));
+  const kq = ds.filter((x, i) => (them && them(x)) || diemTim_(pt, ban[i], false) > 0);
+  return kq.length ? kq : ds.filter((x, i) => diemTim_(pt, ban[i], true) > 0);
+}
 const boDau_ = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
 
 /**
@@ -207,12 +216,13 @@ function traBaoHanh(token, q) {
   const ds = dsBaoHanh(token), homNay = homNay_();
   // Mã vạch serial trên hộp máy Apple thường có chữ S ở đầu
   const maThu = /^S[A-Z0-9]{10,12}$/.test(ma) ? [ma, ma.slice(1)] : [ma];
-  const laSo = /^[\d\s.\-+]+$/.test(raw), so = sdtVN_(raw), chu = boDau_(raw);
+  const laSo = /^[\d\s.\-+]+$/.test(raw), so = sdtVN_(raw);
+  const khopMa = x => imeiList_(x.IMEI).find(i => maThu.some(m => gonMa_(i).indexOf(m) >= 0));
+  const sdt = x => laSo && so.length >= 4 && String(x.SDT || '').replace(/\D/g, '').indexOf(so) >= 0;
   const kq = [];
-  ds.forEach(x => {
-    const imei = imeiList_(x.IMEI), khop = imei.find(i => maThu.some(m => gonMa_(i).indexOf(m) >= 0));
-    const sdt = laSo && so.length >= 4 && String(x.SDT || '').replace(/\D/g, '').indexOf(so) >= 0;
-    if (!khop && !sdt && !(!laSo && boDau_(x.TenKH).indexOf(chu) >= 0)) return;
+  // gõ chữ: theo tên khách (tìm kiếm thông minh; không theo tên máy kẻo ra cả kho) hoặc serial; gõ số: theo IMEI / số điện thoại
+  (laSo ? ds.filter(x => khopMa(x) || sdt(x)) : locTim_(ds, raw, x => x.TenKH, x => !!khopMa(x))).forEach(x => {
+    const khop = khopMa(x);
     const n = x.HetHan ? Math.round((Date.parse(x.HetHan) - Date.parse(homNay)) / 864e5) : null;
     kq.push(Object.assign({}, x, { IMEIKhop: khop || '', ConHan: n === null ? null : n >= 0, ConNgay: n }));
   });
@@ -305,10 +315,10 @@ function sapXep_(ds, bang, sx, chieu, phu) {
 function dsKhachMay(token, q, o) {
   user_(token);
   o = o || {};
-  const raw = String(q == null ? '' : q).trim().slice(0, 60), laSo = /^[\d\s.\-+]+$/.test(raw), so = sdtVN_(raw), chu = boDau_(raw);
+  const raw = String(q == null ? '' : q).trim().slice(0, 60), laSo = /^[\d\s.\-+]+$/.test(raw), so = sdtVN_(raw);
   const n = noKhach_();
   let ds = readTable_('KhachHang').map(k => ({ MaKH: k.MaKH, TenKH: k.TenKH, SDT: String(k.SDT || ''), DiaChi: k.DiaChi || '', no: n.no(k.MaKH), muaCuoi: n.cuoi(k.MaKH), NgayTao: String(k.NgayTao || '') }));
-  if (raw) ds = ds.filter(k => laSo ? so.length >= 3 && k.SDT.replace(/\D/g, '').indexOf(so) >= 0 : boDau_(k.TenKH).indexOf(chu) >= 0 || String(k.MaKH).toLowerCase() === chu);
+  if (raw) ds = laSo ? ds.filter(k => so.length >= 3 && k.SDT.replace(/\D/g, '').indexOf(so) >= 0) : locTim_(ds, raw, k => k.TenKH + ' ' + k.MaKH + ' ' + k.DiaChi);
   const loc = { no: k => k.no > 0, mua: k => !!k.muaCuoi, chua: k => !k.muaCuoi }[o.loc];
   if (loc) ds = ds.filter(loc);
   const ten = (a, b) => String(a.TenKH).localeCompare(String(b.TenKH), 'vi'), moiThem = (a, b) => b.NgayTao.localeCompare(a.NgayTao) || String(b.MaKH).localeCompare(String(a.MaKH));
@@ -444,9 +454,9 @@ function banNhanh(token, o) {
 function dsHopDongMay(token, q, o) {
   user_(token);
   o = o || {};
-  const raw = String(q == null ? '' : q).trim().slice(0, 60), chu = boDau_(raw), so = sdtVN_(raw), homNay = homNay_();
+  const raw = String(q == null ? '' : q).trim().slice(0, 60), so = sdtVN_(raw), homNay = homNay_();
   let ds = readTable_('HopDong');
-  if (raw) ds = ds.filter(h => boDau_(h.SoHD + ' ' + h.TenDN).indexOf(chu) >= 0 || (so.length >= 4 && String(h.SDT || '').replace(/\D/g, '').indexOf(so) >= 0));
+  if (raw) ds = locTim_(ds, raw, h => h.SoHD + ' ' + h.TenDN, h => so.length >= 4 && String(h.SDT || '').replace(/\D/g, '').indexOf(so) >= 0);
   const loc = {
     hieuLuc: h => h.TrangThai === 'Đang hiệu lực', sap: h => !!(hanHD_(h, homNay) || {}).sap, het: h => !!(hanHD_(h, homNay) || {}).het,
     nhap: h => h.TrangThai === 'Soạn thảo', coFile: h => !!h.FileId,

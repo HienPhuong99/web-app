@@ -263,6 +263,10 @@ assert.deepStrictEqual(tim('0977 12').ds.map(k => k.MaKH), [bn.MaKH]);
 assert.deepStrictEqual(tim('KH00001').ds.map(k => k.TenKH), ['Anh Minh']);
 assert.deepStrictEqual(tim('chi').ds.map(k => k.TenKH), ['Chị Hoa', 'Chị Mai']);
 assert.strictEqual(tim('12').tong, 0); // số quá ngắn
+// Tìm kiếm thông minh: gõ sai một chữ vẫn ra (khi không có tên nào khớp đúng), chữ cái đầu, viết liền
+assert.deepStrictEqual(tim('chi maii').ds.map(k => k.TenKH), ['Chị Mai']);
+assert.deepStrictEqual(tim('anh mihn').ds.map(k => k.TenKH), ['Anh Minh']);
+assert.deepStrictEqual(tim('chimai').ds.map(k => k.TenKH), ['Chị Mai']);
 assert.strictEqual(tim('').tong, sheets.PS_KhachHang.rows.length - 1);
 assert.strictEqual(tim('').ds[0].muaCuoi, today);
 // Lọc, sắp xếp (app gửi o = { loc, sx })
@@ -546,6 +550,11 @@ const doiNgay = (bang, so, ngay) => { const sh = sheets['PS_' + bang], c = sh.ro
   const cu2 = { TenHang: 'iPhone 11 128GB', IMEI: '359999000000033', GiaThu: 5000000 };
   const b = goi(binh4, 'banNhanh', { MaKH: kh2.MaKH, lines: [{ MaHH: 'HH0002', SoLuong: 1, DonGia: 25000000, IMEI: 'SQ0003' }, { MaHH: op.MaHH, SoLuong: 1, DonGia: 200000 }], thuCu: [cu2], thu: { SoTien: 20200000, HinhThuc: 'Tiền mặt' } });
   assert.strictEqual(b.TongCong, 20200000);
+  // Chọn máy thay vì gõ: máy trong kho (máy cũ vừa thu còn bị giữ 7 ngày), máy đã giao của đơn (màn trả hàng)
+  const ton1 = goi(binh4, 'dsMaTon', {}), giao1 = goi(binh4, 'dsMaTon', { SoDH: b.SoDH });
+  assert.ok(!ton1.some(m => m.IMEI === 'SQ0003') && ton1.every(m => m.IMEI && m.MaHH && m.SoPK));
+  assert.deepStrictEqual(plain(ton1.find(m => m.IMEI === '359999000000033')), { IMEI: '359999000000033', MaHH: G.readTable_('HangHoa').find(h => h.TenHang === 'iPhone 11 128GB (máy cũ)').MaHH, TenHang: 'iPhone 11 128GB (máy cũ)', SoPK: b.thuCu[0].SoPK, Ngay: today, giuDen: ngayLui(-7) });
+  assert.deepStrictEqual(plain(giao1).map(m => [m.IMEI, m.MaHH, m.giuDen]), [['SQ0003', 'HH0002', '']]);
   let xem = goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: op.MaHH, SoLuong: 1 }], xemTruoc: true });
   assert.deepStrictEqual([xem.tongMoi, xem.hoanToiDa, xem.mayCuTra.length, xem.hanTra], [20000000, 200000, 0, ngayLui(-7)]);
   xem = goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0002', IMEI: 'SQ0003' }], xemTruoc: true });

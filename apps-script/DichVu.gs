@@ -97,13 +97,13 @@ function phieuSua_(r, homNay) {
 function dsSuaChua(token, q, o) {
   user_(token);
   o = o || {};
-  const homNay = homNay_(), raw = String(q == null ? '' : q).trim().slice(0, 60), chu = boDau_(raw), so = raw.replace(/\D/g, '');
+  const homNay = homNay_(), raw = String(q == null ? '' : q).trim().slice(0, 60), so = raw.replace(/\D/g, '');
   const LOC = {
     dang: r => r.TrangThai !== 'Đã trả khách', tra: r => r.TrangThai === 'Đã trả khách', xong: r => r.TrangThai === 'Đã sửa xong' || r.TrangThai === 'Không sửa được',
     hen: r => r.TrangThai !== 'Đã trả khách' && r.conNgay !== null && r.conNgay <= 0, tat: () => true,
   };
   let ds = readTable_('SuaChua').map(r => phieuSua_(r, homNay)).filter(LOC[o.loc] || LOC.dang);
-  if (raw) ds = ds.filter(r => boDau_([r.SoPN, r.TenKH, r.TenMay, r.IMEI, r.TinhTrang].join(' ')).indexOf(chu) >= 0 || (so.length >= 4 && (r.SDT.replace(/\D/g, '').indexOf(so) >= 0 || r.IMEI.indexOf(so) >= 0)));
+  if (raw) ds = locTim_(ds, raw, r => [r.SoPN, r.TenKH, r.TenMay, r.IMEI, r.TinhTrang].join(' '), r => so.length >= 4 && (r.SDT.replace(/\D/g, '').indexOf(so) >= 0 || r.IMEI.indexOf(so) >= 0));
   ds.sort((a, b) => String(b.NgayNhan + b.SoPN).localeCompare(String(a.NgayNhan + a.SoPN)));
   return { tong: ds.length, ds: ds.slice(0, 50) };
 }
@@ -248,10 +248,28 @@ function imeiTrongKho_() {
   const kho = {}, daXuat = {};
   Object.keys(cuoi).forEach(x => {
     const c = cuoi[x];
-    if (c.p.Loai === 'Nhập') kho[x] = { IMEI: c.ma, MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay };
-    else daXuat[x] = { IMEI: c.ma, MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay, DoiTac: c.p.DoiTac || '' };
+    if (c.p.Loai === 'Nhập') kho[x] = { IMEI: c.ma, MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay, thuCu: laNhapThuCu_(c.p) };
+    else daXuat[x] = { IMEI: c.ma, MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay, DoiTac: c.p.DoiTac || '', SoDH: c.p.SoDH || '' };
   });
   return { kho: kho, daXuat: daXuat };
+}
+
+/**
+ * Máy (IMEI / serial) để chọn thay vì gõ tay. o.SoDH: máy đã giao cho đơn đó mà khách chưa trả (màn khách trả hàng);
+ * không có SoDH: mọi máy đang trong kho (bán, xuất kho). Mỗi máy { IMEI, MaHH, TenHang, SoPK, Ngay, giuDen }:
+ * giuDen = máy cũ thu đổi còn bị giữ tới ngày đó, chưa bán / xuất được.
+ */
+function dsMaTon(token, o) {
+  user_(token);
+  o = o || {};
+  const { kho, daXuat } = imeiTrongKho_(), homNay = homNay_(), hang = {};
+  readTable_('HangHoa').forEach(h => { hang[h.MaHH] = h; });
+  const ra = x => {
+    const giuDen = x.thuCu ? congNgay_(x.Ngay, NGAY_GIU_MAY_CU) : '';
+    return { IMEI: x.IMEI, MaHH: x.MaHH, TenHang: (hang[x.MaHH] || {}).TenHang || x.TenHang, SoPK: x.SoPK, Ngay: String(x.Ngay).slice(0, 10), giuDen: giuDen >= homNay ? giuDen : '' };
+  };
+  const ds = o.SoDH ? Object.values(daXuat).filter(x => String(x.SoDH) === String(o.SoDH)).map(ra) : Object.values(kho).map(ra);
+  return ds.sort((a, b) => String(a.TenHang).localeCompare(String(b.TenHang), 'vi') || a.Ngay.localeCompare(b.Ngay) || a.IMEI.localeCompare(b.IMEI));
 }
 
 /**

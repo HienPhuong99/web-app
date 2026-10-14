@@ -944,6 +944,7 @@ assert.deepStrictEqual(plain(G.xoaCuaHangDaBo_()), []); // chạy lại không l
   vm.runInContext('BANG_DA_DOC_ = null; TIEU_DE_DA_DOC_ = null;', G);
 }
 
+require('./kiem-tra-tim-kiem'); // tìm kiếm thông minh: cùng mã ở web và máy chủ, đúng các mẫu
 require('./kiem-tra-html'); // giao diện: cú pháp, và các chỗ Apps Script sẽ cắt nhầm khi xóa chú thích
 // API app điện thoại: tiến trình riêng để có dữ liệu sạch
 ['kiem-tra-api.js', 'kiem-tra-du-lieu-thu.js'].forEach(f => require('child_process').execFileSync(process.execPath, [require('path').join(__dirname, f)], { stdio: ['ignore', 'pipe', 'inherit'] })

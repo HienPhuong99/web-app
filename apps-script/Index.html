@@ -304,6 +304,9 @@ table.lines.hd { min-width: 980px; } /* hợp đồng */
 .picker div { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
 .picker div.on { background: var(--brand-50); }
 .picker small { color: var(--muted); display: block; }
+.chips.ma-giao { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; font-size: 12px; align-items: center; }
+.chips.ma-giao .chip { border: 1px solid #d5dbe5; background: #fff; border-radius: 999px; padding: 2px 8px; font: 12px ui-monospace, monospace; cursor: pointer; color: inherit; }
+.chips.ma-giao .chip.on { background: var(--brand-50); border-color: var(--brand); color: var(--brand-d); }
 #toast { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 70; }
 #toast div { background: #1d2433; color: #fff; padding: 10px 16px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,.2); max-width: 380px; animation: rise .4s var(--ease); }
 #toast .err { background: #b42318; }
@@ -404,7 +407,7 @@ table.lines.hd { min-width: 980px; } /* hợp đồng */
 
 <script>
 // ===================== Trạng thái & tiện ích =====================
-const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], suaChua: [], ttSua: [], loaiSua: [], htMayCu: 'Thu máy cũ', phieuChi: [], soDuDau: { ngay: '', tienMat: 0, nganHang: 0 }, loaiChi: [], giaVon: {}, hopDong: [], hopDongLich: [], mauHD: [], loaiHD: [], nganHang: [], emailSang: null, hd: null, ton: {},
+const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], suaChua: [], ttSua: [], loaiSua: [], htMayCu: 'Thu máy cũ', phieuChi: [], soDuDau: { ngay: '', tienMat: 0, nganHang: 0 }, loaiChi: [], giaVon: {}, hopDong: [], hopDongLich: [], mauHD: [], loaiHD: [], nganHang: [], emailSang: null, hd: null, ton: {}, maTon: null,
   thongKe: { topHang: [], theoNhom: [] }, taiKhoan: null, baoHanh: null, nhatKy: null, view: 'home', loai: '', doc: null, extra: {}, dirty: false, q: {}, onNew: null };
 const D = { thuDH: {}, thuKH: {}, muaKH: {}, noKH: {}, dhBG: {} }; // số liệu suy ra: đã thu, công nợ, báo giá đã chốt
 const LG = { si: 'Giá sỉ', le: 'Giá lẻ', tuy: 'Giá tùy chọn' };
@@ -431,13 +434,119 @@ const store = {
   get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} },
 };
-const words = q => norm(q).split(/\s+/).filter(Boolean);
-// Chuỗi tìm kiếm (bỏ dấu) tính 1 lần cho mỗi bản ghi; bản ghi mới từ máy chủ tự tính lại
+// <tim-kiem> Tìm kiếm thông minh: bản sao của apps-script/TimKiem.gs (dev/tim-kiem-mau.json kiểm cả hai bản cho ra cùng kết quả)
+// 1. Chuẩn hóa: bỏ dấu, chữ thường, bỏ ký tự lạ, tách chữ và số ("ip15pm" → "ip 15 pm", "128GB" → "128 gb").
+// 2. Mỗi từ gõ phải khớp (AND), theo thứ tự ưu tiên: trùng nguyên từ (3 điểm) > đầu một từ (2) > nằm trong chuỗi liền không cách
+//    (1: "0901234" khớp "0901 234 567", 4 số cuối IMEI) > chữ cái đầu các từ (0,8: "pm" = Pro Max, "tn" = tai nghe) > viết tắt (TU_TAT).
+// 3. Không có kết quả nào thì mới thử gần đúng: cho sai 1 chữ (từ 3–6 ký tự) hoặc 2 chữ (từ 7 ký tự trở lên), đo bằng khoảng cách
+//    sửa chuỗi (Damerau–Levenshtein: thêm, bớt, thay, đổi chỗ hai chữ cạnh nhau) – "iphnoe" vẫn ra "iphone".
+// 4. Điểm cao xếp trước; từ gõ đầu trùng từ đầu của tên được cộng thêm; bằng điểm thì tên ngắn hơn trước.
+const TU_TAT_TIM = { ss: ['samsung'], xm: ['xiaomi'], dt: ['dien thoai'], ip: ['iphone'], mb: ['macbook'], aw: ['apple watch'] };
+
+function chuanChuTim_(s) {
+  return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ').replace(/([a-z])(\d)/g, '$1 $2').replace(/(\d)([a-z])/g, '$1 $2').trim();
+}
+/** Bản ghi đã chuẩn hóa để so: w = các từ, c = chuỗi liền không cách, i = chữ cái đầu các từ */
+function banTim_(text) {
+  const w = chuanChuTim_(text).split(' ').filter(Boolean);
+  return { w: w, c: w.join(''), i: w.map(x => x[0]).join('') };
+}
+/** Câu tìm → các từ, mỗi từ kèm các cách hiểu (viết tắt có thể thành nhiều từ: "dt" → "dien thoai") */
+function phanTichTim_(q) {
+  return chuanChuTim_(q).split(' ').filter(Boolean).map(t => ({ t: t, alt: [[t]].concat((TU_TAT_TIM[t] || []).map(x => x.split(' '))) }));
+}
+// Khoảng cách sửa chuỗi (thêm / bớt / thay / đổi chỗ hai chữ cạnh nhau); dừng sớm khi chắc chắn vượt toiDa
+function khoangCachTim_(a, b, toiDa) {
+  if (Math.abs(a.length - b.length) > toiDa) return toiDa + 1;
+  let d2 = null, d1 = [];
+  for (let j = 0; j <= b.length; j++) d1.push(j);
+  for (let i = 1; i <= a.length; i++) {
+    const d = [i];
+    let nho = i;
+    for (let j = 1; j <= b.length; j++) {
+      let v = Math.min(d1[j] + 1, d[j - 1] + 1, d1[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (d2 && i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, d2[j - 2] + 1);
+      d.push(v);
+      if (v < nho) nho = v;
+    }
+    if (nho > toiDa) return toiDa + 1;
+    d2 = d1; d1 = d;
+  }
+  return d1[b.length];
+}
+function diemTu_(t, b, ganDung) {
+  let best = 0;
+  for (let k = 0; k < b.w.length; k++) {
+    const w = b.w[k];
+    if (w === t) return 3;
+    if (best < 2 && w.lastIndexOf(t, 0) === 0) best = 2;
+  }
+  if (best) return best;
+  if (t.length >= 2 && b.c.indexOf(t) >= 0) return 1;
+  if (t.length >= 2 && t.length <= 4 && /^[a-z]+$/.test(t) && b.i.indexOf(t) >= 0) return 0.8;
+  if (ganDung && t.length >= 3 && !/^\d+$/.test(t)) {
+    const toiDa = t.length >= 7 ? 2 : 1;
+    for (let k = 0; k < b.w.length; k++) {
+      const w = b.w[k];
+      if (/^\d+$/.test(w)) continue;
+      if (khoangCachTim_(t, w, toiDa) <= toiDa || (w.length > t.length && khoangCachTim_(t, w.slice(0, t.length), toiDa) <= toiDa)) return 0.5;
+    }
+  }
+  return 0;
+}
+/** Điểm của bản ghi b (banTim_) với câu tìm pt (phanTichTim_): 0 = không khớp. ganDung: cho gõ sai chính tả. */
+function diemTim_(pt, b, ganDung) {
+  if (!pt.length) return 1;
+  let tong = 0;
+  for (let n = 0; n < pt.length; n++) {
+    let tot = 0;
+    pt[n].alt.forEach(cach => {
+      let d = 0;
+      for (let m = 0; m < cach.length; m++) { const x = diemTu_(cach[m], b, ganDung); if (!x) return; d += x; }
+      d = d / cach.length;
+      if (d > tot) tot = d;
+    });
+    if (!tot) return 0;
+    tong += tot;
+  }
+  const dau = b.w[0] || '';
+  if (dau && (dau === pt[0].t || dau.lastIndexOf(pt[0].t, 0) === 0)) tong += 1;
+  return tong - b.w.length * 0.01; // bằng điểm: tên ngắn (ít từ thừa) trước
+}
+/**
+ * Lọc và xếp hạng ds theo câu tìm q; text(x) = chuỗi để tìm của một bản ghi. o.giuThuTu: giữ thứ tự ds (danh sách theo ngày),
+ * chỉ lọc. Không có bản ghi nào khớp đúng thì trả kết quả gần đúng, kèm ds.ganDung = true.
+ */
+function timKiem_(ds, q, text, o) {
+  o = o || {};
+  const pt = phanTichTim_(q);
+  if (!pt.length) return ds.slice();
+  const ban = ds.map(x => banTim_(text(x)));
+  const chay = ganDung => {
+    const kq = [];
+    ds.forEach((x, i) => { const d = diemTim_(pt, ban[i], ganDung); if (d) kq.push({ x: x, d: d, i: i }); });
+    if (!o.giuThuTu) kq.sort((a, b) => b.d - a.d || a.i - b.i);
+    return kq.map(k => k.x);
+  };
+  let kq = chay(false);
+  if (!kq.length) { kq = chay(true); kq.ganDung = kq.length > 0; }
+  return kq;
+}
+// </tim-kiem>
+const words = q => phanTichTim_(q);
+// Bản ghi đã chuẩn hóa để tìm tính 1 lần cho mỗi bản ghi; bản ghi mới từ máy chủ tự tính lại
 const searchCache = new WeakMap();
-function matches(w, obj, text) {
-  let s = searchCache.get(obj);
-  if (s === undefined) { s = norm(text(obj)); searchCache.set(obj, s); }
-  return w.every(x => s.includes(x));
+const banCua = (obj, text) => { let b = searchCache.get(obj); if (b === undefined) { b = banTim_(text(obj)); searchCache.set(obj, b); } return b; };
+const diemCua = (w, obj, text, ganDung) => diemTim_(w, banCua(obj, text), ganDung);
+const matches = (w, obj, text, ganDung) => diemCua(w, obj, text, ganDung) > 0;
+// Ô gợi ý: xếp theo độ khớp (cộng thêm diemThem(x) nếu có), không thấy gì thì thử gần đúng (gõ sai chính tả)
+function xepTim(ds, q, text, n, diemThem) {
+  const w = words(q);
+  const chay = gan => ds.map((x, i) => ({ x: x, i: i, d: diemCua(w, x, text, gan) })).filter(o => o.d > 0)
+    .map(o => (o.d += diemThem ? diemThem(o.x) : 0, o)).sort((a, b) => b.d - a.d || a.i - b.i).slice(0, n).map(o => o.x);
+  const kq = chay(false);
+  return kq.length || !w.length ? kq : chay(true);
 }
 function initials(name) {
   const w = String(name || '?').trim().split(/\s+/);
@@ -615,6 +724,7 @@ $('#loginForm').addEventListener('submit', async e => {
 
 async function loadAll() {
   Object.assign(S, await api('taiDuLieu'));
+  S.maTon = null;
   if (S.q.baocao) S.q.baocao.hang = null;
   sortAll(); derive();
 }
@@ -802,7 +912,7 @@ function listCard(el, cfg) {
     nutChieu.innerHTML = icon(giam ? 'arrowDown' : 'arrowUp');
     nutChieu.title = t; nutChieu.setAttribute('aria-label', t);
   };
-  let rows = [], lim = LIMIT, daVe = 0, hen = 0;
+  let rows = [], lim = LIMIT, daVe = 0, hen = 0, ganDung = false;
   // Vẽ dần: DAU dòng đầu vẽ ngay để màn hình hiện liền, phần còn lại (tới lim) vẽ ở lượt sau. daVe = số dòng đã có trong bảng,
   // nên bấm Hiện thêm liên tiếp hay lọc lại giữa chừng cũng không sót / lặp dòng.
   const dongHtml = (a, b) => rows.slice(a, b).map((r, i) => `<tr data-i="${a + i}">${cfg.cols.map(c => `<td class="${c.cls || ''}">${c.f ? c.f(r) : esc(r[c.k])}</td>`).join('')}</tr>`).join('');
@@ -812,13 +922,16 @@ function listCard(el, cfg) {
     $('tr.them', body)?.remove();
     if (n > daVe) { body.insertAdjacentHTML('beforeend', dongHtml(daVe, n)); daVe = n; }
     const can = Math.min(lim, rows.length), con = rows.length - can;
-    count.textContent = con > 0 ? `Hiện ${can} / ${rows.length} dòng` : `${rows.length} dòng`;
+    count.textContent = (con > 0 ? `Hiện ${can} / ${rows.length} dòng` : `${rows.length} dòng`) + (ganDung ? ' gần đúng' : '');
+    count.title = ganDung ? 'Không có dòng nào khớp đúng chữ đã gõ; đang hiện các dòng gần giống (có thể gõ sai một vài chữ).' : '';
     if (daVe < can) { hen = setTimeout(() => { if (card.isConnected) veDen(can); }, 16); return; } // đã rời màn hình: thôi vẽ tiếp
     if (con > 0) body.insertAdjacentHTML('beforeend', `<tr class="them"><td colspan="${cfg.cols.length}"><button type="button" class="btn sm">Hiện thêm ${Math.min(LIMIT, con)} dòng (còn ${con})</button></td></tr>`);
   };
   const refresh = () => {
-    const w = words(st.text), md = macDinh(), sx = tieuChi(st.f.sx);
-    rows = cfg.data().filter(r => (!cfg.filter || cfg.filter(r, st.f)) && matches(w, r, cfg.text));
+    const w = words(st.text), md = macDinh(), sx = tieuChi(st.f.sx), loc = r => !cfg.filter || cfg.filter(r, st.f);
+    rows = cfg.data().filter(r => loc(r) && matches(w, r, cfg.text));
+    ganDung = !rows.length && w.length > 0;
+    if (ganDung) { rows = cfg.data().filter(r => loc(r) && matches(w, r, cfg.text, true)); ganDung = rows.length > 0; } // không thấy: thử gần đúng (gõ sai chính tả)
     if (sx) rows = sapXep(rows, sx[2], st.f.chieu);
     veChieu();
     lim = LIMIT; daVe = 0;
@@ -1745,13 +1858,16 @@ function vDoc(el) {
   el.oninput = e => onDocInput(el, e.target);
   el.onchange = e => { if (e.target.dataset.f === 'LoaiGia') onTypeChange(el, e.target); };
   // Máy quét mã vạch gõ xong IMEI rồi Enter: thêm dấu phẩy để quét tiếp máy kế
+  // (phiếu xuất: đang có máy gợi ý thì Enter chọn máy đó – ô gợi ý bắt phím trước và đã xử lý)
   el.onkeydown = e => {
     const t = e.target;
-    if (e.key !== 'Enter' || t.dataset.f !== 'IMEI') return;
+    if (e.key !== 'Enter' || t.dataset.f !== 'IMEI' || e.defaultPrevented) return;
     e.preventDefault();
     t.value = t.value.replace(/[\s,;]+$/, '') + ', ';
     onDocInput(el, t);
+    hidePicker();
   };
+  if (L === 'XK') taiMaTon();
 }
 
 function drawLines(el) {
@@ -1855,6 +1971,7 @@ function onDocInput(el, t) {
   if (f === 'IMEI') { // số lượng đếm theo số mã đã nhập
     const n = t.value.split(/[\s,;]+/).filter(Boolean).length;
     if (n) { l.SoLuong = n; $('[data-f="SoLuong"]', tr).value = n; }
+    if (S.loai === 'XK') taiMaTon().then(() => { if (document.activeElement === t) showPicker(t, maTonSource(i), m => pickMaTon(i, m), !!l.MaHH); });
   }
   if (f === 'TenHang') {
     if (!t.value.trim()) l.MaHH = '';
@@ -1862,6 +1979,51 @@ function onDocInput(el, t) {
   }
   updateRow(tr, l); drawTotals(el); setDirty(true);
 }
+
+// ===== Phiếu xuất / giao hàng: chọn máy (IMEI) đang trong kho thay vì gõ đủ mã =====
+// Gõ vài số (thường là mấy số cuối) là ra máy khớp; bấm vào ô IMEI của dòng máy thì hiện mọi máy của mặt hàng đó còn trong kho.
+const gonMa = v => String(v ?? '').toUpperCase().replace(/[\s._\/\-]/g, '');
+let maTonDangTai = null; // đang tải: các lần gọi cùng lúc chờ chung một lần
+function taiMaTon() {
+  if (S.maTon) return Promise.resolve(S.maTon);
+  return maTonDangTai || (maTonDangTai = api('dsMaTon', {}).then(r => (S.maTon = r)).catch(() => null).finally(() => { maTonDangTai = null; }));
+}
+function maTonSource(i) {
+  return q => {
+    const l = S.doc.lines[i] || {}, tok = String(q).split(/[,;]/).pop(), go = gonMa(tok);
+    const co = new Set(S.doc.lines.flatMap(x => String(x.IMEI || '').split(/[\s,;]+/)).map(gonMa).filter(Boolean)); // máy đã ghi ở phiếu này
+    const ds = (S.maTon || []).filter(m => (!l.MaHH || m.MaHH === l.MaHH) && !co.has(gonMa(m.IMEI)));
+    let kq = [];
+    if (!go) kq = l.MaHH ? ds : [];
+    else if (!/^\d{1,2}$/.test(go)) {
+      const hang = m => { const g = gonMa(m.IMEI); return g.endsWith(go) ? 0 : g.startsWith(go) ? 1 : g.includes(go) ? 2 : -1; }; // khớp cuối mã trước
+      kq = /\d/.test(go) && go.length >= 3 ? ds.map(m => [m, hang(m)]).filter(x => x[1] >= 0).sort((a, b) => a[1] - b[1]).map(x => x[0]) : [];
+      if (!kq.length && !/^\d+$/.test(go)) kq = xepTim(ds, tok, m => m.TenHang + ' ' + m.IMEI, 30); // không khớp mã: tìm theo tên máy
+    }
+    return kq.slice(0, 30).map(m => ({ item: m, html: `<b class="code">${esc(m.IMEI)}</b><small>${esc(m.TenHang)} · nhập ${dmy(m.Ngay)} · ${esc(m.SoPK)}${m.giuDen ? ' · máy cũ giữ đến ' + dmy(m.giuDen) + ', chưa xuất được' : ''}</small>` }));
+  };
+}
+function pickMaTon(i, m) {
+  if (m.giuDen) return toast(`Máy ${m.IMEI} là máy cũ thu đổi, còn giữ đến hết ngày ${dmy(m.giuDen)} (khách có thể trả hàng), chưa xuất được.`, 'err');
+  const el = $('#view'), l = S.doc.lines[i], ma = String(l.IMEI || '').split(/[,;]/).map(x => x.trim());
+  ma.pop(); // bỏ phần đang gõ dở
+  const ds = ma.filter(Boolean).concat(m.IMEI);
+  const h = !l.MaHH && hangByMa(m.MaHH);
+  if (h) Object.assign(l, { MaHH: h.MaHH, TenHang: h.TenHang, Model: h.Model, DVT: h.DVT, XuatXu: h.XuatXu });
+  Object.assign(l, { IMEI: ds.join(', ') + ', ', SoLuong: ds.length });
+  ensureTail(); drawLines(el); drawTotals(el); setDirty(true);
+  const c = $(`tr[data-i="${i}"] [data-f="IMEI"]`, el);
+  if (c) { c.focus(); c.setSelectionRange(c.value.length, c.value.length); }
+}
+// Bấm vào ô IMEI của dòng máy ở phiếu xuất: hiện máy của mặt hàng đó còn trong kho
+document.addEventListener('focusin', async e => {
+  const t = e.target;
+  if (S.view !== 'doc' || S.loai !== 'XK' || !t.dataset || t.dataset.f !== 'IMEI') return;
+  const tr = t.closest('tr[data-i]'), i = tr ? +tr.dataset.i : -1, l = S.doc.lines[i];
+  if (!l || !l.MaHH) return;
+  await taiMaTon();
+  if (document.activeElement === t) showPicker(t, maTonSource(i), m => pickMaTon(i, m), true);
+});
 
 function onTypeChange(el, sel) {
   const tr = sel.closest('tr'), i = +tr.dataset.i, l = S.doc.lines[i];
@@ -1907,7 +2069,7 @@ function pickKhach(kh) {
 // Cập nhật danh sách sau khi lưu/xóa: chứng từ, tồn kho, trạng thái đơn bị ảnh hưởng
 function applyResult(r) {
   if (S.q.baocao) S.q.baocao.loi = null;
-  if (r.ton) S.ton = r.ton;
+  if (r.ton) { S.ton = r.ton; S.maTon = null; } // máy (IMEI) trong kho: tải lại khi cần
   if (r.giaVon) S.giaVon = r.giaVon;
   if (S.q.baocao) S.q.baocao.hang = null;
   (r.donHang || []).forEach(dh => upsertLocal('donHang', 'SoDH', dh));
@@ -2072,18 +2234,16 @@ function ptPrintHtml(p) {
 // ===================== Ô gợi ý tìm hàng / tìm khách =====================
 const P = { input: null, items: [], idx: 0, onPick: null };
 function hangSource(q) {
-  const w = words(q);
-  return S.hang.filter(h => matches(w, h, hangText)).slice(0, 50).map(h => ({ item: h,
+  return xepTim(S.hang, q, hangText, 50, h => tonOf(h.MaHH) > 0 ? 0.5 : 0).map(h => ({ item: h, // còn hàng: xếp trước một chút
     html: `<b>${esc(h.TenHang)}</b><small>${esc([h.MaHH, h.Model, h.XuatXu].filter(Boolean).join(' · '))} — Sỉ ${money(h.GiaSi) || '—'} · Lẻ ${money(h.GiaLe) || '—'}${S.ton[h.MaHH] ? ' · Tồn ' + money(tonOf(h.MaHH)) : ''}</small>` }));
 }
 function khachSource(q) {
-  const w = words(q);
-  return S.khach.filter(k => matches(w, k, khachText)).slice(0, 30).map(k => ({ item: k,
+  return xepTim(S.khach, q, khachText, 30).map(k => ({ item: k,
     html: `<b>${esc(k.TenKH)}</b><small>${esc([k.MaKH, k.SDT, k.DiaChi].filter(Boolean).join(' · '))}</small>` }));
 }
-function showPicker(input, source, onPick) {
+function showPicker(input, source, onPick, rong) { // rong: hiện cả khi ô trống (vd danh sách máy của mặt hàng)
   const box = $('#picker');
-  P.items = input.value.trim() ? source(input.value) : [];
+  P.items = input.value.trim() || rong ? source(input.value) : [];
   P.input = input; P.onPick = onPick; P.idx = 0;
   if (!P.items.length) return hidePicker();
   box.innerHTML = P.items.map((it, i) => `<div data-i="${i}" class="${i ? '' : 'on'}">${it.html}</div>`).join('');
@@ -3048,7 +3208,7 @@ function openTraHang(d) {
       <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Hàng hóa</th><th class="num">Đã mua</th><th class="num">Trả</th><th>IMEI máy trả</th></tr></thead><tbody>
       ${ls.map((l, i) => `<tr><td>${esc(l.TenHang)}<span class="sub">${money(l.DonGia)} ₫</span></td><td class="num">${money(l.SoLuong)}</td>
         <td class="num"><input type="number" min="0" max="${+l.SoLuong || 0}" step="1" value="0" data-sl="${i}" style="width:70px" aria-label="Số lượng trả ${esc(l.TenHang)}"></td>
-        <td>${l.MaHH ? `<input data-imei="${i}" placeholder="IMEI, cách nhau dấu phẩy" aria-label="IMEI trả ${esc(l.TenHang)}">` : '<span class="muted">—</span>'}</td></tr>`).join('')}</tbody></table></div>
+        <td>${l.MaHH ? `<input data-imei="${i}" placeholder="IMEI, cách nhau dấu phẩy" aria-label="IMEI trả ${esc(l.TenHang)}"><div class="chips ma-giao" data-giao="${i}"></div>` : '<span class="muted">—</span>'}</td></tr>`).join('')}</tbody></table></div>
       <div class="fgrid" style="margin-top:12px"><label class="field"><span class="lb">Trả lại tiền cho khách</span><input name="SoTien" class="money num" inputmode="numeric" value="0"></label>
       <label class="field"><span class="lb">Hình thức</span><select name="HinhThuc">${hinhThuc.map(x => `<option>${esc(x)}</option>`).join('')}</select></label>
       <label class="field full"><span class="lb">Lý do / ghi chú</span><input name="GhiChu" placeholder="vd: Khách đổi ý, máy lỗi đổi máy khác"></label></div>
@@ -3079,10 +3239,26 @@ function openTraHang(d) {
     } catch (e) { if (so === lan) xemEl.innerHTML = `<span class="red">${esc(errMsg(e))}</span>`; }
   };
   let t;
+  const demMa = i => { const n = $(`[data-imei="${i}"]`, m).value.split(/[\s,;]+/).filter(Boolean).length; if (n) $(`[data-sl="${i}"]`, m).value = n; };
   m.oninput = e => {
-    if (e.target.dataset.imei !== undefined) { const i = e.target.dataset.imei, n = e.target.value.split(/[\s,;]+/).filter(Boolean).length; if (n) $(`[data-sl="${i}"]`, m).value = n; }
+    if (e.target.dataset.imei !== undefined) demMa(e.target.dataset.imei);
     if (e.target.dataset.imei !== undefined || e.target.dataset.sl !== undefined) { clearTimeout(t); t = setTimeout(xem, 400); }
   };
+  // Máy đã giao cho đơn này (khách chưa trả): bấm để ghi vào ô IMEI máy trả, khỏi gõ
+  api('dsMaTon', { SoDH: d.SoDH }).then(ds => ls.forEach((l, i) => {
+    const o = $(`[data-giao="${i}"]`, m), cua = ds.filter(x => x.MaHH === l.MaHH);
+    if (!o || !cua.length) return;
+    o.innerHTML = '<span class="muted">Máy đã giao:</span> ' + cua.map(x => `<button type="button" class="chip" data-ma="${esc(x.IMEI)}" title="Bấm để ghi máy này vào ô IMEI máy trả">${esc(x.IMEI)}</button>`).join('');
+    o.onclick = e => {
+      const b = e.target.closest('[data-ma]'), inp = $(`[data-imei="${i}"]`, m);
+      if (!b) return;
+      const ma = inp.value.split(/[,;]/).map(x => x.trim()).filter(Boolean), co = ma.indexOf(b.dataset.ma);
+      if (co >= 0) ma.splice(co, 1); else ma.push(b.dataset.ma);
+      inp.value = ma.join(', '); b.classList.toggle('on', co < 0);
+      if (!ma.length) $(`[data-sl="${i}"]`, m).value = 0;
+      demMa(i); clearTimeout(t); t = setTimeout(xem, 200);
+    };
+  })).catch(() => {});
 }
 
 // ===================== Bảo hành – sửa chữa, thu cũ đổi mới =====================
@@ -3194,12 +3370,12 @@ function suaPrintHtml(p) {
 const NGAY_GIU = 7;
 const coThuCu = d => (d.lines || []).some(l => +l.SoLuong < 0);
 function openThuMayCu(d) {
-  modal({
+  const m = modal({
     title: 'Thu máy cũ trừ vào đơn ' + d.SoDH,
     body: `<p class="muted" style="margin-top:0">Đơn còn nợ ${money(conNo(d))} ₫. Máy cũ thành một dòng của đơn (số lượng −1, đơn giá = giá thu) và vào kho ngay, nhóm "Máy cũ".
       Trong ${NGAY_GIU} ngày kể từ ngày bán, khách trả máy mới thì cửa hàng trả lại đúng máy cũ này, nên máy cũ chưa bán được; quá ${NGAY_GIU} ngày không nhận trả.</p><div class="fgrid">
       <label class="field"><span class="lb">Tên máy cũ *</span><input name="TenHang" placeholder="vd: iPhone 12 64GB"></label>
-      <label class="field"><span class="lb">IMEI / serial *</span><input name="IMEI"></label>
+      <label class="field"><span class="lb">IMEI / serial *</span><input name="IMEI"><small class="muted" data-lich-su></small></label>
       <label class="field"><span class="lb">Giá thu *</span><input name="GiaThu" class="money num" inputmode="numeric"></label>
       <label class="field"><span class="lb">Giá bán lại (dự kiến)</span><input name="GiaLe" class="money num" inputmode="numeric"></label>
       <label class="field full"><span class="lb">Tình trạng máy</span><input name="GhiChu" placeholder="vd: trầy nhẹ, pin 85%"></label></div>`,
@@ -3211,6 +3387,22 @@ function openThuMayCu(d) {
       toast(`Đã thu máy cũ ${kq.TenHang} (nhập kho ${kq.SoPK}): trừ ${money(kq.GiaThu)} ₫ vào đơn.`);
     }) }],
   });
+  // Gõ / quét xong IMEI: tra lịch sử. Máy cửa hàng từng bán thì tự điền tên máy; máy đang trong kho thì báo ngay (không thu được)
+  const oMa = $('[name=IMEI]', m), oTen = $('[name=TenHang]', m), ghi = $('[data-lich-su]', m);
+  let daTra = '';
+  oMa.onchange = async () => {
+    const ma = gonMa(oMa.value);
+    if (ma.length < 8 || ma === daTra) return;
+    daTra = ma; ghi.textContent = ''; ghi.className = 'muted';
+    try {
+      const r = await api('traMaKho', ma);
+      if (r.trangThai === 'trongKho') { ghi.className = 'red'; ghi.textContent = `Máy này đang trong kho (${r.TenHang}, phiếu ${r.SoPK}): kiểm tra lại IMEI.`; }
+      else if (r.trangThai === 'daBan') {
+        if (!oTen.value.trim() && r.TenHang) oTen.value = r.TenHang;
+        ghi.textContent = `Cửa hàng đã bán máy này ngày ${dmy(r.Ngay)}${r.DoiTac ? ' cho ' + r.DoiTac : ''}${r.SoDH ? ' (đơn ' + r.SoDH + ')' : ''}: ${r.TenHang}.`;
+      }
+    } catch (e) {} // mất mạng: vẫn thu được, máy chủ kiểm lại khi lưu
+  };
 }
 
 // ===================== Tài chính: lãi gộp, sổ quỹ, phiếu chi, nợ nhà cung cấp =====================
