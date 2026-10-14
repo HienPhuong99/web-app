@@ -49,7 +49,7 @@ export type TraBaoHanhKQ = { q: string; tong: number; ds: MayBaoHanh[] };
 
 export type TongQuan = {
   user: NguoiDung; cuaHang: { ten: string; moTa: string }; homNay: string;
-  ban: { don: number; tien: number }; thu: number; homQua: { don: number; tien: number }; ban7: { ngay: string; tien: number }[];
+  ban: { don: number; tien: number }; thu: number; traLai?: number; mayCu?: number; homQua: { don: number; tien: number }; ban7: { ngay: string; tien: number }[];
   hopDong: { SoHD: string; MaKH: string; TenDN: string; NgayHetHan: string; het: boolean; n: number; bao: number; quyetDinh: number; tuGiaHan: boolean }[];
   dot: { SoHD: string; MaKH: string; TenDN: string; Nhan: string; NgayDen: string; SoTien: number; quaHan: boolean; n: number }[];
   donTre: { SoDH: string; MaKH: string; TenKH: string; NgayGiao: string; TongCong: number }[];
@@ -69,7 +69,7 @@ export type PhieuSua = {
   Anh: string[]; conNgay: number | null; NguoiTao: string;
 };
 export const TT_SUA = ['Đã nhận', 'Đang sửa', 'Chờ linh kiện', 'Đã sửa xong', 'Không sửa được', 'Đã trả khách'] as const;
-export type LaiGop = { doanhThu: number; giaVon: number; lai: number };
+export type LaiGop = { doanhThu: number; giaVon: number; lai: number; laiMayMoi?: number; laiMayCu?: number }; // laiMayCu: lãi bán lại máy thu về
 
 /** soQuyMay(ngày): tồn quỹ cuối ngày (tiền mặt / ngân hàng), thu – chi trong ngày và từng phiếu */
 export type SoQuy = {
@@ -85,7 +85,7 @@ export type ChiTietNgay = {
   ngay: string; homNay: string; truoc: string; sau: string;
   don: { SoDH: string; MaKH: string; TenKH: string; TongCong: number; daThu: number; TrangThai: string; gio: string }[];
   thu: { SoPT: string; MaKH: string; TenKH: string; SoDH: string; SoTien: number; HinhThuc: string; GhiChu: string }[];
-  tong: { don: number; tien: number; thu: number; huy: number };
+  tong: { don: number; tien: number; thu: number; traLai?: number; mayCu?: number; huy: number }; // thu = tiền thật khách đưa
 };
 /** chiTietTongQuan('no'): mọi khách còn nợ, nhiều nhất trước */
 export type KhachNo = { tong: number; ds: { MaKH: string; TenKH: string; SDT: string; tien: number }[] };
@@ -109,8 +109,8 @@ export type HoSoKhach = {
 export type BanNhanhKQ = {
   SoDH: string; SoPK: string; SoPT: string; TongCong: number; daThu: number; MaKH: string; TenKH: string; loiThu: string;
   lines: { TenHang: string; SoLuong: number; IMEI: string; HetHan: string }[];
-  /** máy cũ thu về trừ vào đơn (daThu đã gồm giá các máy này) */
-  thuCu?: { MaHH: string; TenHang: string; IMEI: string; GiaThu: number; SoPK: string; SoPT: string }[];
+  /** máy cũ thu lại (đơn lên đời): mỗi máy là dòng −1 của đơn, TongCong đã trừ; daThu là tiền thật khách trả */
+  thuCu?: { MaHH: string; TenHang: string; IMEI: string; GiaThu: number; SoPK: string }[];
 };
 export type PhieuThu = { SoPT: string; Ngay: string; MaKH: string; TenKH: string; SoDH: string; SoTien: number; HinhThuc: string };
 

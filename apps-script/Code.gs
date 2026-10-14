@@ -45,7 +45,7 @@ const TABLES = {
   PhieuKhoCT: ['SoPK', 'STT', 'MaHH', 'TenHang', 'Model', 'DVT', 'SoLuong', 'IMEI', 'GiaVon'], // GiaVon: giá nhập một đơn vị (dòng của phiếu nhập) để tính lợi nhuận
   ThuTien: ['SoPT', 'Ngay', 'MaKH', 'TenKH', 'SoDH', 'SoTien', 'HinhThuc', 'GhiChu', 'NguoiTao', 'NgayTao'],
   SuaChua: ['SoPN', 'NgayNhan', 'Loai', 'MaKH', 'TenKH', 'SDT', 'TenMay', 'IMEI', 'TinhTrang', 'PhuKien', 'MatKhauMay', 'NgayHen', 'TrangThai', 'ChiPhi', 'KetQua', 'NgayTra', 'SoDH', 'Anh', 'NguoiTao', 'NgayTao', 'NgaySua'], // phiếu nhận bảo hành – sửa chữa; DichVu.gs
-  PhieuChi: ['SoPC', 'Ngay', 'Loai', 'DoiTac', 'SoTien', 'HinhThuc', 'GhiChu', 'NguoiTao', 'NgayTao'], // sổ quỹ: tiền chi ra (trả nhà cung cấp, chi phí); SoQuy.gs
+  PhieuChi: ['SoPC', 'Ngay', 'Loai', 'DoiTac', 'SoTien', 'HinhThuc', 'GhiChu', 'NguoiTao', 'NgayTao', 'MaHH', 'IMEI'], // sổ quỹ: tiền chi ra (trả nhà cung cấp, chi phí); SoQuy.gs
   NhatKy: ['ThoiGian', 'NguoiDung', 'HanhDong', 'DoiTuong', 'ChiTiet'],
   // Hợp đồng: bên A = khách (các cột TenDN…NganHang), bên B = cửa hàng (lấy từ cài đặt cửa hàng khi tạo file)
   HopDong: ['SoHD', 'Ngay', 'LoaiHD', 'SoDH', 'MaKH', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang', 'SoCCCD', 'CCCDCap', 'IMEI',
@@ -66,7 +66,7 @@ const NGAN_HANG = [['970436', 'Vietcombank'], ['970415', 'VietinBank'], ['970418
 const SHARED = ['TaiKhoan', 'CaiDat', 'ThietBi']; // trang dùng chung cho mọi cửa hàng, không có tiền tố
 const NUMBER_COLS = ['Dot', 'BaoTruocNgay', 'ThangGiaHan', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien', 'GiaVon', 'ChiPhi', 'GiamGia'];
 const SESSION_TTL = 6 * 60 * 60; // giây; tối đa của CacheService, tự gia hạn khi còn dùng
-const SCHEMA = '14'; // tăng số này khi thêm bảng/cột ở TABLES (hoặc cần sửa dữ liệu một lần): app tự làm ở lần gọi đầu sau khi triển khai
+const SCHEMA = '15'; // tăng số này khi thêm bảng/cột ở TABLES (hoặc cần sửa dữ liệu một lần): app tự làm ở lần gọi đầu sau khi triển khai
 
 // Loại chứng từ có dòng hàng. Số chứng từ dạng 001-2026/DH, mỗi năm đánh lại từ 001 (riêng từng cửa hàng).
 const CT = {
@@ -164,7 +164,7 @@ function nangCap_(cache) {
   const p = PropertiesService.getScriptProperties();
   let ok = p.getProperty('schema') === SCHEMA;
   if (!ok) {
-    let boSung = false;
+    let boSung = false, tonMay = false;
     try {
       withLock_(() => {
         taoBang_(false);
@@ -173,12 +173,14 @@ function nangCap_(cache) {
         try { suaGioLech_(); } catch (e) { console.error('Không sửa được ngày giờ bị lệch: ' + e); }
         p.setProperty('schema', SCHEMA);
         if (!p.getProperty('boSung.10')) { p.setProperty('boSung.10', '1'); boSung = true; } // phần bổ sung của bản 10: chỉ một lần gọi làm
+        if (!p.getProperty('tonMay.15')) { p.setProperty('tonMay.15', '1'); tonMay = true; } // bản 15: tồn kho máy 2–3 máy mỗi mã, có IMEI (DuLieuThu.gs)
       });
       ok = true;
     }
     catch (e) { console.error('Không tự nâng cấp được Sheet: ' + e); }
     // Ngoài khóa (các hàm bên trong tự giữ khóa): thêm mẫu hợp đồng mặc định mới, hợp đồng mẫu mới cho Sheet đang có dữ liệu thử
     if (boSung) { try { boSungBanMoi_(); } catch (e) { console.error('Không bổ sung được mẫu / dữ liệu thử của bản mới: ' + e); } }
+    if (tonMay) { try { chuanHoaTonMay(); } catch (e) { console.error('Không chuẩn hóa được tồn kho máy (chạy chuanHoaTonMay trong trình soạn thảo): ' + e); } }
   }
   cache.put('schema', SCHEMA, ok ? SESSION_TTL : 600);
 }
@@ -611,6 +613,10 @@ function luuChungTu(token, loai, doc) {
       l.IMEI = im.join(', ');
       imeis = imeis.concat(im);
     });
+    const hang = {};
+    readTable_('HangHoa').forEach(h => { hang[h.MaHH] = h; });
+    const thieu = lines.find(l => l.MaHH && laMay_(hang[l.MaHH]) && imeiList_(l.IMEI).length !== l.SoLuong);
+    if (thieu) throw new Error('Dòng ' + thieu.STT + ': ' + thieu.TenHang + ' là máy, ghi IMEI/serial của từng máy (' + thieu.SoLuong + ' mã).');
     const gon = imeis.map(gonMa_), lap = imeis.find((x, i) => gon.indexOf(gon[i]) !== i);
     if (lap) throw new Error('IMEI/serial ' + lap + ' bị lặp trong phiếu.');
     if (head.SoDH && !findObj_('DonHang', head.SoDH)) throw new Error('Không tìm thấy đơn hàng ' + head.SoDH + '.');
@@ -629,6 +635,16 @@ function luuChungTu(token, loai, doc) {
     head.VAT = +head.VAT || 0;
     head.TienVAT = Math.round(head.TienHang * head.VAT / 100);
     head.TongCong = head.TienHang + head.TienVAT;
+    // Dòng số lượng âm = máy cũ thu lại của đơn lên đời: chỉ máy chủ thêm (kèm phiếu nhập kho), trình duyệt không thêm, sửa, xóa hay hủy đơn được
+    const am = lines.filter(l => l.SoLuong < 0);
+    if (loai !== 'DH' && am.length) throw new Error('Số lượng mỗi dòng phải lớn hơn 0.');
+    if (loai === 'DH' && !GHI_THU_CU_) {
+      const old = head.SoDH ? findObj_('DonHang', head.SoDH) : null, k = l => [l.MaHH, +l.SoLuong, Math.round(+l.DonGia || 0)].join('|');
+      const amCu = old ? readTable_('DonHangCT').filter(l => String(l.SoDH) === String(head.SoDH) && +l.SoLuong < 0) : [];
+      if (am.map(k).sort().join() !== amCu.map(k).sort().join()) throw new Error('Dòng máy cũ thu lại (số lượng âm) chỉ thêm bằng nút "Thu máy cũ" và không sửa, xóa được. Khách trả hàng thì dùng "Khách trả hàng".');
+      if (amCu.length && head.TrangThai === 'Hủy' && old.TrangThai !== 'Hủy') throw new Error('Đơn lên đời có máy cũ thu lại: không hủy được, dùng "Khách trả hàng" (trong ' + NGAY_GIU_MAY_CU + ' ngày kể từ ngày bán).');
+    }
+    if (am.length && head.TongCong < 0) throw new Error('Giá máy cũ thu lại lớn hơn tiền hàng của đơn.');
   }
   head.NgaySua = now_();
   if (!head[key]) { head.NguoiTao = user.ten; head.NgayTao = head.NgaySua; }
@@ -661,6 +677,7 @@ function xoaChungTu(token, loai, so) {
     if (loai === 'DH' && (readTable_('ThuTien').some(p => p.SoDH === so) || readTable_('PhieuKho').some(p => p.SoDH === so))) {
       throw new Error('Đơn đã có phiếu thu hoặc phiếu giao hàng. Xóa các phiếu đó trước, hoặc bấm Hủy đơn.');
     }
+    if (loai === 'DH' && readTable_('DonHangCT').some(l => String(l.SoDH) === String(so) && +l.SoLuong < 0)) throw new Error('Đơn lên đời có máy cũ đã nhập kho: không xóa được.');
     deleteWhere_(c.head, so);
     deleteWhere_(c.lines, so);
     log_(user, 'Xóa ' + c.ten, so, c.loai ? doc.DoiTac : doc.TenKH + ' · ' + doc.TongCong + ' đ');
@@ -764,7 +781,19 @@ function imeiList_(v) {
 // IMEI/serial bỏ khoảng trắng, dấu chấm, gạch: mọi phép so mã (chặn bán trùng, tra, kiểm kho, bảo hành) dùng dạng này; mã lưu giữ như người dùng nhập
 const gonMa_ = v => String(v == null ? '' : v).toUpperCase().replace(/[\s._\/\-]/g, '');
 
-// Một máy không xuất 2 lần liền nhau (bán trùng), không nhập 2 lần liền nhau. Nhập kho không bắt buộc ghi IMEI.
+// Mặt hàng đơn vị "Máy" (điện thoại, kể cả máy cũ thu về): mỗi lần nhập, xuất kho phải ghi IMEI/serial của từng máy
+const laMay_ = h => !!h && String(h.DVT || '').trim().toLowerCase() === 'máy';
+// Đơn lên đời: máy cũ khách đưa là một dòng số lượng −1 của đơn (giá thu là đơn giá), nhập kho ngay bằng phiếu nhập ghi chú "Thu cũ đổi mới · đơn …".
+// Khách trả hàng được trong NGAY_GIU_MAY_CU ngày kể từ ngày bán (DichVu.gs traHang); trong thời gian đó máy cũ phải nằm nguyên trong kho để trả lại đúng máy.
+const NGAY_GIU_MAY_CU = 7;
+const laNhapThuCu_ = p => !!p && p.Loai === 'Nhập' && /^Thu cũ đổi mới/.test(String(p.GhiChu || ''));
+const congNgay_ = (ngay, n) => Utilities.formatDate(new Date(Date.parse(String(ngay).slice(0, 10) + 'T12:00:00Z') + n * 864e5), 'UTC', 'yyyy-MM-dd');
+const dmy_ = ngay => String(ngay).slice(0, 10).split('-').reverse().join('/');
+// true trong lúc máy chủ tự ghi dòng máy cũ của đơn / trả máy cũ cho khách (banNhanh, thuMayCu, traHang); trình duyệt không đặt được
+let GHI_THU_CU_ = false;
+function ghiThuCu_(fn) { const truoc = GHI_THU_CU_; GHI_THU_CU_ = true; try { return fn(); } finally { GHI_THU_CU_ = truoc; } }
+
+// Một máy không xuất 2 lần liền nhau (bán trùng), không nhập 2 lần liền nhau. Máy cũ vừa thu lại chưa xuất được trong thời gian giữ cho khách.
 // ponytail: chỉ xét phiếu gần nhất của từng IMEI, không dựng lại cả chuỗi khi sửa phiếu cũ lùi ngày.
 function kiemIMEI_(loai, soPK, imeis) {
   const can = new Set(imeis.map(gonMa_)), pk = {}, cuoi = {}; // cùng một máy viết có / không dấu gạch vẫn là một
@@ -780,6 +809,9 @@ function kiemIMEI_(loai, soPK, imeis) {
     if (e && e.p.Loai === loai) {
       throw new Error(loai === 'Xuất' ? 'IMEI/serial ' + x + ' đã xuất ở phiếu ' + e.p.SoPK + (e.p.SoDH ? ' (đơn ' + e.p.SoDH + ')' : '') + '.'
         : 'IMEI/serial ' + x + ' đã nhập ở phiếu ' + e.p.SoPK + ' và chưa xuất.');
+    }
+    if (loai === 'Xuất' && e && laNhapThuCu_(e.p) && !GHI_THU_CU_ && homNay_() <= congNgay_(e.p.Ngay, NGAY_GIU_MAY_CU)) {
+      throw new Error('Máy cũ ' + x + ' (thu lại ở phiếu ' + e.p.SoPK + ') đang giữ cho khách đổi trả đến hết ngày ' + dmy_(congNgay_(e.p.Ngay, NGAY_GIU_MAY_CU)) + ', chưa bán được.');
     }
   });
 }
@@ -815,7 +847,7 @@ function dsBaoHanh_() {
   const pk = {}, dh = {}, han = hanBaoHanh_(), cuoi = {}, tatCa = {};
   readTable_('PhieuKho').forEach(p => { tatCa[p.SoPK] = p; });
   readTable_('PhieuKhoCT').forEach(l => { const p = tatCa[l.SoPK]; if (p && l.IMEI) imeiList_(l.IMEI).forEach(x => { const g = gonMa_(x), k = String(p.Ngay) + p.NgayTao; if (!cuoi[g] || k >= cuoi[g].k) cuoi[g] = { k: k, p: p }; }); });
-  readTable_('PhieuKho').forEach(p => { if (p.Loai === 'Xuất') pk[p.SoPK] = p; });
+  readTable_('PhieuKho').forEach(p => { if (p.Loai === 'Xuất' && !/^Trả lại máy cũ/.test(String(p.GhiChu || ''))) pk[p.SoPK] = p; }); // trả máy cũ cho khách (traHang) không phải bán: không bảo hành
   readTable_('DonHang').forEach(d => { dh[d.SoDH] = d; });
   return readTable_('PhieuKhoCT').filter(l => pk[l.SoPK] && l.MaHH).map(l => {
     const im = imeiList_(l.IMEI), con = im.filter(x => { const c = cuoi[gonMa_(x)]; return !c || c.p.Loai !== 'Nhập'; });

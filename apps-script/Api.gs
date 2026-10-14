@@ -13,7 +13,7 @@ function apiHam_() {
     taiDuLieu: taiDuLieu, tongQuanMay: tongQuanMay, traBaoHanh: traBaoHanh, dsBaoHanh: dsBaoHanh,
     layChungTu: layChungTu, theKho: theKho, baoCaoHang: baoCaoHang, layHopDong: layHopDong,
     luuKhach: luuKhach, luuChungTu: luuChungTu, luuThuTien: luuThuTien, doiMatKhau: doiMatKhau,
-    cauHinhMay: cauHinhMay, khoMay: khoMay, traMaKho: traMaKho, dsKhachMay: dsKhachMay, chiTietKhach: chiTietKhach, banNhanh: banNhanh,
+    cauHinhMay: cauHinhMay, khoMay: khoMay, traMaKho: traMaKho, dsMaTon: dsMaTon, dsKhachMay: dsKhachMay, chiTietKhach: chiTietKhach, banNhanh: banNhanh,
     dsHopDongMay: dsHopDongMay, taiPdfHopDong: taiPdfHopDong, dsThietBi: dsThietBi, xoaThietBi: xoaThietBi, thuThongBao: thuThongBao, chiTietTongQuan: chiTietTongQuan,
     soQuyMay: soQuyMay, luuPhieuChi: luuPhieuChi, loiNhuan: loiNhuan,
     kiemKho: kiemKho, traHang: traHang, phieuBanHangPdf: phieuBanHangPdf, dsSuaChua: dsSuaChua, chiTietSuaChua: chiTietSuaChua, luuSuaChua: luuSuaChua, traMaySua: traMaySua, luuAnhSuaChua: luuAnhSuaChua,
@@ -21,7 +21,7 @@ function apiHam_() {
 }
 
 // Hàm chỉ đọc: kết quả được ghi nhớ (ketQuaNho_ trong Code.gs) tới khi có dữ liệu mới. App gửi moi: true (kéo xuống làm mới) để lấy số mới nhất.
-const DOC_NHO = ['tongQuanMay', 'chiTietTongQuan', 'khoMay', 'dsKhachMay', 'chiTietKhach', 'dsHopDongMay', 'theKho', 'cauHinhMay', 'traMaKho', 'traBaoHanh', 'soQuyMay', 'loiNhuan', 'dsSuaChua', 'chiTietSuaChua'];
+const DOC_NHO = ['tongQuanMay', 'chiTietTongQuan', 'khoMay', 'dsKhachMay', 'chiTietKhach', 'dsHopDongMay', 'theKho', 'cauHinhMay', 'traMaKho', 'dsMaTon', 'traBaoHanh', 'soQuyMay', 'loiNhuan', 'dsSuaChua', 'chiTietSuaChua'];
 
 let MAY_HIEN_TAI_ = ''; // mã băm của điện thoại đang gọi API: để đánh dấu "máy này" và gửi thông báo thử
 
@@ -159,7 +159,7 @@ function tongQuanMay(token) {
   const du = tongHopSang_(homNay_()), ch = cuaHang_(CUR_SHOP);
   return {
     user: { u: user.u, ten: user.ten, vaiTro: user.vaiTro }, cuaHang: { ten: ch.ten, moTa: ch.moTa },
-    homNay: du.homNay, ban: du.homNayBan, thu: du.homNayThu, homQua: du.homQuaBan, ban7: du.ban7,
+    homNay: du.homNay, ban: du.homNayBan, thu: du.homNayThu, traLai: du.homNayTien.traLai, mayCu: du.homNayTien.mayCu, homQua: du.homQuaBan, ban7: du.ban7,
     hopDong: du.hopDong.slice(0, 20), dot: du.dot.slice(0, 20), donTre: du.donTre.slice(0, 20), hang: du.hang.slice(0, 20), suaChua: du.suaChua.slice(0, 20), sapHetBH: du.sapHetBH.slice(0, 20),
     soMuc: du.soMuc, no: { soKhach: du.no.soKhach, tong: du.no.tong, top: du.no.top },
     lai: user.vaiTro === 'admin' ? loiNhuanKy_(du.homNay, du.homNay).tong : null, // lãi gộp hôm nay: chỉ quản trị
@@ -189,10 +189,20 @@ function chiTietTongQuan(token, loai, ngay) {
     .map(d => ({ SoDH: d.SoDH, MaKH: d.MaKH, TenKH: d.TenKH, TongCong: +d.TongCong || 0, daThu: thuDon[d.SoDH] || 0, TrangThai: d.TrangThai || 'Chờ giao', gio: String(d.NgayTao || '').slice(11, 16) }))
     .sort((a, b) => String(b.gio + b.SoDH).localeCompare(String(a.gio + a.SoDH)));
   const song = don.filter(d => d.TrangThai !== 'Hủy'), lech = k => Utilities.formatDate(new Date(Date.parse(n + 'T12:00:00Z') + k * 864e5), 'UTC', 'yyyy-MM-dd');
+  const tienNgay = tienNgay_(tatCaThu, giaThuCuTheoNgay_(readTable_('PhieuKho'), readTable_('PhieuKhoCT')), n); // đã thu = tiền thật, như Tổng quan
   return { ngay: n, homNay: homNay_(), truoc: lech(-1), sau: n < homNay_() ? lech(1) : '', don: don, thu: thu,
-    tong: { don: song.length, tien: song.reduce((s, d) => s + d.TongCong, 0), thu: thu.reduce((s, p) => s + p.SoTien, 0), huy: don.length - song.length } };
+    tong: { don: song.length, tien: song.reduce((s, d) => s + d.TongCong, 0), thu: tienNgay.thu, traLai: tienNgay.traLai, mayCu: tienNgay.mayCu, huy: don.length - song.length } };
 }
 
+// Lọc danh sách theo chữ gõ bằng tìm kiếm thông minh (TimKiem.gs): bỏ dấu, viết liền, viết tắt, chữ cái đầu. them(x): điều kiện khớp
+// riêng (số điện thoại, IMEI). Không có dòng nào khớp thì mới thử gần đúng (gõ sai chính tả). Giữ thứ tự ds.
+function locTim_(ds, raw, text, them) {
+  const pt = phanTichTim_(raw);
+  if (!pt.length) return ds;
+  const ban = ds.map(x => banTim_(text(x)));
+  const kq = ds.filter((x, i) => (them && them(x)) || diemTim_(pt, ban[i], false) > 0);
+  return kq.length ? kq : ds.filter((x, i) => diemTim_(pt, ban[i], true) > 0);
+}
 const boDau_ = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
 
 /**
@@ -206,12 +216,13 @@ function traBaoHanh(token, q) {
   const ds = dsBaoHanh(token), homNay = homNay_();
   // Mã vạch serial trên hộp máy Apple thường có chữ S ở đầu
   const maThu = /^S[A-Z0-9]{10,12}$/.test(ma) ? [ma, ma.slice(1)] : [ma];
-  const laSo = /^[\d\s.\-+]+$/.test(raw), so = sdtVN_(raw), chu = boDau_(raw);
+  const laSo = /^[\d\s.\-+]+$/.test(raw), so = sdtVN_(raw);
+  const khopMa = x => imeiList_(x.IMEI).find(i => maThu.some(m => gonMa_(i).indexOf(m) >= 0));
+  const sdt = x => laSo && so.length >= 4 && String(x.SDT || '').replace(/\D/g, '').indexOf(so) >= 0;
   const kq = [];
-  ds.forEach(x => {
-    const imei = imeiList_(x.IMEI), khop = imei.find(i => maThu.some(m => gonMa_(i).indexOf(m) >= 0));
-    const sdt = laSo && so.length >= 4 && String(x.SDT || '').replace(/\D/g, '').indexOf(so) >= 0;
-    if (!khop && !sdt && !(!laSo && boDau_(x.TenKH).indexOf(chu) >= 0)) return;
+  // gõ chữ: theo tên khách (tìm kiếm thông minh; không theo tên máy kẻo ra cả kho) hoặc serial; gõ số: theo IMEI / số điện thoại
+  (laSo ? ds.filter(x => khopMa(x) || sdt(x)) : locTim_(ds, raw, x => x.TenKH, x => !!khopMa(x))).forEach(x => {
+    const khop = khopMa(x);
     const n = x.HetHan ? Math.round((Date.parse(x.HetHan) - Date.parse(homNay)) / 864e5) : null;
     kq.push(Object.assign({}, x, { IMEIKhop: khop || '', ConHan: n === null ? null : n >= 0, ConNgay: n }));
   });
@@ -304,10 +315,10 @@ function sapXep_(ds, bang, sx, chieu, phu) {
 function dsKhachMay(token, q, o) {
   user_(token);
   o = o || {};
-  const raw = String(q == null ? '' : q).trim().slice(0, 60), laSo = /^[\d\s.\-+]+$/.test(raw), so = sdtVN_(raw), chu = boDau_(raw);
+  const raw = String(q == null ? '' : q).trim().slice(0, 60), laSo = /^[\d\s.\-+]+$/.test(raw), so = sdtVN_(raw);
   const n = noKhach_();
   let ds = readTable_('KhachHang').map(k => ({ MaKH: k.MaKH, TenKH: k.TenKH, SDT: String(k.SDT || ''), DiaChi: k.DiaChi || '', no: n.no(k.MaKH), muaCuoi: n.cuoi(k.MaKH), NgayTao: String(k.NgayTao || '') }));
-  if (raw) ds = ds.filter(k => laSo ? so.length >= 3 && k.SDT.replace(/\D/g, '').indexOf(so) >= 0 : boDau_(k.TenKH).indexOf(chu) >= 0 || String(k.MaKH).toLowerCase() === chu);
+  if (raw) ds = laSo ? ds.filter(k => so.length >= 3 && k.SDT.replace(/\D/g, '').indexOf(so) >= 0) : locTim_(ds, raw, k => k.TenKH + ' ' + k.MaKH + ' ' + k.DiaChi);
   const loc = { no: k => k.no > 0, mua: k => !!k.muaCuoi, chua: k => !k.muaCuoi }[o.loc];
   if (loc) ds = ds.filter(loc);
   const ten = (a, b) => String(a.TenKH).localeCompare(String(b.TenKH), 'vi'), moiThem = (a, b) => b.NgayTao.localeCompare(a.NgayTao) || String(b.MaKH).localeCompare(String(a.MaKH));
@@ -346,8 +357,10 @@ function chiTietKhach(token, maKH) {
 // ===== Bán nhanh tại quầy =====
 /**
  * Một lần bấm: lập đơn hàng, phiếu xuất kho (kèm IMEI) và phiếu thu nếu khách trả ngay. Ngày là hôm nay.
- * o = { MaKH | khachMoi: { TenKH, SDT }, lines: [{ MaHH, TenHang, SoLuong, DonGia, IMEI }], VAT, GhiChu, thu: { SoTien, HinhThuc } }
- * Kiểm tra hết trước khi ghi; phiếu xuất vẫn lỗi thì xóa đơn vừa lập. Phiếu thu lỗi thì giữ đơn + phiếu xuất và báo loiThu.
+ * o = { MaKH | khachMoi: { TenKH, SDT }, lines: [{ MaHH, TenHang, SoLuong, DonGia, IMEI }], VAT, GhiChu, thu: { SoTien, HinhThuc }, thuCu: [{ TenHang, IMEI, GiaThu }] }
+ * thuCu (đơn lên đời): mỗi máy cũ là một dòng −1 của đơn và vào kho bằng phiếu nhập; tổng đơn, giảm giá, VAT tính trên tiền hàng đã trừ máy cũ (DichVu.gs).
+ * Kiểm tra hết trước khi ghi; phiếu xuất / nhập máy cũ vẫn lỗi thì xóa phần vừa ghi. Phiếu thu lỗi thì giữ đơn + phiếu kho và báo loiThu.
+ * Trả về TongCong (đã trừ máy cũ) và daThu = tiền thật khách trả.
  */
 function banNhanh(token, o) {
   const user = user_(token);
@@ -371,6 +384,7 @@ function banNhanh(token, o) {
     const sai = im.find(x => !/^[A-Z0-9][A-Z0-9._/-]{3,39}$/.test(x));
     if (sai) throw new Error('Dòng ' + (i + 1) + ': IMEI/serial "' + sai + '" không hợp lệ.');
     if (im.length && im.length !== sl) throw new Error('Dòng ' + (i + 1) + ': có ' + im.length + ' IMEI/serial nhưng số lượng là ' + sl + '.');
+    if (laMay_(h) && im.length !== sl) throw new Error('Dòng ' + (i + 1) + ': ' + ten + ' là máy, ghi IMEI/serial của từng máy.');
     imeis = imeis.concat(im);
     return { MaHH: h ? h.MaHH : '', TenHang: ten, Model: h ? h.Model : '', DVT: h ? h.DVT : String(l.DVT || ''), XuatXu: h ? h.XuatXu : '',
       SoLuong: sl, LoaiGia: h && gia === (+h.GiaLe || 0) ? 'Giá lẻ' : 'Giá tùy chọn', DonGia: gia, IMEI: im.join(', ') };
@@ -378,11 +392,12 @@ function banNhanh(token, o) {
   const gon = imeis.map(gonMa_), lap = imeis.find((x, i) => gon.indexOf(gon[i]) !== i);
   if (lap) throw new Error('IMEI/serial ' + lap + ' bị lặp trong đơn.');
   if (imeis.length) kiemIMEI_('Xuất', '', imeis); // máy đã bán thì báo ngay, chưa ghi gì
-  const vat = Math.min(100, Math.max(0, +o.VAT || 0)), cong = lines.reduce((s, l) => s + Math.round(l.SoLuong * l.DonGia), 0);
-  const giam = Math.min(Math.max(0, cong), Math.max(0, Math.round(+o.GiamGia || 0))), tienHang = cong - giam; // giảm giá cả đơn, trước VAT
+  const mayCu = chuanMayCu_(o.thuCu), tongCu = mayCu.reduce((s, m) => s + m.GiaThu, 0); // thu cũ đổi mới: dòng −1 của đơn (DichVu.gs)
+  const vat = Math.min(100, Math.max(0, +o.VAT || 0)), cong = lines.reduce((s, l) => s + Math.round(l.SoLuong * l.DonGia), 0) - tongCu;
+  if (cong < 0) throw new Error('Giá máy cũ (' + tongCu + ' đ) lớn hơn tiền hàng (' + (cong + tongCu) + ' đ).');
+  const giam = Math.min(cong, Math.max(0, Math.round(+o.GiamGia || 0))), tienHang = cong - giam; // giảm giá cả đơn, trước VAT
   const tong = tienHang + Math.round(tienHang * vat / 100), thu = o.thu || {}, soThu = Math.round(+thu.SoTien || 0);
-  const mayCu = chuanMayCu_(o.thuCu), tongCu = mayCu.reduce((s, m) => s + m.GiaThu, 0); // thu cũ đổi mới: trừ vào đơn (DichVu.gs)
-  if (soThu < 0 || soThu + tongCu > tong) throw new Error(tongCu ? 'Tiền khách trả cộng giá máy cũ (' + (soThu + tongCu) + ' đ) lớn hơn tổng đơn (' + tong + ' đ).' : 'Số tiền khách trả phải từ 0 đến ' + tong + ' đ.');
+  if (soThu < 0 || soThu > tong) throw new Error('Số tiền khách trả phải từ 0 đến ' + tong + ' đ' + (tongCu ? ' (đã trừ máy cũ ' + tongCu + ' đ)' : '') + '.');
   // Khách: chọn sẵn, hoặc khách mới (trùng số điện thoại với khách cũ thì dùng khách cũ)
   let kh, khMoi = false;
   if (o.MaKH) {
@@ -401,8 +416,9 @@ function banNhanh(token, o) {
   const ghiChu = String(o.GhiChu || '').trim().slice(0, 500);
   let dh;
   try {
-    dh = luuChungTu(token, 'DH', { Ngay: ngay, MaKH: kh.MaKH, TenKH: kh.TenKH, SDT: kh.SDT || '', DiaChi: kh.DiaChi || '', NgayGiao: ngay, VAT: vat, GiamGia: giam, GhiChu: ghiChu,
-      lines: lines.map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, Model: l.Model, DVT: l.DVT, XuatXu: l.XuatXu, SoLuong: l.SoLuong, LoaiGia: l.LoaiGia, DonGia: l.DonGia })) }).doc;
+    mayCu.forEach(m => { m.h = hangMayCu_(user, m); });
+    dh = ghiThuCu_(() => luuChungTu(token, 'DH', { Ngay: ngay, MaKH: kh.MaKH, TenKH: kh.TenKH, SDT: kh.SDT || '', DiaChi: kh.DiaChi || '', NgayGiao: ngay, VAT: vat, GiamGia: giam, GhiChu: ghiChu,
+      lines: lines.map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, Model: l.Model, DVT: l.DVT, XuatXu: l.XuatXu, SoLuong: l.SoLuong, LoaiGia: l.LoaiGia, DonGia: l.DonGia })).concat(mayCu.map(dongMayCu_)) }).doc);
   } catch (e) { withLock_(boKhachMoi); throw e; }
   let pk;
   try {
@@ -412,14 +428,20 @@ function banNhanh(token, o) {
     withLock_(() => { deleteWhere_('DonHang', dh.SoDH); deleteWhere_('DonHangCT', dh.SoDH); boKhachMoi(); });
     throw e;
   }
+  let nk = null;
+  if (mayCu.length) {
+    try { nk = nhapMayCu_(token, kh, dh.SoDH, mayCu, ngay); }
+    catch (e) {
+      withLock_(() => { deleteWhere_('PhieuKhoCT', pk.SoPK); deleteWhere_('PhieuKho', pk.SoPK); deleteWhere_('DonHang', dh.SoDH); deleteWhere_('DonHangCT', dh.SoDH); boKhachMoi(); });
+      throw e;
+    }
+  }
   let pt = null, loiThu = '';
   if (soThu > 0) {
     try { pt = luuThuTien(token, { Ngay: ngay, SoDH: dh.SoDH, SoTien: soThu, HinhThuc: String(thu.HinhThuc || 'Tiền mặt').slice(0, 60), GhiChu: 'Bán nhanh trên app' }); }
     catch (e) { loiThu = String(e && e.message || e); }
   }
-  const cu = [];
-  mayCu.forEach(m => { try { cu.push(ghiMayCu_(token, user, kh, dh.SoDH, m, ngay)); } catch (e) { loiThu = (loiThu ? loiThu + ' ' : '') + 'Chưa ghi được máy cũ ' + m.IMEI + ': ' + (e && e.message || e); } });
-  return { SoDH: dh.SoDH, SoPK: pk.SoPK, SoPT: pt ? pt.SoPT : '', TongCong: tong, daThu: (pt ? soThu : 0) + cu.reduce((s, m) => s + m.GiaThu, 0), thuCu: cu, MaKH: kh.MaKH, TenKH: kh.TenKH,
+  return { SoDH: dh.SoDH, SoPK: pk.SoPK, SoPT: pt ? pt.SoPT : '', TongCong: dh.TongCong, daThu: pt ? soThu : 0, thuCu: mayCu.map(m => ketQuaMayCu_(m, nk.SoPK)), MaKH: kh.MaKH, TenKH: kh.TenKH,
     lines: pk.lines.map(l => ({ TenHang: l.TenHang, SoLuong: l.SoLuong, IMEI: l.IMEI, HetHan: l.HetHan })), loiThu: loiThu };
 }
 
@@ -432,9 +454,9 @@ function banNhanh(token, o) {
 function dsHopDongMay(token, q, o) {
   user_(token);
   o = o || {};
-  const raw = String(q == null ? '' : q).trim().slice(0, 60), chu = boDau_(raw), so = sdtVN_(raw), homNay = homNay_();
+  const raw = String(q == null ? '' : q).trim().slice(0, 60), so = sdtVN_(raw), homNay = homNay_();
   let ds = readTable_('HopDong');
-  if (raw) ds = ds.filter(h => boDau_(h.SoHD + ' ' + h.TenDN).indexOf(chu) >= 0 || (so.length >= 4 && String(h.SDT || '').replace(/\D/g, '').indexOf(so) >= 0));
+  if (raw) ds = locTim_(ds, raw, h => h.SoHD + ' ' + h.TenDN, h => so.length >= 4 && String(h.SDT || '').replace(/\D/g, '').indexOf(so) >= 0);
   const loc = {
     hieuLuc: h => h.TrangThai === 'Đang hiệu lực', sap: h => !!(hanHD_(h, homNay) || {}).sap, het: h => !!(hanHD_(h, homNay) || {}).het,
     nhap: h => h.TrangThai === 'Soạn thảo', coFile: h => !!h.FileId,

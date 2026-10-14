@@ -1,0 +1,154 @@
+[
+ {
+  "ten": "viết liền, viết tắt Pro Max",
+  "ds": [
+   "iPhone 15 Pro Max 256GB",
+   "iPhone 15 128GB",
+   "iPhone 11 64GB",
+   "Ốp lưng iPhone 15",
+   "Samsung Galaxy S24 Ultra"
+  ],
+  "q": "ip15pm",
+  "kq": [
+   "iPhone 15 Pro Max 256GB"
+  ]
+ },
+ {
+  "ten": "tách từ bình thường",
+  "ds": [
+   "iPhone 15 Pro Max 256GB",
+   "iPhone 15 128GB",
+   "iPhone 11 64GB"
+  ],
+  "q": "15 pro max",
+  "kq": [
+   "iPhone 15 Pro Max 256GB"
+  ]
+ },
+ {
+  "ten": "xếp hạng: tên ngắn, khớp từ đầu trước",
+  "ds": [
+   "Ốp lưng iPhone 15",
+   "iPhone 15 Pro Max 256GB",
+   "iPhone 15 128GB",
+   "iPhone 11 64GB"
+  ],
+  "q": "iphone 15",
+  "kq": [
+   "iPhone 15 128GB",
+   "iPhone 15 Pro Max 256GB",
+   "Ốp lưng iPhone 15"
+  ]
+ },
+ {
+  "ten": "viết tắt hãng",
+  "ds": [
+   "iPhone 15 128GB",
+   "Samsung Galaxy S24 Ultra",
+   "Xiaomi 14"
+  ],
+  "q": "ss s24",
+  "kq": [
+   "Samsung Galaxy S24 Ultra"
+  ]
+ },
+ {
+  "ten": "không dấu",
+  "ds": [
+   "Ốp lưng iPhone 15",
+   "Cường lực iPhone 15"
+  ],
+  "q": "op lung",
+  "kq": [
+   "Ốp lưng iPhone 15"
+  ]
+ },
+ {
+  "ten": "chữ cái đầu",
+  "ds": [
+   "Tai nghe AirPods Pro 2",
+   "Tấm dán màn hình",
+   "Cáp sạc nhanh"
+  ],
+  "q": "tn",
+  "kq": [
+   "Tai nghe AirPods Pro 2"
+  ]
+ },
+ {
+  "ten": "gõ sai một chữ: gần đúng",
+  "ds": [
+   "iPhone 15 128GB",
+   "iPhone 11 64GB",
+   "Samsung Galaxy S24 Ultra"
+  ],
+  "q": "iphnoe 11",
+  "kq": [
+   "iPhone 11 64GB"
+  ],
+  "ganDung": true
+ },
+ {
+  "ten": "gõ sai: samsng",
+  "ds": [
+   "iPhone 15 128GB",
+   "Samsung Galaxy S24 Ultra"
+  ],
+  "q": "samsng",
+  "kq": [
+   "Samsung Galaxy S24 Ultra"
+  ],
+  "ganDung": true
+ },
+ {
+  "ten": "số điện thoại có dấu cách",
+  "ds": [
+   "Nguyễn Văn An 0901 234 567",
+   "Trần Thị Bình 0912345678"
+  ],
+  "q": "0901234",
+  "kq": [
+   "Nguyễn Văn An 0901 234 567"
+  ]
+ },
+ {
+  "ten": "4 số cuối IMEI",
+  "ds": [
+   "iPhone 15 · 359999000000033",
+   "iPhone 15 · 356789012345678"
+  ],
+  "q": "0033",
+  "kq": [
+   "iPhone 15 · 359999000000033"
+  ]
+ },
+ {
+  "ten": "tên khách không dấu, khớp nguyên từ trước",
+  "ds": [
+   "Trần Thị Bình",
+   "Nguyễn Văn An"
+  ],
+  "q": "an",
+  "kq": [
+   "Nguyễn Văn An",
+   "Trần Thị Bình"
+  ]
+ },
+ {
+  "ten": "không khớp gì",
+  "ds": [
+   "iPhone 15 128GB"
+  ],
+  "q": "laptop dell",
+  "kq": []
+ },
+ {
+  "ten": "số không sửa chính tả",
+  "ds": [
+   "iPhone 15 128GB",
+   "iPhone 13 128GB"
+  ],
+  "q": "iphone 14",
+  "kq": []
+ }
+]

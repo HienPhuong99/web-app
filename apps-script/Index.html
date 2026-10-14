@@ -304,6 +304,9 @@ table.lines.hd { min-width: 980px; } /* hợp đồng */
 .picker div { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
 .picker div.on { background: var(--brand-50); }
 .picker small { color: var(--muted); display: block; }
+.chips.ma-giao { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; font-size: 12px; align-items: center; }
+.chips.ma-giao .chip { border: 1px solid #d5dbe5; background: #fff; border-radius: 999px; padding: 2px 8px; font: 12px ui-monospace, monospace; cursor: pointer; color: inherit; }
+.chips.ma-giao .chip.on { background: var(--brand-50); border-color: var(--brand); color: var(--brand-d); }
 #toast { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 70; }
 #toast div { background: #1d2433; color: #fff; padding: 10px 16px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,.2); max-width: 380px; animation: rise .4s var(--ease); }
 #toast .err { background: #b42318; }
@@ -404,7 +407,7 @@ table.lines.hd { min-width: 980px; } /* hợp đồng */
 
 <script>
 // ===================== Trạng thái & tiện ích =====================
-const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], suaChua: [], ttSua: [], loaiSua: [], htMayCu: 'Thu máy cũ', phieuChi: [], soDuDau: { ngay: '', tienMat: 0, nganHang: 0 }, loaiChi: [], giaVon: {}, hopDong: [], hopDongLich: [], mauHD: [], loaiHD: [], nganHang: [], emailSang: null, hd: null, ton: {},
+const S = { token: null, user: null, congTy: {}, cuaHang: null, dsCuaHang: [], khach: [], hang: [], baoGia: [], donHang: [], phieuKho: [], thuTien: [], suaChua: [], ttSua: [], loaiSua: [], htMayCu: 'Thu máy cũ', phieuChi: [], soDuDau: { ngay: '', tienMat: 0, nganHang: 0 }, loaiChi: [], giaVon: {}, hopDong: [], hopDongLich: [], mauHD: [], loaiHD: [], nganHang: [], emailSang: null, hd: null, ton: {}, maTon: null,
   thongKe: { topHang: [], theoNhom: [] }, taiKhoan: null, baoHanh: null, nhatKy: null, view: 'home', loai: '', doc: null, extra: {}, dirty: false, q: {}, onNew: null };
 const D = { thuDH: {}, thuKH: {}, muaKH: {}, noKH: {}, dhBG: {} }; // số liệu suy ra: đã thu, công nợ, báo giá đã chốt
 const LG = { si: 'Giá sỉ', le: 'Giá lẻ', tuy: 'Giá tùy chọn' };
@@ -431,13 +434,119 @@ const store = {
   get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} },
 };
-const words = q => norm(q).split(/\s+/).filter(Boolean);
-// Chuỗi tìm kiếm (bỏ dấu) tính 1 lần cho mỗi bản ghi; bản ghi mới từ máy chủ tự tính lại
+// <tim-kiem> Tìm kiếm thông minh: bản sao của apps-script/TimKiem.gs (dev/tim-kiem-mau.json kiểm cả hai bản cho ra cùng kết quả)
+// 1. Chuẩn hóa: bỏ dấu, chữ thường, bỏ ký tự lạ, tách chữ và số ("ip15pm" → "ip 15 pm", "128GB" → "128 gb").
+// 2. Mỗi từ gõ phải khớp (AND), theo thứ tự ưu tiên: trùng nguyên từ (3 điểm) > đầu một từ (2) > nằm trong chuỗi liền không cách
+//    (1: "0901234" khớp "0901 234 567", 4 số cuối IMEI) > chữ cái đầu các từ (0,8: "pm" = Pro Max, "tn" = tai nghe) > viết tắt (TU_TAT).
+// 3. Không có kết quả nào thì mới thử gần đúng: cho sai 1 chữ (từ 3–6 ký tự) hoặc 2 chữ (từ 7 ký tự trở lên), đo bằng khoảng cách
+//    sửa chuỗi (Damerau–Levenshtein: thêm, bớt, thay, đổi chỗ hai chữ cạnh nhau) – "iphnoe" vẫn ra "iphone".
+// 4. Điểm cao xếp trước; từ gõ đầu trùng từ đầu của tên được cộng thêm; bằng điểm thì tên ngắn hơn trước.
+const TU_TAT_TIM = { ss: ['samsung'], xm: ['xiaomi'], dt: ['dien thoai'], ip: ['iphone'], mb: ['macbook'], aw: ['apple watch'] };
+
+function chuanChuTim_(s) {
+  return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ').replace(/([a-z])(\d)/g, '$1 $2').replace(/(\d)([a-z])/g, '$1 $2').trim();
+}
+/** Bản ghi đã chuẩn hóa để so: w = các từ, c = chuỗi liền không cách, i = chữ cái đầu các từ */
+function banTim_(text) {
+  const w = chuanChuTim_(text).split(' ').filter(Boolean);
+  return { w: w, c: w.join(''), i: w.map(x => x[0]).join('') };
+}
+/** Câu tìm → các từ, mỗi từ kèm các cách hiểu (viết tắt có thể thành nhiều từ: "dt" → "dien thoai") */
+function phanTichTim_(q) {
+  return chuanChuTim_(q).split(' ').filter(Boolean).map(t => ({ t: t, alt: [[t]].concat((TU_TAT_TIM[t] || []).map(x => x.split(' '))) }));
+}
+// Khoảng cách sửa chuỗi (thêm / bớt / thay / đổi chỗ hai chữ cạnh nhau); dừng sớm khi chắc chắn vượt toiDa
+function khoangCachTim_(a, b, toiDa) {
+  if (Math.abs(a.length - b.length) > toiDa) return toiDa + 1;
+  let d2 = null, d1 = [];
+  for (let j = 0; j <= b.length; j++) d1.push(j);
+  for (let i = 1; i <= a.length; i++) {
+    const d = [i];
+    let nho = i;
+    for (let j = 1; j <= b.length; j++) {
+      let v = Math.min(d1[j] + 1, d[j - 1] + 1, d1[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (d2 && i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, d2[j - 2] + 1);
+      d.push(v);
+      if (v < nho) nho = v;
+    }
+    if (nho > toiDa) return toiDa + 1;
+    d2 = d1; d1 = d;
+  }
+  return d1[b.length];
+}
+function diemTu_(t, b, ganDung) {
+  let best = 0;
+  for (let k = 0; k < b.w.length; k++) {
+    const w = b.w[k];
+    if (w === t) return 3;
+    if (best < 2 && w.lastIndexOf(t, 0) === 0) best = 2;
+  }
+  if (best) return best;
+  if (t.length >= 2 && b.c.indexOf(t) >= 0) return 1;
+  if (t.length >= 2 && t.length <= 4 && /^[a-z]+$/.test(t) && b.i.indexOf(t) >= 0) return 0.8;
+  if (ganDung && t.length >= 3 && !/^\d+$/.test(t)) {
+    const toiDa = t.length >= 7 ? 2 : 1;
+    for (let k = 0; k < b.w.length; k++) {
+      const w = b.w[k];
+      if (/^\d+$/.test(w)) continue;
+      if (khoangCachTim_(t, w, toiDa) <= toiDa || (w.length > t.length && khoangCachTim_(t, w.slice(0, t.length), toiDa) <= toiDa)) return 0.5;
+    }
+  }
+  return 0;
+}
+/** Điểm của bản ghi b (banTim_) với câu tìm pt (phanTichTim_): 0 = không khớp. ganDung: cho gõ sai chính tả. */
+function diemTim_(pt, b, ganDung) {
+  if (!pt.length) return 1;
+  let tong = 0;
+  for (let n = 0; n < pt.length; n++) {
+    let tot = 0;
+    pt[n].alt.forEach(cach => {
+      let d = 0;
+      for (let m = 0; m < cach.length; m++) { const x = diemTu_(cach[m], b, ganDung); if (!x) return; d += x; }
+      d = d / cach.length;
+      if (d > tot) tot = d;
+    });
+    if (!tot) return 0;
+    tong += tot;
+  }
+  const dau = b.w[0] || '';
+  if (dau && (dau === pt[0].t || dau.lastIndexOf(pt[0].t, 0) === 0)) tong += 1;
+  return tong - b.w.length * 0.01; // bằng điểm: tên ngắn (ít từ thừa) trước
+}
+/**
+ * Lọc và xếp hạng ds theo câu tìm q; text(x) = chuỗi để tìm của một bản ghi. o.giuThuTu: giữ thứ tự ds (danh sách theo ngày),
+ * chỉ lọc. Không có bản ghi nào khớp đúng thì trả kết quả gần đúng, kèm ds.ganDung = true.
+ */
+function timKiem_(ds, q, text, o) {
+  o = o || {};
+  const pt = phanTichTim_(q);
+  if (!pt.length) return ds.slice();
+  const ban = ds.map(x => banTim_(text(x)));
+  const chay = ganDung => {
+    const kq = [];
+    ds.forEach((x, i) => { const d = diemTim_(pt, ban[i], ganDung); if (d) kq.push({ x: x, d: d, i: i }); });
+    if (!o.giuThuTu) kq.sort((a, b) => b.d - a.d || a.i - b.i);
+    return kq.map(k => k.x);
+  };
+  let kq = chay(false);
+  if (!kq.length) { kq = chay(true); kq.ganDung = kq.length > 0; }
+  return kq;
+}
+// </tim-kiem>
+const words = q => phanTichTim_(q);
+// Bản ghi đã chuẩn hóa để tìm tính 1 lần cho mỗi bản ghi; bản ghi mới từ máy chủ tự tính lại
 const searchCache = new WeakMap();
-function matches(w, obj, text) {
-  let s = searchCache.get(obj);
-  if (s === undefined) { s = norm(text(obj)); searchCache.set(obj, s); }
-  return w.every(x => s.includes(x));
+const banCua = (obj, text) => { let b = searchCache.get(obj); if (b === undefined) { b = banTim_(text(obj)); searchCache.set(obj, b); } return b; };
+const diemCua = (w, obj, text, ganDung) => diemTim_(w, banCua(obj, text), ganDung);
+const matches = (w, obj, text, ganDung) => diemCua(w, obj, text, ganDung) > 0;
+// Ô gợi ý: xếp theo độ khớp (cộng thêm diemThem(x) nếu có), không thấy gì thì thử gần đúng (gõ sai chính tả)
+function xepTim(ds, q, text, n, diemThem) {
+  const w = words(q);
+  const chay = gan => ds.map((x, i) => ({ x: x, i: i, d: diemCua(w, x, text, gan) })).filter(o => o.d > 0)
+    .map(o => (o.d += diemThem ? diemThem(o.x) : 0, o)).sort((a, b) => b.d - a.d || a.i - b.i).slice(0, n).map(o => o.x);
+  const kq = chay(false);
+  return kq.length || !w.length ? kq : chay(true);
 }
 function initials(name) {
   const w = String(name || '?').trim().split(/\s+/);
@@ -615,6 +724,7 @@ $('#loginForm').addEventListener('submit', async e => {
 
 async function loadAll() {
   Object.assign(S, await api('taiDuLieu'));
+  S.maTon = null;
   if (S.q.baocao) S.q.baocao.hang = null;
   sortAll(); derive();
 }
@@ -802,7 +912,7 @@ function listCard(el, cfg) {
     nutChieu.innerHTML = icon(giam ? 'arrowDown' : 'arrowUp');
     nutChieu.title = t; nutChieu.setAttribute('aria-label', t);
   };
-  let rows = [], lim = LIMIT, daVe = 0, hen = 0;
+  let rows = [], lim = LIMIT, daVe = 0, hen = 0, ganDung = false;
   // Vẽ dần: DAU dòng đầu vẽ ngay để màn hình hiện liền, phần còn lại (tới lim) vẽ ở lượt sau. daVe = số dòng đã có trong bảng,
   // nên bấm Hiện thêm liên tiếp hay lọc lại giữa chừng cũng không sót / lặp dòng.
   const dongHtml = (a, b) => rows.slice(a, b).map((r, i) => `<tr data-i="${a + i}">${cfg.cols.map(c => `<td class="${c.cls || ''}">${c.f ? c.f(r) : esc(r[c.k])}</td>`).join('')}</tr>`).join('');
@@ -812,13 +922,16 @@ function listCard(el, cfg) {
     $('tr.them', body)?.remove();
     if (n > daVe) { body.insertAdjacentHTML('beforeend', dongHtml(daVe, n)); daVe = n; }
     const can = Math.min(lim, rows.length), con = rows.length - can;
-    count.textContent = con > 0 ? `Hiện ${can} / ${rows.length} dòng` : `${rows.length} dòng`;
+    count.textContent = (con > 0 ? `Hiện ${can} / ${rows.length} dòng` : `${rows.length} dòng`) + (ganDung ? ' gần đúng' : '');
+    count.title = ganDung ? 'Không có dòng nào khớp đúng chữ đã gõ; đang hiện các dòng gần giống (có thể gõ sai một vài chữ).' : '';
     if (daVe < can) { hen = setTimeout(() => { if (card.isConnected) veDen(can); }, 16); return; } // đã rời màn hình: thôi vẽ tiếp
     if (con > 0) body.insertAdjacentHTML('beforeend', `<tr class="them"><td colspan="${cfg.cols.length}"><button type="button" class="btn sm">Hiện thêm ${Math.min(LIMIT, con)} dòng (còn ${con})</button></td></tr>`);
   };
   const refresh = () => {
-    const w = words(st.text), md = macDinh(), sx = tieuChi(st.f.sx);
-    rows = cfg.data().filter(r => (!cfg.filter || cfg.filter(r, st.f)) && matches(w, r, cfg.text));
+    const w = words(st.text), md = macDinh(), sx = tieuChi(st.f.sx), loc = r => !cfg.filter || cfg.filter(r, st.f);
+    rows = cfg.data().filter(r => loc(r) && matches(w, r, cfg.text));
+    ganDung = !rows.length && w.length > 0;
+    if (ganDung) { rows = cfg.data().filter(r => loc(r) && matches(w, r, cfg.text, true)); ganDung = rows.length > 0; } // không thấy: thử gần đúng (gõ sai chính tả)
     if (sx) rows = sapXep(rows, sx[2], st.f.chieu);
     veChieu();
     lim = LIMIT; daVe = 0;
@@ -969,6 +1082,10 @@ const CT_HANG = [
   { t: 'Số lượng', cls: 'num', f: r => `${money(r.SoLuong)} ${esc(r.DVT || '')}` }, { t: 'Doanh số (chưa VAT)', cls: 'num', f: r => `<b>${money(r.ThanhTien)}</b>` },
 ];
 
+// "Đã thu" = tiền thật khách đưa, khớp dòng Thu của sổ quỹ: không tính phiếu ghi giá máy cũ (cách ghi cũ) và phiếu trả lại tiền khách (âm).
+// Máy cũ thu về (phiếu nhập "Thu cũ đổi mới") và tiền trả lại khách hiện riêng ở dòng nhỏ. Cùng cách tính với email sáng / app (tienNgay_).
+const tienThat = p => p.HinhThuc === S.htMayCu ? 0 : Math.max(0, +p.SoTien || 0);
+const laNhapThuCu = p => p.Loai === 'Nhập' && /^Thu cũ đổi mới/.test(String(p.GhiChu || ''));
 function vHome(el) {
   setTop('Tổng quan', 'Bảng điều khiển', [{ t: 'Tải lại', ic: 'refresh', fn: run(async () => { await loadAll(); if (S.q.home) S.q.home.tk = null; render(); toast('Đã tải lại dữ liệu.'); }) }]);
   const st = S.q.home || (S.q.home = { ky: 'thang' });
@@ -977,7 +1094,9 @@ function vHome(el) {
   const live = S.donHang.filter(d => d.TrangThai !== 'Hủy');
   const donKy = trongKy(live, tu, den), thuKy = trongKy(S.thuTien, tu, den), bgKy = trongKy(S.baoGia, tu, den);
   const ds = sum(donKy, d => d.TongCong), dsTruoc = sum(trongKy(live, tu0, den0), d => d.TongCong);
-  const daThuKy = sum(thuKy, p => p.SoTien), thuTruoc = sum(trongKy(S.thuTien, tu0, den0), p => p.SoTien);
+  const daThuKy = sum(thuKy, tienThat), thuTruoc = sum(trongKy(S.thuTien, tu0, den0), tienThat);
+  const traLaiKy = sum(thuKy, p => p.HinhThuc === S.htMayCu ? 0 : Math.max(0, -(+p.SoTien || 0))), mayCuKy = sum(trongKy(S.phieuKho, tu, den).filter(laNhapThuCu), p => p.GiaTri);
+  const phuThu = [mayCuKy ? 'Máy cũ thu về ' + money(mayCuKy) + ' ₫' : '', traLaiKy ? 'Trả lại khách ' + money(traLaiKy) + ' ₫' : ''].filter(Boolean).join(' · ');
   const chot = bgKy.filter(b => D.dhBG[b.SoBG]);
   const noList = Object.entries(D.noKH).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
   const choGiao = live.filter(d => d.TrangThai === 'Chờ giao' || d.TrangThai === 'Giao một phần')
@@ -1001,7 +1120,7 @@ function vHome(el) {
   const months = [];
   for (let i = 11; i >= 0; i--) months.push(iso(new Date(d0.getFullYear(), d0.getMonth() - i, 1)).slice(0, 7));
   const inM = (l, mm) => l.filter(x => String(x.Ngay).startsWith(mm));
-  const ds12 = months.map(mm => sum(inM(live, mm), d => d.TongCong)), thu12 = months.map(mm => sum(inM(S.thuTien, mm), p => p.SoTien));
+  const ds12 = months.map(mm => sum(inM(live, mm), d => d.TongCong)), thu12 = months.map(mm => sum(inM(S.thuTien, mm), tienThat));
   const max = Math.max(1, ...ds12, ...thu12);
   const donTrongKy = trongKy(S.donHang, tu, den);
   const statuses = [['Chờ giao', '#f59e0b'], ['Giao một phần', '#3b82f6'], ['Đã giao', '#16a34a'], ['Hủy', '#cbd2dc']]
@@ -1016,7 +1135,7 @@ function vHome(el) {
   const CT = {
     ds: () => ({ tieuDe: `Doanh số ${kyChu}: ${money(ds)} ₫`, moTa: `Đơn hàng từ ${dmy(tu)} đến ${dmy(den)}, không gồm đơn đã hủy. Kỳ trước (${dmy(tu0)} – ${dmy(den0)}): ${money(dsTruoc)} ₫.`,
       cols: CT_DON, rows: donKy, foot: ctFootDon, mo: r => openDoc('DH', r), ds: { view: 'donhang', id: 'donhang', f: { tt: 'khongHuy', ngayFrom: tu, ngayTo: den } } }),
-    thu: () => ({ tieuDe: `Đã thu ${kyChu}: ${money(daThuKy)} ₫`, moTa: `Phiếu thu từ ${dmy(tu)} đến ${dmy(den)}. Kỳ trước: ${money(thuTruoc)} ₫.`,
+    thu: () => ({ tieuDe: `Đã thu ${kyChu}: ${money(daThuKy)} ₫`, moTa: `Tiền thật khách đưa từ ${dmy(tu)} đến ${dmy(den)}, khớp dòng Thu của sổ quỹ${phuThu ? ' (ngoài ra: ' + phuThu.toLowerCase() + ')' : ''}. Kỳ trước: ${money(thuTruoc)} ₫.`,
       cols: CT_THU, rows: thuKy, foot: ctFootThu, mo: r => openThu(r), ds: { view: 'congno', tab: 'pt', id: 'phieuthu', f: { ngayFrom: tu, ngayTo: den } } }),
     no: () => ({ tieuDe: `Công nợ phải thu: ${money(sum(noList, x => x[1]))} ₫`, moTa: `${noList.length} khách còn nợ, nhiều nhất trước. Nợ = tổng đơn (không gồm đơn hủy) trừ tiền đã thu.`,
       cols: [{ t: 'Khách hàng', cls: 'wrap', f: r => `<b>${esc(r.k.TenKH)}</b><span class="sub">${esc(r.k.MaKH)} · ${esc(r.k.SDT)}</span>` },
@@ -1051,7 +1170,7 @@ function vHome(el) {
       rows: dotThu, foot: rs => `<span>${rs.length} đợt</span><span>Cần thu <b class="red">${money(sum(rs, r => r.SoTien))} ₫</b></span>`,
       mo: r => openHD(hdTheoSo[r.SoHD]), ds: { view: 'hdlich', id: 'hdlich', f: { loc: 'can' } } }),
     thang: mm => { const don = inM(live, mm), pt = inM(S.thuTien, mm), cuoi = iso(new Date(+mm.slice(0, 4), +mm.slice(5), 0));
-      return { tieuDe: `Doanh số ${tenThang(mm)}: ${money(sum(don, d => d.TongCong))} ₫`, moTa: `${don.length} đơn hàng (không gồm đơn hủy); đã thu trong tháng ${money(sum(pt, p => p.SoTien))} ₫ (${pt.length} phiếu thu).`,
+      return { tieuDe: `Doanh số ${tenThang(mm)}: ${money(sum(don, d => d.TongCong))} ₫`, moTa: `${don.length} đơn hàng (không gồm đơn hủy); đã thu trong tháng ${money(sum(pt, tienThat))} ₫ (${pt.length} phiếu thu).`,
         cols: CT_DON, rows: don, foot: ctFootDon, mo: r => openDoc('DH', r), ds: { view: 'donhang', id: 'donhang', f: { tt: 'khongHuy', ngayFrom: mm + '-01', ngayTo: cuoi } } }; },
     tt: t => { const rs = donTrongKy.filter(d => (d.TrangThai || 'Chờ giao') === t);
       return { tieuDe: `Đơn "${t}" ${kyChu}: ${rs.length}`, moTa: `Đơn hàng từ ${dmy(tu)} đến ${dmy(den)} đang ở trạng thái ${t}.`, cols: CT_DON, rows: rs, foot: ctFootDon,
@@ -1074,7 +1193,7 @@ function vHome(el) {
     <span class="muted">${dmy(tu)} – ${dmy(den)} · bấm vào số liệu bất kỳ để xem chi tiết</span></div>
   <div class="kpis">
     ${kpi('ds', 'trend', S.cuaHang.mau.brand50, S.cuaHang.mau.brand, 'Doanh số ' + kyChu, money(ds) + ' ₫', `${donKy.length} đơn · ${tangGiam(soSanh(ds, dsTruoc))}`)}
-    ${kpi('thu', 'card', '#e7f6ec', '#16a34a', 'Đã thu ' + kyChu, money(daThuKy) + ' ₫', `${thuKy.length} phiếu thu · ${tangGiam(soSanh(daThuKy, thuTruoc))}`)}
+    ${kpi('thu', 'card', '#e7f6ec', '#16a34a', 'Đã thu ' + kyChu, money(daThuKy) + ' ₫', `${thuKy.length} phiếu thu · ${tangGiam(soSanh(daThuKy, thuTruoc))}${phuThu ? `<br><span class="muted" data-phu-thu>${phuThu}</span>` : ''}`)}
     ${kpi('no', 'alert', '#fff3df', '#d97706', 'Công nợ phải thu', money(sum(noList, x => x[1])) + ' ₫', noList.length + ' khách còn nợ')}
     ${kpi('giao', 'truck', '#e8f0fe', '#2563eb', 'Đơn chờ giao', choGiao.length, quaHan.length ? `<span class="red">${quaHan.length} đơn quá hẹn giao</span>` : 'Không có đơn quá hẹn')}
     ${kpi('bg', 'file', '#f1ebfe', '#7c3aed', 'Báo giá ' + kyChu, bgKy.length, bgKy.length ? `Đã chốt ${chot.length}/${bgKy.length} (${Math.round(chot.length / bgKy.length * 100)}%)` : 'Chưa có báo giá')}
@@ -1665,7 +1784,7 @@ function vDoc(el) {
   }
   if (L === 'DH' && saved && d.TrangThai !== 'Hủy' && S.phieuKho.some(p => p.SoDH === d.SoDH && p.Loai === 'Xuất')) btns.push({ t: 'Khách trả hàng', ic: 'down', fn: () => openTraHang(d) });
   if (L === 'DH' && saved && d.TrangThai !== 'Hủy') btns.push({ t: 'Tạo hợp đồng', ic: 'clipboard', cls: 'soft', fn: run(() => hdTuDon(d)) });
-  if (L === 'DH' && saved) btns.push({ t: d.TrangThai === 'Hủy' ? 'Khôi phục đơn' : 'Hủy đơn', ic: 'x', fn: run(huyDon) });
+  if (L === 'DH' && saved && !(d.TrangThai !== 'Hủy' && coThuCu(d))) btns.push({ t: d.TrangThai === 'Hủy' ? 'Khôi phục đơn' : 'Hủy đơn', ic: 'x', fn: run(huyDon) }); // đơn lên đời: hủy bằng Khách trả hàng
   if (L === 'XK' && d.SoDH) {
     const dh = S.donHang.find(x => x.SoDH === d.SoDH);
     if (saved && dh && conNo(dh) > 0) btns.push({ t: 'Thu tiền', ic: 'card', cls: 'soft', fn: () => openThu({ SoDH: d.SoDH }) }); // giao xong thu tiền luôn, khỏi quay lại đơn
@@ -1739,13 +1858,16 @@ function vDoc(el) {
   el.oninput = e => onDocInput(el, e.target);
   el.onchange = e => { if (e.target.dataset.f === 'LoaiGia') onTypeChange(el, e.target); };
   // Máy quét mã vạch gõ xong IMEI rồi Enter: thêm dấu phẩy để quét tiếp máy kế
+  // (phiếu xuất: đang có máy gợi ý thì Enter chọn máy đó – ô gợi ý bắt phím trước và đã xử lý)
   el.onkeydown = e => {
     const t = e.target;
-    if (e.key !== 'Enter' || t.dataset.f !== 'IMEI') return;
+    if (e.key !== 'Enter' || t.dataset.f !== 'IMEI' || e.defaultPrevented) return;
     e.preventDefault();
     t.value = t.value.replace(/[\s,;]+$/, '') + ', ';
     onDocInput(el, t);
+    hidePicker();
   };
+  if (L === 'XK') taiMaTon();
 }
 
 function drawLines(el) {
@@ -1763,6 +1885,12 @@ function drawLines(el) {
         <td><input data-f="IMEI" value="${esc(l.IMEI)}" aria-label="IMEI hoặc serial dòng ${i + 1}"${i ? '' : ' placeholder="Mỗi máy một mã, cách nhau dấu phẩy"'}></td>
         ${L === 'NK' ? `<td><input data-f="GiaVon" class="num money" inputmode="numeric" value="${money(l.GiaVon)}" aria-label="Giá nhập một đơn vị dòng ${i + 1}"${i ? '' : ' placeholder="Giá 1 máy"'}></td>` : ''}
         <td class="c num" data-c="ton">${t === null ? '' : `<span data-av="${t}" class="${L === 'XK' && +l.SoLuong > t ? 'red' : ''}">${money(t)}</span>`}</td>${rm}</tr>`;
+    }
+    if (+l.SoLuong < 0) { // dòng máy cũ thu lại (đơn lên đời): máy chủ ghi kèm phiếu nhập kho, không sửa / xóa ở đây
+      const ro = v => `<td><input value="${esc(v)}" readonly tabindex="-1"></td>`;
+      return `<tr data-i="${i}" class="thu-cu"><td class="c muted">${i + 1}</td><td><input value="${esc(l.TenHang)}" readonly tabindex="-1" aria-label="Máy cũ thu lại dòng ${i + 1}"></td>${ro(l.Model)}${ro(l.DVT)}${ro(l.XuatXu)}
+        <td><input class="num" value="${esc(l.SoLuong)}" readonly tabindex="-1"></td><td><span class="badge b-amber">Thu máy cũ</span></td>
+        <td><input class="num money" value="${money(l.DonGia)}" readonly tabindex="-1"></td><td class="c num" data-c="ThanhTien">${money(lineTotal(l))}</td>${showGiao ? '<td class="c muted">nhập kho</td>' : ''}<td></td></tr>`;
     }
     let giao = '';
     if (showGiao) {
@@ -1843,6 +1971,7 @@ function onDocInput(el, t) {
   if (f === 'IMEI') { // số lượng đếm theo số mã đã nhập
     const n = t.value.split(/[\s,;]+/).filter(Boolean).length;
     if (n) { l.SoLuong = n; $('[data-f="SoLuong"]', tr).value = n; }
+    if (S.loai === 'XK') taiMaTon().then(() => { if (document.activeElement === t) showPicker(t, maTonSource(i), m => pickMaTon(i, m), !!l.MaHH); });
   }
   if (f === 'TenHang') {
     if (!t.value.trim()) l.MaHH = '';
@@ -1850,6 +1979,51 @@ function onDocInput(el, t) {
   }
   updateRow(tr, l); drawTotals(el); setDirty(true);
 }
+
+// ===== Phiếu xuất / giao hàng: chọn máy (IMEI) đang trong kho thay vì gõ đủ mã =====
+// Gõ vài số (thường là mấy số cuối) là ra máy khớp; bấm vào ô IMEI của dòng máy thì hiện mọi máy của mặt hàng đó còn trong kho.
+const gonMa = v => String(v ?? '').toUpperCase().replace(/[\s._\/\-]/g, '');
+let maTonDangTai = null; // đang tải: các lần gọi cùng lúc chờ chung một lần
+function taiMaTon() {
+  if (S.maTon) return Promise.resolve(S.maTon);
+  return maTonDangTai || (maTonDangTai = api('dsMaTon', {}).then(r => (S.maTon = r)).catch(() => null).finally(() => { maTonDangTai = null; }));
+}
+function maTonSource(i) {
+  return q => {
+    const l = S.doc.lines[i] || {}, tok = String(q).split(/[,;]/).pop(), go = gonMa(tok);
+    const co = new Set(S.doc.lines.flatMap(x => String(x.IMEI || '').split(/[\s,;]+/)).map(gonMa).filter(Boolean)); // máy đã ghi ở phiếu này
+    const ds = (S.maTon || []).filter(m => (!l.MaHH || m.MaHH === l.MaHH) && !co.has(gonMa(m.IMEI)));
+    let kq = [];
+    if (!go) kq = l.MaHH ? ds : [];
+    else if (!/^\d{1,2}$/.test(go)) {
+      const hang = m => { const g = gonMa(m.IMEI); return g.endsWith(go) ? 0 : g.startsWith(go) ? 1 : g.includes(go) ? 2 : -1; }; // khớp cuối mã trước
+      kq = /\d/.test(go) && go.length >= 3 ? ds.map(m => [m, hang(m)]).filter(x => x[1] >= 0).sort((a, b) => a[1] - b[1]).map(x => x[0]) : [];
+      if (!kq.length && !/^\d+$/.test(go)) kq = xepTim(ds, tok, m => m.TenHang + ' ' + m.IMEI, 30); // không khớp mã: tìm theo tên máy
+    }
+    return kq.slice(0, 30).map(m => ({ item: m, html: `<b class="code">${esc(m.IMEI)}</b><small>${esc(m.TenHang)} · nhập ${dmy(m.Ngay)} · ${esc(m.SoPK)}${m.giuDen ? ' · máy cũ giữ đến ' + dmy(m.giuDen) + ', chưa xuất được' : ''}</small>` }));
+  };
+}
+function pickMaTon(i, m) {
+  if (m.giuDen) return toast(`Máy ${m.IMEI} là máy cũ thu đổi, còn giữ đến hết ngày ${dmy(m.giuDen)} (khách có thể trả hàng), chưa xuất được.`, 'err');
+  const el = $('#view'), l = S.doc.lines[i], ma = String(l.IMEI || '').split(/[,;]/).map(x => x.trim());
+  ma.pop(); // bỏ phần đang gõ dở
+  const ds = ma.filter(Boolean).concat(m.IMEI);
+  const h = !l.MaHH && hangByMa(m.MaHH);
+  if (h) Object.assign(l, { MaHH: h.MaHH, TenHang: h.TenHang, Model: h.Model, DVT: h.DVT, XuatXu: h.XuatXu });
+  Object.assign(l, { IMEI: ds.join(', ') + ', ', SoLuong: ds.length });
+  ensureTail(); drawLines(el); drawTotals(el); setDirty(true);
+  const c = $(`tr[data-i="${i}"] [data-f="IMEI"]`, el);
+  if (c) { c.focus(); c.setSelectionRange(c.value.length, c.value.length); }
+}
+// Bấm vào ô IMEI của dòng máy ở phiếu xuất: hiện máy của mặt hàng đó còn trong kho
+document.addEventListener('focusin', async e => {
+  const t = e.target;
+  if (S.view !== 'doc' || S.loai !== 'XK' || !t.dataset || t.dataset.f !== 'IMEI') return;
+  const tr = t.closest('tr[data-i]'), i = tr ? +tr.dataset.i : -1, l = S.doc.lines[i];
+  if (!l || !l.MaHH) return;
+  await taiMaTon();
+  if (document.activeElement === t) showPicker(t, maTonSource(i), m => pickMaTon(i, m), true);
+});
 
 function onTypeChange(el, sel) {
   const tr = sel.closest('tr'), i = +tr.dataset.i, l = S.doc.lines[i];
@@ -1895,7 +2069,7 @@ function pickKhach(kh) {
 // Cập nhật danh sách sau khi lưu/xóa: chứng từ, tồn kho, trạng thái đơn bị ảnh hưởng
 function applyResult(r) {
   if (S.q.baocao) S.q.baocao.loi = null;
-  if (r.ton) S.ton = r.ton;
+  if (r.ton) { S.ton = r.ton; S.maTon = null; } // máy (IMEI) trong kho: tải lại khi cần
   if (r.giaVon) S.giaVon = r.giaVon;
   if (S.q.baocao) S.q.baocao.hang = null;
   (r.donHang || []).forEach(dh => upsertLocal('donHang', 'SoDH', dh));
@@ -2060,18 +2234,16 @@ function ptPrintHtml(p) {
 // ===================== Ô gợi ý tìm hàng / tìm khách =====================
 const P = { input: null, items: [], idx: 0, onPick: null };
 function hangSource(q) {
-  const w = words(q);
-  return S.hang.filter(h => matches(w, h, hangText)).slice(0, 50).map(h => ({ item: h,
+  return xepTim(S.hang, q, hangText, 50, h => tonOf(h.MaHH) > 0 ? 0.5 : 0).map(h => ({ item: h, // còn hàng: xếp trước một chút
     html: `<b>${esc(h.TenHang)}</b><small>${esc([h.MaHH, h.Model, h.XuatXu].filter(Boolean).join(' · '))} — Sỉ ${money(h.GiaSi) || '—'} · Lẻ ${money(h.GiaLe) || '—'}${S.ton[h.MaHH] ? ' · Tồn ' + money(tonOf(h.MaHH)) : ''}</small>` }));
 }
 function khachSource(q) {
-  const w = words(q);
-  return S.khach.filter(k => matches(w, k, khachText)).slice(0, 30).map(k => ({ item: k,
+  return xepTim(S.khach, q, khachText, 30).map(k => ({ item: k,
     html: `<b>${esc(k.TenKH)}</b><small>${esc([k.MaKH, k.SDT, k.DiaChi].filter(Boolean).join(' · '))}</small>` }));
 }
-function showPicker(input, source, onPick) {
+function showPicker(input, source, onPick, rong) { // rong: hiện cả khi ô trống (vd danh sách máy của mặt hàng)
   const box = $('#picker');
-  P.items = input.value.trim() ? source(input.value) : [];
+  P.items = input.value.trim() || rong ? source(input.value) : [];
   P.input = input; P.onPick = onPick; P.idx = 0;
   if (!P.items.length) return hidePicker();
   box.innerHTML = P.items.map((it, i) => `<div data-i="${i}" class="${i ? '' : 'on'}">${it.html}</div>`).join('');
@@ -2765,7 +2937,7 @@ async function saveHD(ve) {
   const d = Object.assign({}, S.hd), lines = d.lines.filter(l => String(l.TenHang).trim());
   if (!d.LoaiHD) throw new Error('Chọn loại hợp đồng.');
   if (!String(d.TenDN).trim()) throw new Error('Nhập tên khách hàng (bên A).');
-  if (lines.some(l => !(+l.SoLuong > 0))) throw new Error('Nhập số lượng lớn hơn 0 cho mọi dòng hàng.');
+  if (lines.some(l => !(+l.SoLuong > 0) && !(+l.SoLuong < 0 && l.MaHH))) throw new Error('Nhập số lượng lớn hơn 0 cho mọi dòng hàng.'); // số âm: máy cũ thu lại (lập từ đơn lên đời)
   if (d.NgayHieuLuc && d.NgayHetHan && d.NgayHetHan < d.NgayHieuLuc) throw new Error('Ngày hết hạn phải sau ngày hiệu lực.');
   if (d.lichSua) d.lich.forEach((r, i) => { if (!r.SoPT && !(r.NgayDen && +r.SoTien > 0)) throw new Error(`Lịch thanh toán: đợt ${i + 1} cần ngày đến hạn và số tiền lớn hơn 0.`); });
   if (lines.some(l => l.DonGia === '' || l.DonGia == null) && !confirm('Có dòng chưa có đơn giá (sẽ tính 0 ₫). Vẫn lưu?')) return;
@@ -2921,10 +3093,11 @@ function vBaoCao(el) {
     else {
       const st2 = (l, v, cls = '') => `<div class="stat"><div class="l">${l}</div><div class="v ${cls}">${v}</div></div>`;
       them = `<div class="card" style="margin-bottom:16px" data-loi><div class="card-b"><div class="stats" style="margin-top:0">${st2('Doanh thu (chưa VAT)', money(r.tong.doanhThu) + ' ₫')}${st2('Giá vốn hàng bán', money(r.tong.giaVon) + ' ₫')}${st2('Lãi gộp', money(r.tong.lai) + ' ₫', r.tong.lai >= 0 ? 'green' : 'red')}${st2('Tỷ lệ lãi gộp', tl(r.tong))}</div>
+        ${r.tong.laiMayCu != null ? `<p style="margin:12px 0 0" data-lai-tach><b>Lãi bán máy mới (và hàng, dịch vụ khác):</b> <span class="${r.tong.laiMayMoi >= 0 ? 'green' : 'red'}">${money(r.tong.laiMayMoi)} ₫</span> · <b>Lãi máy cũ (bán lại máy thu về):</b> <span class="${r.tong.laiMayCu >= 0 ? 'green' : 'red'}">${money(r.tong.laiMayCu)} ₫</span></p>` : ''}
         ${r.theoNhom.length ? `<p style="margin:12px 0 0"><b>Theo nhóm hàng:</b> ${r.theoNhom.map(n => `${esc(n.nhom)} <b>${money(n.lai)} ₫</b> (${tl(n)})`).join(' · ')}</p>` : ''}
         ${r.theoThang.length > 1 ? `<p style="margin:6px 0 0"><b>Theo tháng:</b> ${r.theoThang.map(m => `${m.thang.slice(5)}/${m.thang.slice(0, 4)} <b>${money(m.lai)} ₫</b>`).join(' · ')}</p>` : ''}
         ${r.thieuGiaVon.length ? `<p class="warn" style="margin:10px 0 0">Chưa có giá nhập (đang tính giá vốn 0, lãi cao hơn thực tế): ${r.thieuGiaVon.map(h => esc(h.TenHang)).join(', ')}. Ghi giá nhập ở phiếu nhập kho của các mặt hàng này.</p>` : ''}
-        <p class="muted" style="margin:8px 0 0">Giá vốn = giá nhập bình quân của các phiếu nhập có ghi giá. Dịch vụ (dòng không có mã hàng) không có giá vốn. Không tính đơn đã hủy.</p></div></div>`;
+        <p class="muted" style="margin:8px 0 0">Giá vốn = giá nhập bình quân của các phiếu nhập có ghi giá, cộng phiếu chi "Làm lại máy cũ". Dịch vụ (dòng không có mã hàng) không có giá vốn. Máy cũ thu vào trừ vào đơn: doanh thu và giá vốn cùng bằng giá thu (lãi 0), lãi máy cũ tính khi bán lại. Không tính đơn đã hủy.</p></div></div>`;
     }
     const rs = r ? r.theoHang : [];
     head = [['Mặt hàng'], ['Số lượng', 'num'], ['Doanh thu (chưa VAT)', 'num'], ['Giá vốn', 'num'], ['Lãi gộp', 'num'], ['Tỷ lệ', 'num']];
@@ -3025,15 +3198,17 @@ function openKiemKho() {
 
 // Khách trả hàng của đơn: chọn số lượng (và IMEI máy trả), xem trước số tiền, nhập lại kho, giảm đơn, trả lại tiền
 function openTraHang(d) {
-  const ls = filled(d.lines);
+  const ls = filled(d.lines).filter(l => +l.SoLuong > 0), cu = filled(d.lines).filter(l => +l.SoLuong < 0); // cu: máy cũ thu lại (đơn lên đời)
   const hinhThuc = S.congTy.hinhThuc || ['Tiền mặt'];
+  const han = new Date(Date.parse(String(d.Ngay).slice(0, 10) + 'T12:00:00Z') + NGAY_GIU * 864e5).toISOString().slice(0, 10);
   const m = modal({
     title: 'Khách trả hàng – đơn ' + d.SoDH, wide: true,
     body: `<p class="muted" style="margin-top:0">Hàng trả nhập lại kho; đơn giảm theo hàng trả (trả hết thì hủy đơn). Máy có IMEI: ghi IMEI máy khách trả.</p>
+      ${cu.length ? `<p class="warn" style="margin-top:0">Đơn lên đời: khách trả máy thì cửa hàng trả lại đúng máy cũ đã thu (${cu.map(l => esc(l.TenHang)).join('; ')}). Chỉ nhận trả đến hết ngày ${dmy(han)}.</p>` : ''}
       <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Hàng hóa</th><th class="num">Đã mua</th><th class="num">Trả</th><th>IMEI máy trả</th></tr></thead><tbody>
       ${ls.map((l, i) => `<tr><td>${esc(l.TenHang)}<span class="sub">${money(l.DonGia)} ₫</span></td><td class="num">${money(l.SoLuong)}</td>
         <td class="num"><input type="number" min="0" max="${+l.SoLuong || 0}" step="1" value="0" data-sl="${i}" style="width:70px" aria-label="Số lượng trả ${esc(l.TenHang)}"></td>
-        <td>${l.MaHH ? `<input data-imei="${i}" placeholder="IMEI, cách nhau dấu phẩy" aria-label="IMEI trả ${esc(l.TenHang)}">` : '<span class="muted">—</span>'}</td></tr>`).join('')}</tbody></table></div>
+        <td>${l.MaHH ? `<input data-imei="${i}" placeholder="IMEI, cách nhau dấu phẩy" aria-label="IMEI trả ${esc(l.TenHang)}"><div class="chips ma-giao" data-giao="${i}"></div>` : '<span class="muted">—</span>'}</td></tr>`).join('')}</tbody></table></div>
       <div class="fgrid" style="margin-top:12px"><label class="field"><span class="lb">Trả lại tiền cho khách</span><input name="SoTien" class="money num" inputmode="numeric" value="0"></label>
       <label class="field"><span class="lb">Hình thức</span><select name="HinhThuc">${hinhThuc.map(x => `<option>${esc(x)}</option>`).join('')}</select></label>
       <label class="field full"><span class="lb">Lý do / ghi chú</span><input name="GhiChu" placeholder="vd: Khách đổi ý, máy lỗi đổi máy khác"></label></div>
@@ -3043,12 +3218,12 @@ function openTraHang(d) {
       const kq = await api('traHang', { SoDH: d.SoDH, lines: dong(), hoan: { SoTien: f.SoTien || 0, HinhThuc: f.HinhThuc }, GhiChu: f.GhiChu });
       await loadAll();
       closeModal(); await openDoc('DH', S.donHang.find(x => x.SoDH === d.SoDH));
-      toast(`Đã nhận hàng trả${kq.SoPK ? ' (nhập kho ' + kq.SoPK + ')' : ''}${kq.hoan ? ', trả lại ' + money(kq.hoan) + ' ₫' : ''}${kq.huy ? ', đơn đã hủy' : ''}.`);
+      toast(`Đã nhận hàng trả${kq.SoPK ? ' (nhập kho ' + kq.SoPK + ')' : ''}${kq.SoPKCu ? ', trả lại máy cũ (phiếu ' + kq.SoPKCu + ')' : ''}${kq.hoan ? ', trả lại ' + money(kq.hoan) + ' ₫' : ''}${kq.huy ? ', đơn đã hủy' : ''}.`);
     }) }],
   });
   const dong = () => ls.map((l, i) => {
     const im = (($(`[data-imei="${i}"]`, m) || {}).value || '').trim(), sl = +$(`[data-sl="${i}"]`, m).value || 0;
-    return { MaHH: l.MaHH, TenHang: l.TenHang, SoLuong: sl, IMEI: im };
+    return { STT: l.STT, MaHH: l.MaHH, TenHang: l.TenHang, SoLuong: sl, IMEI: im }; // STT: đúng dòng khách trả khi đơn có cùng mặt hàng ở nhiều dòng giá
   }).filter(l => l.SoLuong > 0 || l.IMEI);
   const xemEl = $('[data-xem]', m), tien = $('[name=SoTien]', m);
   let lan = 0;
@@ -3058,15 +3233,32 @@ function openTraHang(d) {
     try {
       const r = await api('traHang', { SoDH: d.SoDH, lines: ds, xemTruoc: true });
       if (so !== lan) return;
-      xemEl.innerHTML = `Đơn ${money(r.tongCu)} ₫ → <b>${money(r.tongMoi)} ₫</b>${r.huy ? ' (hủy đơn)' : ''} · khách đã trả ${money(r.daThu)} ₫ · trả lại tối đa <b>${money(r.hoanToiDa)} ₫</b>`;
+      xemEl.innerHTML = `Đơn ${money(r.tongCu)} ₫ → <b>${money(r.tongMoi)} ₫</b>${r.huy ? ' (hủy đơn)' : ''} · khách đã trả ${money(r.daThu)} ₫ · trả lại tối đa <b>${money(r.hoanToiDa)} ₫</b>`
+        + ((r.mayCuTra || []).length ? `<br><b class="warn">Trả lại khách máy cũ:</b> ${r.mayCuTra.map(x => esc(x.TenHang) + ' · IMEI ' + esc(x.IMEI)).join('; ')}` : '');
       tien.value = money(r.hoanToiDa);
     } catch (e) { if (so === lan) xemEl.innerHTML = `<span class="red">${esc(errMsg(e))}</span>`; }
   };
   let t;
+  const demMa = i => { const n = $(`[data-imei="${i}"]`, m).value.split(/[\s,;]+/).filter(Boolean).length; if (n) $(`[data-sl="${i}"]`, m).value = n; };
   m.oninput = e => {
-    if (e.target.dataset.imei !== undefined) { const i = e.target.dataset.imei, n = e.target.value.split(/[\s,;]+/).filter(Boolean).length; if (n) $(`[data-sl="${i}"]`, m).value = n; }
+    if (e.target.dataset.imei !== undefined) demMa(e.target.dataset.imei);
     if (e.target.dataset.imei !== undefined || e.target.dataset.sl !== undefined) { clearTimeout(t); t = setTimeout(xem, 400); }
   };
+  // Máy đã giao cho đơn này (khách chưa trả): bấm để ghi vào ô IMEI máy trả, khỏi gõ
+  api('dsMaTon', { SoDH: d.SoDH }).then(ds => ls.forEach((l, i) => {
+    const o = $(`[data-giao="${i}"]`, m), cua = ds.filter(x => x.MaHH === l.MaHH);
+    if (!o || !cua.length) return;
+    o.innerHTML = '<span class="muted">Máy đã giao:</span> ' + cua.map(x => `<button type="button" class="chip" data-ma="${esc(x.IMEI)}" title="Bấm để ghi máy này vào ô IMEI máy trả">${esc(x.IMEI)}</button>`).join('');
+    o.onclick = e => {
+      const b = e.target.closest('[data-ma]'), inp = $(`[data-imei="${i}"]`, m);
+      if (!b) return;
+      const ma = inp.value.split(/[,;]/).map(x => x.trim()).filter(Boolean), co = ma.indexOf(b.dataset.ma);
+      if (co >= 0) ma.splice(co, 1); else ma.push(b.dataset.ma);
+      inp.value = ma.join(', '); b.classList.toggle('on', co < 0);
+      if (!ma.length) $(`[data-sl="${i}"]`, m).value = 0;
+      demMa(i); clearTimeout(t); t = setTimeout(xem, 200);
+    };
+  })).catch(() => {});
 }
 
 // ===================== Bảo hành – sửa chữa, thu cũ đổi mới =====================
@@ -3174,13 +3366,16 @@ function suaPrintHtml(p) {
     ${signs(['Khách hàng', 'Nhân viên nhận máy'])}</div>`;
 }
 
-// Thu máy cũ của khách trừ vào đơn đang còn nợ: máy vào kho, giá thu ghi thành phiếu thu "Thu máy cũ"
+// Đơn lên đời: máy cũ của khách thành một dòng −1 của đơn (giá thu), máy vào kho ngay; giữ NGAY_GIU ngày để khách trả hàng thì trả lại đúng máy
+const NGAY_GIU = 7;
+const coThuCu = d => (d.lines || []).some(l => +l.SoLuong < 0);
 function openThuMayCu(d) {
-  modal({
+  const m = modal({
     title: 'Thu máy cũ trừ vào đơn ' + d.SoDH,
-    body: `<p class="muted" style="margin-top:0">Đơn còn nợ ${money(conNo(d))} ₫. Máy cũ vào kho (nhóm "Máy cũ", giá nhập = giá thu); giá thu trừ vào tiền khách phải trả.</p><div class="fgrid">
+    body: `<p class="muted" style="margin-top:0">Đơn còn nợ ${money(conNo(d))} ₫. Máy cũ thành một dòng của đơn (số lượng −1, đơn giá = giá thu) và vào kho ngay, nhóm "Máy cũ".
+      Trong ${NGAY_GIU} ngày kể từ ngày bán, khách trả máy mới thì cửa hàng trả lại đúng máy cũ này, nên máy cũ chưa bán được; quá ${NGAY_GIU} ngày không nhận trả.</p><div class="fgrid">
       <label class="field"><span class="lb">Tên máy cũ *</span><input name="TenHang" placeholder="vd: iPhone 12 64GB"></label>
-      <label class="field"><span class="lb">IMEI / serial *</span><input name="IMEI"></label>
+      <label class="field"><span class="lb">IMEI / serial *</span><input name="IMEI"><small class="muted" data-lich-su></small></label>
       <label class="field"><span class="lb">Giá thu *</span><input name="GiaThu" class="money num" inputmode="numeric"></label>
       <label class="field"><span class="lb">Giá bán lại (dự kiến)</span><input name="GiaLe" class="money num" inputmode="numeric"></label>
       <label class="field full"><span class="lb">Tình trạng máy</span><input name="GhiChu" placeholder="vd: trầy nhẹ, pin 85%"></label></div>`,
@@ -3189,17 +3384,33 @@ function openThuMayCu(d) {
       const kq = await api('thuMayCu', o);
       await loadAll();
       closeModal(); await openDoc('DH', S.donHang.find(x => x.SoDH === d.SoDH));
-      toast(`Đã thu máy cũ ${kq.TenHang}: trừ ${money(kq.GiaThu)} ₫ vào đơn.`);
+      toast(`Đã thu máy cũ ${kq.TenHang} (nhập kho ${kq.SoPK}): trừ ${money(kq.GiaThu)} ₫ vào đơn.`);
     }) }],
   });
+  // Gõ / quét xong IMEI: tra lịch sử. Máy cửa hàng từng bán thì tự điền tên máy; máy đang trong kho thì báo ngay (không thu được)
+  const oMa = $('[name=IMEI]', m), oTen = $('[name=TenHang]', m), ghi = $('[data-lich-su]', m);
+  let daTra = '';
+  oMa.onchange = async () => {
+    const ma = gonMa(oMa.value);
+    if (ma.length < 8 || ma === daTra) return;
+    daTra = ma; ghi.textContent = ''; ghi.className = 'muted';
+    try {
+      const r = await api('traMaKho', ma);
+      if (r.trangThai === 'trongKho') { ghi.className = 'red'; ghi.textContent = `Máy này đang trong kho (${r.TenHang}, phiếu ${r.SoPK}): kiểm tra lại IMEI.`; }
+      else if (r.trangThai === 'daBan') {
+        if (!oTen.value.trim() && r.TenHang) oTen.value = r.TenHang;
+        ghi.textContent = `Cửa hàng đã bán máy này ngày ${dmy(r.Ngay)}${r.DoiTac ? ' cho ' + r.DoiTac : ''}${r.SoDH ? ' (đơn ' + r.SoDH + ')' : ''}: ${r.TenHang}.`;
+      }
+    } catch (e) {} // mất mạng: vẫn thu được, máy chủ kiểm lại khi lưu
+  };
 }
 
 // ===================== Tài chính: lãi gộp, sổ quỹ, phiếu chi, nợ nhà cung cấp =====================
 // Lãi gộp của một đơn (quản trị): tiền hàng chưa VAT − giá vốn bình quân. Dòng dịch vụ (không mã hàng) không có giá vốn.
 function laiDonHtml(d) {
   if (!isAdmin()) return '';
-  const ls = filled(d.lines), dt = sum(ls, lineTotal) - (+d.GiamGia || 0), von = sum(ls, l => l.MaHH ? (+l.SoLuong || 0) * (S.giaVon[l.MaHH] || 0) : 0);
-  const thieu = ls.filter(l => l.MaHH && !S.giaVon[l.MaHH]);
+  const ls = filled(d.lines), dt = sum(ls, lineTotal) - (+d.GiamGia || 0), von = sum(ls, l => +l.SoLuong < 0 ? lineTotal(l) : l.MaHH ? (+l.SoLuong || 0) * (S.giaVon[l.MaHH] || 0) : 0); // máy cũ thu lại: giá vốn = giá thu
+  const thieu = ls.filter(l => l.MaHH && +l.SoLuong > 0 && !S.giaVon[l.MaHH]);
   return `<div class="card"><div class="card-h"><h3>Lãi gộp</h3></div><div class="card-b">
     <div class="stats" style="margin-top:0"><div class="stat"><div class="l">Tiền hàng (chưa VAT)</div><div class="v">${money(dt)}</div></div>
     <div class="stat"><div class="l">Giá vốn</div><div class="v">${money(von)}</div></div><div class="stat"><div class="l">Lãi gộp</div><div class="v ${dt - von >= 0 ? 'green' : 'red'}" data-lai>${money(dt - von)}</div></div></div>
@@ -3289,6 +3500,7 @@ function vNCC(el) {
   el.append(p);
 }
 
+const LAM_LAI = 'Làm lại máy cũ'; // loại phiếu chi cộng vào giá vốn của một máy (SoQuy.gs)
 function openChi(pc) {
   const isNew = !pc || !pc.SoPC, sua = isNew || isAdmin(), loai = S.loaiChi.length ? S.loaiChi : ['Chi khác'];
   const hinhThuc = S.congTy.hinhThuc || ['Tiền mặt', 'Chuyển khoản'];
@@ -3304,10 +3516,12 @@ function openChi(pc) {
       <label class="field"><span class="lb">Ngày chi</span><input name="Ngay" type="date" value="${esc(pc.Ngay)}"${ro}></label>
       <label class="field"><span class="lb">Hình thức</span><select name="HinhThuc"${ro}>${chon(hinhThuc, pc.HinhThuc)}</select></label>
       <label class="field"><span class="lb">Ghi chú</span><input name="GhiChu" value="${esc(pc.GhiChu)}" placeholder="vd: Tiền nhà tháng 10"${ro}></label>
+      <label class="field" data-imei-chi style="${pc.Loai === LAM_LAI ? '' : 'display:none'}"><span class="lb">IMEI máy làm lại *</span><input name="IMEI" value="${esc(pc.IMEI || '')}" placeholder="Máy đang trong kho; tiền chi cộng vào giá vốn máy"${ro}></label>
     </div>${isNew ? '' : `<p class="muted">Lập bởi ${esc(pc.NguoiTao)} lúc ${esc(pc.NgayTao)}${sua ? '' : ' · chỉ tài khoản quản trị được sửa, xóa phiếu chi'}</p>`}`,
     buttons: (sua ? [{ t: 'Lưu (F8)', ic: 'save', cls: 'primary', save: true, fn: run(async m => {
       const d = formData(m);
       if (!(d.SoTien > 0)) throw new Error('Nhập số tiền chi.');
+      if (d.Loai === LAM_LAI && !String(d.IMEI || '').trim()) throw new Error('Nhập IMEI của máy được làm lại.');
       const saved = await api('luuPhieuChi', Object.assign({}, d, { SoPC: pc.SoPC || '' }));
       upsertLocal('phieuChi', 'SoPC', saved); sortAll();
       closeModal(); render(); toast(`Đã lưu phiếu chi ${saved.SoPC}: ${money(saved.SoTien)} ₫.`);
@@ -3318,6 +3532,8 @@ function openChi(pc) {
       closeModal(); render(); toast('Đã xóa phiếu chi.');
     }) }] : []),
   });
+  const m = $('#modal') || document.querySelector('.modal');
+  if (m) m.onchange = e => { if (e.target.name === 'Loai') { const f = $('[data-imei-chi]', m); if (f) f.style.display = e.target.value === LAM_LAI ? '' : 'none'; } };
 }
 
 function openSoDuDau() {

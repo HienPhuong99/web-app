@@ -1,7 +1,7 @@
 // Lọc và sắp xếp các danh sách trên điện thoại: kho, thẻ kho (nhập – xuất), đơn của khách, điện thoại đăng nhập; và các lựa chọn gửi lên máy chủ
 // cho danh sách khách, hợp đồng. Thuần TypeScript (không dùng React Native) để test được bằng node --test.
 import type { DongTheKho, HangKho, ThietBi } from './api.ts';
-import { boDau } from './lienHe.ts';
+import { timKiem } from './timKiem.ts';
 
 /** Danh sách lựa chọn [giá trị, nhãn]; cái đầu là mặc định */
 export type LuaChon<T extends string> = readonly (readonly [T, string])[];
@@ -41,10 +41,10 @@ const SX_KHO_FN: Record<SxKho['theo'], (a: HangKho, b: HangKho) => number> = {
 };
 /** Số mặt hàng theo từng bộ lọc (hiện trên nút lọc) */
 export const demKho = (ds: HangKho[], loc: LocKho) => ds.filter(LOC_KHO_FN[loc]).length;
-/** Tìm (không cần dấu, mọi từ đều phải có) trong tên, mã, model, nhóm; lọc; sắp xếp (cùng giá trị thì theo tên A → Z) */
+/** Tìm (tìm kiếm thông minh: không dấu, viết liền, viết tắt, gõ sai khi không có kết quả) trong tên, mã, model, nhóm; lọc;
+ *  sắp xếp (cùng giá trị thì theo tên A → Z) */
 export function locKho(ds: HangKho[], q: string, loc: LocKho, sx: SxKho): HangKho[] {
-  const w = boDau(q).split(/\s+/).filter(Boolean);
-  return ds.filter(h => LOC_KHO_FN[loc](h) && w.every(x => boDau(`${h.TenHang} ${h.MaHH} ${h.Model} ${h.NhomHang}`).includes(x)))
+  return timKiem(ds.filter(LOC_KHO_FN[loc]), q, h => `${h.TenHang} ${h.MaHH} ${h.Model} ${h.NhomHang}`)
     .sort((a, b) => dau(sx.chieu) * SX_KHO_FN[sx.theo](a, b) || theoChu(a.TenHang, b.TenHang));
 }
 

@@ -1,7 +1,9 @@
 // ===== Thu cũ đổi mới, nhận bảo hành – sửa chữa =====
-// Thu cũ đổi mới: máy cũ của khách được định giá (GiaThu) và trừ vào đơn máy mới. Máy cũ vào kho bằng một phiếu nhập
-// (giá nhập = giá thu, mặt hàng nhóm "Máy cũ", tạo tự động theo tên máy), tiền máy cũ ghi thành phiếu thu hình thức "Thu máy cũ"
-// gắn với đơn – nên công nợ của khách giảm đúng, doanh thu máy mới giữ nguyên, sổ quỹ không tính (không phải tiền).
+// Thu cũ đổi mới (đơn lên đời): máy cũ của khách được định giá (GiaThu) và ghi thành một dòng của chính đơn bán máy mới, số lượng −1,
+// đơn giá = giá thu, tên kèm IMEI. Tổng đơn là số khách trả thật (vd 25tr − 5tr = 20tr): doanh số, công nợ, "đã thu" đều theo số này.
+// Máy cũ vào kho ngay bằng một phiếu nhập "Thu cũ đổi mới · đơn …" (giá nhập = giá thu, mặt hàng nhóm "Máy cũ" tạo theo tên máy), nên lãi của dòng
+// máy cũ bằng 0; lãi máy cũ chỉ có khi bán lại máy đó. Khách trả máy mới trong NGAY_GIU_MAY_CU ngày thì nhận lại đúng máy cũ (traHang).
+// Đơn cũ ghi máy cũ bằng phiếu thu hình thức "Thu máy cũ" (bản trước) vẫn giữ nguyên: công nợ đúng, sổ quỹ bỏ qua phiếu đó.
 // Bảo hành – sửa chữa (trang SuaChua): phiếu nhận máy (lỗi, phụ kiện kèm, mật khẩu máy, ngày hẹn trả, ảnh), theo dõi trạng thái tới khi trả khách;
 // trả máy có chi phí thì lập đơn dịch vụ (bán nhanh) để có doanh thu, công nợ, phiếu thu như mọi đơn.
 // File này dùng chung phạm vi với Code.gs, Api.gs (banNhanh, luuChungTu, luuThuTien…).
@@ -30,32 +32,33 @@ function chuanMayCu_(ds) {
   return kq;
 }
 
-/** Ghi một máy cũ đã kiểm tra: mặt hàng "… (máy cũ)", phiếu nhập kho, phiếu thu "Thu máy cũ" gắn đơn */
-function ghiMayCu_(token, user, kh, soDH, m, ngay) {
+/** Mặt hàng "… (máy cũ)" theo tên máy; chưa có thì tạo (hai quầy cùng thu một mẫu máy chỉ tạo một mặt hàng) */
+function hangMayCu_(user, m) {
   const ten = /máy cũ/i.test(m.TenHang) ? m.TenHang : m.TenHang + ' (máy cũ)';
   const timHang = () => readTable_('HangHoa').find(x => x.NhomHang === NHOM_MAY_CU && boDau_(x.TenHang) === boDau_(ten));
-  let h = timHang();
-  if (!h) {
-    h = withLock_(() => { // tìm lại trong khóa: hai quầy cùng thu một mẫu máy thì chỉ tạo một mặt hàng
-      const co = timHang();
-      if (co) return co;
-      const moi = upsert_('HangHoa', { TenHang: ten, NhomHang: NHOM_MAY_CU, PhanLoai: NHOM_MAY_CU, DVT: 'Máy', GiaLe: m.GiaLe, GhiChu: 'Tạo khi thu cũ đổi mới' }, () => nextCode_('HangHoa', 'HH', 4), []);
-      log_(user, 'Thêm mặt hàng', moi.MaHH, ten + ' · máy cũ thu về');
-      return moi;
-    });
-  }
-  const nk = luuChungTu(token, 'NK', { Ngay: ngay, DoiTac: kh.TenKH, GhiChu: 'Thu cũ đổi mới' + (soDH ? ' · đơn ' + soDH : '') + (m.GhiChu ? ' · ' + m.GhiChu : ''),
-    lines: [{ MaHH: h.MaHH, TenHang: h.TenHang, Model: h.Model || '', DVT: h.DVT || 'Máy', SoLuong: 1, IMEI: m.IMEI, GiaVon: m.GiaThu }] }).doc;
-  let pt;
-  try { pt = luuThuTien(token, { Ngay: ngay, SoDH: soDH, MaKH: kh.MaKH, TenKH: kh.TenKH, SoTien: m.GiaThu, HinhThuc: HT_MAY_CU, GhiChu: 'Máy cũ ' + h.TenHang + ' · IMEI ' + m.IMEI }); }
-  catch (e) { // phiếu thu lỗi: bỏ phiếu nhập vừa ghi, kẻo máy nằm trong kho mà nợ khách không giảm và không thu lại được (IMEI đã có trong kho)
-    withLock_(() => { deleteWhere_('PhieuKhoCT', nk.SoPK); deleteWhere_('PhieuKho', nk.SoPK); log_(user, 'Bỏ phiếu nhập máy cũ (thu tiền lỗi)', nk.SoPK, m.IMEI); });
-    throw e;
-  }
-  return { MaHH: h.MaHH, TenHang: h.TenHang, IMEI: m.IMEI, GiaThu: m.GiaThu, SoPK: nk.SoPK, SoPT: pt.SoPT };
+  return timHang() || withLock_(() => { // tìm lại trong khóa
+    const co = timHang();
+    if (co) return co;
+    const moi = upsert_('HangHoa', { TenHang: ten, NhomHang: NHOM_MAY_CU, PhanLoai: NHOM_MAY_CU, DVT: 'Máy', GiaLe: m.GiaLe, GhiChu: 'Tạo khi thu cũ đổi mới' }, () => nextCode_('HangHoa', 'HH', 4), []);
+    log_(user, 'Thêm mặt hàng', moi.MaHH, ten + ' · máy cũ thu về');
+    return moi;
+  });
 }
 
-/** Web: thu máy cũ trừ vào một đơn đã lập. o = { SoDH, TenHang, IMEI, GiaThu, GiaLe, GhiChu } */
+/** Phiếu nhập kho các máy cũ của một đơn lên đời (m.h = mặt hàng máy cũ). Giá nhập = giá thu. */
+function nhapMayCu_(token, kh, soDH, ds, ngay) {
+  const ghiChu = ds.map(m => m.GhiChu).filter(Boolean).join('; ');
+  return luuChungTu(token, 'NK', { Ngay: ngay, DoiTac: kh.TenKH, GhiChu: 'Thu cũ đổi mới · đơn ' + soDH + (ghiChu ? ' · ' + ghiChu : ''),
+    lines: ds.map(m => ({ MaHH: m.h.MaHH, TenHang: m.h.TenHang, Model: m.h.Model || '', DVT: m.h.DVT || 'Máy', SoLuong: 1, IMEI: m.IMEI, GiaVon: m.GiaThu })) }).doc;
+}
+/** Dòng máy cũ của đơn: số lượng −1, đơn giá = giá thu, tên kèm IMEI để đơn (và bản in) có đủ IMEI máy cũ */
+const dongMayCu_ = m => ({ MaHH: m.h.MaHH, TenHang: m.h.TenHang + ' · IMEI ' + m.IMEI, Model: m.h.Model || '', DVT: m.h.DVT || 'Máy', XuatXu: '', SoLuong: -1, LoaiGia: 'Thu máy cũ', DonGia: m.GiaThu });
+const ketQuaMayCu_ = (m, soPK) => ({ MaHH: m.h.MaHH, TenHang: m.h.TenHang, IMEI: m.IMEI, GiaThu: m.GiaThu, SoPK: soPK });
+function boPhieuKho_(user, soPK, lyDo) {
+  withLock_(() => { deleteWhere_('PhieuKhoCT', soPK); deleteWhere_('PhieuKho', soPK); log_(user, lyDo, soPK, ''); });
+}
+
+/** Web: thu máy cũ cho một đơn đã lập: nhập kho máy cũ, thêm dòng máy cũ (−1) vào đơn. o = { SoDH, TenHang, IMEI, GiaThu, GiaLe, GhiChu } */
 function thuMayCu(token, o) {
   const user = user_(token);
   o = o || {};
@@ -66,7 +69,16 @@ function thuMayCu(token, o) {
   const da = readTable_('ThuTien').filter(p => p.SoDH === dh.SoDH).reduce((s, p) => s + (+p.SoTien || 0), 0), con = (+dh.TongCong || 0) - da;
   if (m.GiaThu > con) throw new Error('Giá thu máy cũ (' + m.GiaThu + ' đ) lớn hơn số còn nợ của đơn (' + con + ' đ).');
   const kh = findObj_('KhachHang', dh.MaKH) || { MaKH: dh.MaKH, TenKH: dh.TenKH };
-  return ghiMayCu_(token, user, kh, dh.SoDH, m, homNay_());
+  m.h = hangMayCu_(user, m);
+  const nk = nhapMayCu_(token, kh, dh.SoDH, [m], homNay_());
+  try {
+    const lines = readTable_('DonHangCT').filter(l => String(l.SoDH) === String(dh.SoDH)).sort((a, b) => a.STT - b.STT).map(l => { const x = Object.assign({}, l); delete x.SoDH; return x; });
+    ghiThuCu_(() => luuChungTu(token, 'DH', Object.assign({}, dh, { lines: lines.concat([dongMayCu_(m)]) })));
+  } catch (e) { // ghi đơn lỗi: bỏ phiếu nhập vừa lập, kẻo máy nằm trong kho mà đơn không trừ (và không thu lại được vì IMEI đã có trong kho)
+    boPhieuKho_(user, nk.SoPK, 'Bỏ phiếu nhập máy cũ (ghi đơn lỗi)');
+    throw e;
+  }
+  return ketQuaMayCu_(m, nk.SoPK);
 }
 
 // ===== Bảo hành – sửa chữa =====
@@ -85,13 +97,13 @@ function phieuSua_(r, homNay) {
 function dsSuaChua(token, q, o) {
   user_(token);
   o = o || {};
-  const homNay = homNay_(), raw = String(q == null ? '' : q).trim().slice(0, 60), chu = boDau_(raw), so = raw.replace(/\D/g, '');
+  const homNay = homNay_(), raw = String(q == null ? '' : q).trim().slice(0, 60), so = raw.replace(/\D/g, '');
   const LOC = {
     dang: r => r.TrangThai !== 'Đã trả khách', tra: r => r.TrangThai === 'Đã trả khách', xong: r => r.TrangThai === 'Đã sửa xong' || r.TrangThai === 'Không sửa được',
     hen: r => r.TrangThai !== 'Đã trả khách' && r.conNgay !== null && r.conNgay <= 0, tat: () => true,
   };
   let ds = readTable_('SuaChua').map(r => phieuSua_(r, homNay)).filter(LOC[o.loc] || LOC.dang);
-  if (raw) ds = ds.filter(r => boDau_([r.SoPN, r.TenKH, r.TenMay, r.IMEI, r.TinhTrang].join(' ')).indexOf(chu) >= 0 || (so.length >= 4 && (r.SDT.replace(/\D/g, '').indexOf(so) >= 0 || r.IMEI.indexOf(so) >= 0)));
+  if (raw) ds = locTim_(ds, raw, r => [r.SoPN, r.TenKH, r.TenMay, r.IMEI, r.TinhTrang].join(' '), r => so.length >= 4 && (r.SDT.replace(/\D/g, '').indexOf(so) >= 0 || r.IMEI.indexOf(so) >= 0));
   ds.sort((a, b) => String(b.NgayNhan + b.SoPN).localeCompare(String(a.NgayNhan + a.SoPN)));
   return { tong: ds.length, ds: ds.slice(0, 50) };
 }
@@ -236,10 +248,28 @@ function imeiTrongKho_() {
   const kho = {}, daXuat = {};
   Object.keys(cuoi).forEach(x => {
     const c = cuoi[x];
-    if (c.p.Loai === 'Nhập') kho[x] = { IMEI: c.ma, MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay };
-    else daXuat[x] = { IMEI: c.ma, MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay, DoiTac: c.p.DoiTac || '' };
+    if (c.p.Loai === 'Nhập') kho[x] = { IMEI: c.ma, MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay, thuCu: laNhapThuCu_(c.p) };
+    else daXuat[x] = { IMEI: c.ma, MaHH: c.l.MaHH, TenHang: c.l.TenHang, SoPK: c.p.SoPK, Ngay: c.p.Ngay, DoiTac: c.p.DoiTac || '', SoDH: c.p.SoDH || '' };
   });
   return { kho: kho, daXuat: daXuat };
+}
+
+/**
+ * Máy (IMEI / serial) để chọn thay vì gõ tay. o.SoDH: máy đã giao cho đơn đó mà khách chưa trả (màn khách trả hàng);
+ * không có SoDH: mọi máy đang trong kho (bán, xuất kho). Mỗi máy { IMEI, MaHH, TenHang, SoPK, Ngay, giuDen }:
+ * giuDen = máy cũ thu đổi còn bị giữ tới ngày đó, chưa bán / xuất được.
+ */
+function dsMaTon(token, o) {
+  user_(token);
+  o = o || {};
+  const { kho, daXuat } = imeiTrongKho_(), homNay = homNay_(), hang = {};
+  readTable_('HangHoa').forEach(h => { hang[h.MaHH] = h; });
+  const ra = x => {
+    const giuDen = x.thuCu ? congNgay_(x.Ngay, NGAY_GIU_MAY_CU) : '';
+    return { IMEI: x.IMEI, MaHH: x.MaHH, TenHang: (hang[x.MaHH] || {}).TenHang || x.TenHang, SoPK: x.SoPK, Ngay: String(x.Ngay).slice(0, 10), giuDen: giuDen >= homNay ? giuDen : '' };
+  };
+  const ds = o.SoDH ? Object.values(daXuat).filter(x => String(x.SoDH) === String(o.SoDH)).map(ra) : Object.values(kho).map(ra);
+  return ds.sort((a, b) => String(a.TenHang).localeCompare(String(b.TenHang), 'vi') || a.Ngay.localeCompare(b.Ngay) || a.IMEI.localeCompare(b.IMEI));
 }
 
 /**
@@ -296,8 +326,13 @@ function traHang_(token, o) {
   if (dh.TrangThai === 'Hủy') throw new Error('Đơn đã hủy.');
   const cu = readTable_('DonHangCT').filter(l => String(l.SoDH) === String(dh.SoDH)).sort((a, b) => a.STT - b.STT);
   const moi = cu.map(l => Object.assign({}, l, { SoLuong: +l.SoLuong || 0 }));
+  // Đơn lên đời (có dòng máy cũ −1): chỉ nhận trả trong NGAY_GIU_MAY_CU ngày kể từ ngày bán; quá hạn thì không nhận trả vì bất kỳ lý do gì
+  const amDon = moi.filter(l => l.SoLuong < 0), hanTra = amDon.length ? congNgay_(dh.Ngay, NGAY_GIU_MAY_CU) : '';
+  if (hanTra && homNay_() > hanTra) throw new Error('Đơn lên đời ' + dh.SoDH + ' bán ngày ' + dmy_(dh.Ngay) + ': chỉ nhận trả trong ' + NGAY_GIU_MAY_CU + ' ngày (đến hết ' + dmy_(hanTra) + '), nay đã quá hạn.');
   const tra = (Array.isArray(o.lines) ? o.lines : []).filter(l => l && (+l.SoLuong || imeiList_(l.IMEI).length));
   if (!tra.length) throw new Error('Chọn hàng khách trả.');
+  const hang = {};
+  readTable_('HangHoa').forEach(h => { hang[h.MaHH] = h; });
   // Hàng đang ở chỗ khách theo mặt hàng = đã giao − đã trả về kho; trong đó bao nhiêu máy có IMEI (lần cuối của IMEI là phiếu xuất của đơn này)
   const pkDon = phieuTheoDon_(dh.SoDH), { kho, daXuat } = imeiTrongKho_(), giu = {};
   const giuCua = ma => giu[ma] || (giu[ma] = { sl: 0, imei: 0 });
@@ -305,8 +340,9 @@ function traHang_(token, o) {
   Object.keys(daXuat).forEach(x => { if (pkDon[daXuat[x].SoPK] === 1 && daXuat[x].MaHH) giuCua(daXuat[x].MaHH).imei++; });
   const nhap = tra.map((t, i) => {
     const im = imeiList_(t.IMEI), sl = im.length || Math.round(+t.SoLuong || 0);
-    const l = moi.find(x => (t.MaHH ? x.MaHH === t.MaHH : !x.MaHH && x.TenHang === t.TenHang) && x.SoLuong > 0);
-    if (!l) throw new Error('Dòng trả ' + (i + 1) + ': đơn không có ' + (t.TenHang || t.MaHH) + '.');
+    // Đơn có cùng mặt hàng ở nhiều dòng (giá khác nhau): t.STT chỉ đúng dòng khách trả; không có thì lấy dòng đầu còn hàng
+    const l = moi.find(x => t.STT && +x.STT === +t.STT && x.SoLuong > 0) || moi.find(x => (t.MaHH ? x.MaHH === t.MaHH : !x.MaHH && x.TenHang === t.TenHang) && x.SoLuong > 0);
+    if (!l || (t.MaHH && l.MaHH !== t.MaHH)) throw new Error('Dòng trả ' + (i + 1) + ': đơn không có ' + (t.TenHang || t.MaHH) + '.');
     if (!(sl > 0) || sl > l.SoLuong) throw new Error('Dòng trả ' + (i + 1) + ': số lượng trả phải từ 1 đến ' + l.SoLuong + '.');
     if (im.length && !l.MaHH) throw new Error('Dòng trả ' + (i + 1) + ': ' + l.TenHang + ' không phải hàng trong kho, không ghi IMEI/serial.');
     im.forEach(x => {
@@ -318,37 +354,73 @@ function traHang_(token, o) {
     // Số trả trước hết bớt phần đơn chưa giao (không nhập kho); phần còn lại là hàng khách đã nhận, nhập lại kho
     let vaoKho = 0;
     if (l.MaHH) {
-      const g = giuCua(l.MaHH), dat = moi.filter(x => x.MaHH === l.MaHH).reduce((s, x) => s + x.SoLuong, 0);
+      const g = giuCua(l.MaHH), dat = moi.filter(x => x.MaHH === l.MaHH && x.SoLuong > 0).reduce((s, x) => s + x.SoLuong, 0);
       vaoKho = im.length || Math.max(0, sl - Math.max(0, dat - g.sl));
-      if (!im.length && vaoKho > g.sl - g.imei) throw new Error('Dòng trả ' + (i + 1) + ': ' + l.TenHang + ' đã giao kèm IMEI/serial – ghi IMEI/serial của máy khách trả.');
+      if (!im.length && vaoKho > 0 && (vaoKho > g.sl - g.imei || laMay_(hang[l.MaHH]))) throw new Error('Dòng trả ' + (i + 1) + ': ' + l.TenHang + ' đã giao kèm IMEI/serial – ghi IMEI/serial của máy khách trả.');
       g.sl -= vaoKho; g.imei -= im.length;
     }
     l.SoLuong -= sl;
     return { MaHH: l.MaHH, TenHang: l.TenHang, Model: l.Model, DVT: l.DVT, SoLuong: vaoKho, IMEI: im.join(', '), tra: sl };
   });
-  const conLai = moi.filter(l => l.SoLuong > 0), huy = !conLai.length;
-  const cong = conLai.reduce((s, l) => s + Math.round(l.SoLuong * (+l.DonGia || 0)), 0), giam = Math.min(cong, +dh.GiamGia || 0);
+  // Trả máy (hoặc trả hết hàng) của đơn lên đời: bắt buộc trả lại khách đúng các máy cũ đã thu, theo IMEI ở phiếu nhập "Thu cũ đổi mới · đơn …"
+  const hetHang = !moi.some(l => l.SoLuong > 0);
+  const traCu = amDon.length && (hetHang || nhap.some(l => laMay_(hang[l.MaHH]))) ? amDon : [];
+  const mayTra = [];
+  if (traCu.length) {
+    const nkCu = {}, dau = 'Thu cũ đổi mới · đơn ' + dh.SoDH;
+    readTable_('PhieuKho').forEach(p => { const gc = String(p.GhiChu || ''); if (laNhapThuCu_(p) && (gc === dau || gc.indexOf(dau + ' · ') === 0)) nkCu[p.SoPK] = p; });
+    const conCho = {}; // IMEI máy cũ của đơn theo mặt hàng (còn chưa ghép với dòng nào)
+    readTable_('PhieuKhoCT').forEach(l => { if (nkCu[l.SoPK]) imeiList_(l.IMEI).forEach(x => { (conCho[l.MaHH] = conCho[l.MaHH] || []).push({ ma: x, SoPK: l.SoPK, l: l }); }); });
+    traCu.forEach(l => {
+      for (let n = 0; n < -l.SoLuong; n++) {
+        const c = (conCho[l.MaHH] || []).shift();
+        if (!c) throw new Error('Không tìm thấy phiếu nhập máy cũ của dòng "' + l.TenHang + '" để trả lại khách.');
+        const k = kho[gonMa_(c.ma)];
+        if (!k || k.SoPK !== c.SoPK) throw new Error('Máy cũ ' + c.ma + ' không còn trong kho' + (daXuat[gonMa_(c.ma)] ? ' (đã xuất ở phiếu ' + daXuat[gonMa_(c.ma)].SoPK + ')' : '') + ', không trả lại khách được.');
+        mayTra.push({ MaHH: l.MaHH, TenHang: c.l.TenHang, Model: c.l.Model || '', DVT: c.l.DVT || 'Máy', IMEI: c.ma, GiaThu: Math.round(+l.DonGia || 0) });
+      }
+      l.SoLuong = 0;
+    });
+  }
+  const conLai = moi.filter(l => l.SoLuong !== 0), huy = !conLai.some(l => l.SoLuong > 0);
+  const cong = conLai.reduce((s, l) => s + Math.round(l.SoLuong * (+l.DonGia || 0)), 0), giam = Math.min(Math.max(0, cong), +dh.GiamGia || 0);
   const tongMoi = huy ? 0 : (cong - giam) + Math.round((cong - giam) * (+dh.VAT || 0) / 100);
+  if (tongMoi < 0) throw new Error('Phần đơn còn lại nhỏ hơn giá máy cũ đã trừ: khách trả cả máy thì cửa hàng trả lại máy cũ.');
   const daThu = readTable_('ThuTien').filter(p => String(p.SoDH) === String(dh.SoDH)).reduce((s, p) => s + (+p.SoTien || 0), 0);
   const hoanToiDa = Math.max(0, daThu - tongMoi);
-  if (o.xemTruoc) return { SoDH: dh.SoDH, tongCu: +dh.TongCong || 0, tongMoi: tongMoi, daThu: daThu, hoanToiDa: hoanToiDa, huy: huy };
+  const mayCuTra = mayTra.map(m => ({ TenHang: m.TenHang, IMEI: m.IMEI, GiaThu: m.GiaThu }));
+  if (o.xemTruoc) return { SoDH: dh.SoDH, tongCu: +dh.TongCong || 0, tongMoi: tongMoi, daThu: daThu, hoanToiDa: hoanToiDa, huy: huy, mayCuTra: mayCuTra, hanTra: hanTra };
   const hoan = Math.round(+(o.hoan && o.hoan.SoTien) || 0);
   if (hoan < 0 || hoan > hoanToiDa) throw new Error('Tiền trả lại khách tối đa ' + hoanToiDa + ' đ (đã thu ' + daThu + ' đ, đơn còn ' + tongMoi + ' đ).');
   const ngay = homNay_(), ghiChu = String(o.GhiChu || '').trim().slice(0, 300);
   const coMa = nhap.filter(l => l.MaHH && l.SoLuong > 0).map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, Model: l.Model, DVT: l.DVT, SoLuong: l.SoLuong, IMEI: l.IMEI }));
-  const pk = coMa.length ? luuChungTu(token, 'NK', { Ngay: ngay, SoDH: dh.SoDH, DoiTac: dh.TenKH, GhiChu: 'Khách trả hàng · đơn ' + dh.SoDH + (ghiChu ? ' · ' + ghiChu : ''), lines: coMa }).doc : null;
-  const ghiDon = Object.assign({}, dh, huy ? { TrangThai: 'Hủy', GhiChu: [dh.GhiChu, 'Khách trả hết hàng ' + ngay].filter(Boolean).join(' · ') } : {});
-  const don = luuChungTu(token, 'DH', Object.assign(ghiDon, { lines: huy ? cu : conLai.map(l => { const x = Object.assign({}, l); delete x.SoDH; return x; }) })).doc;
-  let pt = null;
-  if (hoan > 0) {
-    pt = withLock_(() => {
-      const p = { Ngay: ngay, MaKH: dh.MaKH, TenKH: dh.TenKH, SoDH: dh.SoDH, SoTien: -hoan, HinhThuc: String(o.hoan.HinhThuc || 'Tiền mặt').slice(0, 60), GhiChu: 'Trả lại tiền khách trả hàng', NguoiTao: user.ten, NgayTao: now_() };
-      upsert_('ThuTien', p, () => nextSo_('ThuTien', 'PT', ngay), []);
-      return p;
-    });
+  // Bốn bước ghi (nhập hàng trả, trả máy cũ, sửa đơn, phiếu trả tiền): bước nào lỗi thì gỡ các bước đã ghi, khách bấm lại được
+  let pk = null, pkCu = null, don = null, pt = null;
+  try {
+    if (coMa.length) pk = luuChungTu(token, 'NK', { Ngay: ngay, SoDH: dh.SoDH, DoiTac: dh.TenKH, GhiChu: 'Khách trả hàng · đơn ' + dh.SoDH + (ghiChu ? ' · ' + ghiChu : ''), lines: coMa }).doc;
+    if (mayTra.length) pkCu = ghiThuCu_(() => luuChungTu(token, 'XK', { Ngay: ngay, DoiTac: dh.TenKH, GhiChu: 'Trả lại máy cũ · đơn ' + dh.SoDH,
+      lines: mayTra.map(m => ({ MaHH: m.MaHH, TenHang: m.TenHang, Model: m.Model, DVT: m.DVT, SoLuong: 1, IMEI: m.IMEI })) }).doc);
+    const ghiDon = Object.assign({}, dh, huy ? { TrangThai: 'Hủy', GhiChu: [dh.GhiChu, 'Khách trả hết hàng ' + ngay].filter(Boolean).join(' · ') } : {});
+    // trả hết: đơn hủy giữ các dòng đã bán để tra lại, bỏ dòng máy cũ (đã trả lại khách) để khôi phục đơn không làm sống lại máy cũ
+    don = ghiThuCu_(() => luuChungTu(token, 'DH', Object.assign(ghiDon, { lines: (huy ? cu.filter(l => !(+l.SoLuong < 0)) : conLai).map(l => { const x = Object.assign({}, l); delete x.SoDH; return x; }) })).doc);
+    if (hoan > 0) {
+      pt = withLock_(() => {
+        const p = { Ngay: ngay, MaKH: dh.MaKH, TenKH: dh.TenKH, SoDH: dh.SoDH, SoTien: -hoan, HinhThuc: String(o.hoan.HinhThuc || 'Tiền mặt').slice(0, 60), GhiChu: 'Trả lại tiền khách trả hàng', NguoiTao: user.ten, NgayTao: now_() };
+        upsert_('ThuTien', p, () => nextSo_('ThuTien', 'PT', ngay), []);
+        return p;
+      });
+    }
+  } catch (e) {
+    try {
+      if (don) ghiThuCu_(() => luuChungTu(token, 'DH', Object.assign({}, dh, { lines: cu.map(l => { const x = Object.assign({}, l); delete x.SoDH; return x; }) })));
+      if (pkCu) boPhieuKho_(user, pkCu.SoPK, 'Bỏ phiếu trả máy cũ (trả hàng lỗi)');
+      if (pk) boPhieuKho_(user, pk.SoPK, 'Bỏ phiếu nhập hàng trả (trả hàng lỗi)');
+    } catch (e2) { throw new Error('Nhận trả hàng lỗi giữa chừng và chưa gỡ hết được (' + (e2 && e2.message || e2) + '). Kiểm tra lại đơn ' + dh.SoDH + ' và phiếu kho. Lỗi gốc: ' + (e && e.message || e)); }
+    throw new Error('Chưa ghi gì (đã gỡ phần vừa ghi): ' + (e && e.message || e));
   }
-  log_(user, 'Khách trả hàng', dh.SoDH, nhap.map(l => l.TenHang + ' ×' + l.tra + (l.IMEI ? ' (' + l.IMEI + ')' : '')).join(', ') + (hoan ? ' · trả lại ' + hoan + ' đ' : '') + (huy ? ' · hủy đơn' : ''));
-  return { SoDH: dh.SoDH, TrangThai: don.TrangThai, TongCong: don.TongCong, SoPK: pk ? pk.SoPK : '', SoPT: pt ? pt.SoPT : '', hoan: hoan, huy: huy };
+  log_(user, 'Khách trả hàng', dh.SoDH, nhap.map(l => l.TenHang + ' ×' + l.tra + (l.IMEI ? ' (' + l.IMEI + ')' : '')).join(', ')
+    + (mayTra.length ? ' · trả lại máy cũ ' + mayTra.map(m => m.IMEI).join(', ') : '') + (hoan ? ' · trả lại ' + hoan + ' đ' : '') + (huy ? ' · hủy đơn' : ''));
+  return { SoDH: dh.SoDH, TrangThai: don.TrangThai, TongCong: don.TongCong, SoPK: pk ? pk.SoPK : '', SoPKCu: pkCu ? pkCu.SoPK : '', mayCuTra: mayCuTra, SoPT: pt ? pt.SoPT : '', hoan: hoan, huy: huy };
 }
 
 // ===== Phiếu bán hàng gửi khách (PDF) =====

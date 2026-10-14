@@ -257,7 +257,7 @@ ctx.caiDat();
 if (MAU_APP) {
   const t = ctx.dangNhap('admin', logs.join('\n').match(/mật khẩu: (\S+)/)[1]).token, homNay = ctx.now_().slice(0, 10);
   const may16 = { MaHH: 'HH0001', TenHang: 'iPhone 16 Pro Max 256GB - Titan Đen', DVT: 'Máy' }, may15 = { MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', DVT: 'Máy' };
-  ctx.luuChungTu(t, 'NK', { Ngay: homNay, DoiTac: 'Tồn đầu kỳ', lines: [Object.assign({ SoLuong: 5 }, may16), Object.assign({ SoLuong: 1 }, may15)] });
+  ctx.luuChungTu(t, 'NK', { Ngay: homNay, DoiTac: 'Tồn đầu kỳ', lines: [Object.assign({ SoLuong: 5, IMEI: '356789012345672, 356789012345706, 356789012345714, 356789012345722, 356789012345730' }, may16), Object.assign({ SoLuong: 1, IMEI: '351234567890140' }, may15)] }); // máy: mỗi máy một IMEI
   ctx.luuChungTu(t, 'NK', { Ngay: homNay, DoiTac: 'Nhà cung cấp', lines: [Object.assign({ SoLuong: 2, IMEI: '356789012345680, 356789012345698' }, may16),
     Object.assign({ SoLuong: 1, IMEI: '351234567890132' }, may15)] });
   const dh = ctx.luuChungTu(t, 'DH', { Ngay: homNay, MaKH: 'KH00001', TenKH: 'Anh Minh', SDT: '0911000001', VAT: 0, lines: [Object.assign({ SoLuong: 1, DonGia: 28200000 }, may16)] }).doc;

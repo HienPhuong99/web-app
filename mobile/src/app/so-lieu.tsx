@@ -5,7 +5,7 @@ import { Linking, Pressable, RefreshControl, StyleSheet, Text, View } from 'reac
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import type { ChiTietNgay, KhachNo } from '../lib/api';
-import { ngay as dmy, thu, tien, tienGon } from '../lib/dinhDang';
+import { ngay as dmy, phuThu, thu, tien, tienGon } from '../lib/dinhDang';
 import { useDuLieu } from '../lib/useDuLieu';
 import { ChuLoi, ChuNhat, Dong, KhungTrang, Nhan, TieuDeMuc, Vach } from '../ui/DanhSach';
 import { DauTrang } from '../ui/DauTrang';
@@ -47,6 +47,7 @@ function BanTrongNgay({ ngayDau }: { ngayDau: string }) {
               <O3 so={String(dangXem.tong.don)} nhan={dangXem.tong.huy ? `Đơn (${dangXem.tong.huy} hủy)` : 'Đơn hàng'} mauSo={mau.brand} />
               <O3 so={tienGon(dangXem.tong.thu)} nhan="Đã thu" mauSo={mau.xanh} />
             </View>
+            {phuThu(dangXem.tong.mayCu, dangXem.tong.traLai) ? <Text style={s.phuThu} testID="phu-thu-ngay">{phuThu(dangXem.tong.mayCu, dangXem.tong.traLai)}</Text> : null}
           </The>
           <TieuDeMuc chu={`Đơn hàng (${dangXem.don.length})`} />
           <The style={[s.muc, { paddingVertical: 6 }]} testID="ds-don-ngay">
@@ -143,6 +144,7 @@ const s = StyleSheet.create({
   o3: { flex: 1, alignItems: 'center', paddingHorizontal: 4 },
   so: { fontSize: 18, fontWeight: '800' },
   soNhan: { fontSize: 13, color: mau.chuNhat, marginTop: 2, fontWeight: '600' },
+  phuThu: { fontSize: 13, color: mau.chuNhat, marginTop: 10, textAlign: 'center' },
   dong: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 },
   chinh: { fontSize: 16, fontWeight: '700', color: mau.chu },
   phu: { fontSize: 14, color: mau.chuNhat, marginTop: 2 },

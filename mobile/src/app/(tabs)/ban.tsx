@@ -11,6 +11,8 @@ import type { BanNhanhKQ, CauHinh, DsKhach, HangKho, HoSoKhach, KhachTom, MaKho,
 import { homNay, ngay, tien } from '../../lib/dinhDang';
 import { docTien, doiSoLuong, dongGui, soTienNhap, suaGia, themHang, themMay, tongGio, xoaDong, type DongGio } from '../../lib/gioHang';
 import { boDau } from '../../lib/lienHe';
+import { goiYMaTon, type MaTon } from '../../lib/maTon';
+import { timKiem } from '../../lib/timKiem';
 import { chuanHoaMa, goiYMa } from '../../lib/maQuet';
 import { useGuiPhieu } from '../../lib/pdf';
 import { daThuThem, taoMaGhi } from '../../lib/ghiMotLan';
@@ -36,6 +38,8 @@ export default function BanMan() {
   // Cài đặt (hình thức thu, VAT, tài khoản nhận tiền) và danh sách hàng: hiện ngay bản đã nhớ, lấy bản mới mỗi lần mở tab
   const dlCh = useDuLieu<CauHinh>('cauHinhMay', []), ch = dlCh.du;
   const dlKho = useDuLieu<HangKho[]>('khoMay', []), hang = dlKho.du;
+  const dlMa = useDuLieu<MaTon[]>('dsMaTon', []), maTon = dlMa.du; // máy (IMEI) đang trong kho: gõ vài số là ra máy, không phải gõ đủ 15 số
+  const [chonMay, setChonMay] = useState<HangKho | null>(null); // đã chọn mặt hàng máy: chọn tiếp máy (IMEI) trong kho
   const boNho = useSuaBoNho();
   const [vat, setVat] = useState(0), [soThu, setSoThu] = useState<number | null>(null), [hinhThuc, setHinhThuc] = useState('Tiền mặt'), [ghiChu, setGhiChu] = useState('');
   const [camera, setCamera] = useState(false), [focus, setFocus] = useState(false);
@@ -59,9 +63,10 @@ export default function BanMan() {
   const khoaTS = p.ma && p.ten ? p.ma + '|' + p.ten : '';
   if (khoaTS && khoaTS !== thamSo) { setThamSo(khoaTS); setKhach({ MaKH: p.ma!, TenKH: p.ten! }); setKq(null); }
 
-  const tong = useMemo(() => tongGio(gio, vat, giamGia), [gio, vat, giamGia]);
-  const tongCu = mayCu.reduce((s, m) => s + m.GiaThu, 0), phaiTra = Math.max(0, tong.tong - tongCu);
-  const thu = soThu ?? phaiTra; // chưa sửa thì khách trả đủ (sau khi trừ máy cũ)
+  // Đơn lên đời: máy cũ trừ vào tiền hàng trước giảm giá, VAT; tổng đơn là số khách phải trả thật (như máy chủ)
+  const tongCu = mayCu.reduce((s, m) => s + m.GiaThu, 0);
+  const tong = useMemo(() => tongGio(gio, vat, giamGia, tongCu), [gio, vat, giamGia, tongCu]), phaiTra = tong.tong;
+  const thu = soThu ?? phaiTra; // chưa sửa thì khách trả đủ
 
   const themTheoMa = async (raw: string) => {
     const ma = chuanHoaMa(raw);
@@ -89,7 +94,21 @@ export default function BanMan() {
     themTheoMa(raw);
   };
 
+  // Chọn một máy trong kho (gợi ý theo số đã gõ, hoặc danh sách máy của mặt hàng)
+  const chonMaTon = (m: MaTon) => {
+    if (m.giuDen) return setLoiMa(`Máy ${m.IMEI} là máy cũ thu đổi, còn giữ đến hết ngày ${ngay(m.giuDen)} (khách có thể trả hàng), chưa bán được.`);
+    const h = (hang ?? []).find(x => x.MaHH === m.MaHH);
+    try {
+      setGio(g => themMay(g, { MaHH: m.MaHH, TenHang: h?.TenHang || m.TenHang, DVT: h?.DVT || 'Máy', GiaLe: h?.GiaLe || 0 }, m.IMEI));
+      setMaGo(''); setLoiMa(''); setChonMay(null); setChonHang(false);
+      if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
+    } catch (e) { setLoiMa((e as Error).message); }
+  };
+  const goiYTon = useMemo(() => goiYMaTon(maTon, maGo, gio.map(l => l.IMEI ?? '')), [maTon, maGo, gio]);
+  const mayCuaHang = useMemo(() => (chonMay ? goiYMaTon(maTon, '', gio.map(l => l.IMEI ?? ''), { maHH: chonMay.MaHH, toiDa: 60 }) : []), [maTon, chonMay, gio]);
+
   const chon = (h: HangKho | { MaHH: ''; TenHang: string; GiaLe: number }) => {
+    if (!maChuaCo && 'DVT' in h && /^máy$/i.test(String(h.DVT || '').trim())) { setChonMay(h); setChonHang(false); return; } // máy: phải chọn đúng máy trong kho
     try {
       setGio(g => (maChuaCo ? themMay(g, h, maChuaCo) : themHang(g, h)));
       if (maChuaCo) { setMaChuaCo(''); setMaGo(''); }
@@ -101,8 +120,11 @@ export default function BanMan() {
     setLoi('');
     if (!gio.length) return setLoi('Chưa có hàng nào trong đơn.');
     if (!khach) return setLoi('Chọn khách (hoặc bấm Khách lẻ).');
-    if (thu + tongCu > tong.tong) return setLoi(tongCu ? 'Tiền khách trả cộng giá máy cũ lớn hơn tổng đơn.' : 'Số tiền khách trả lớn hơn tổng đơn.');
-    const ten = khach.TenKH, cau = `${tong.soMay} sản phẩm, tổng ${tien(tong.tong)}.${tongCu ? `\nMáy cũ trừ ${tien(tongCu)}.` : ''}\nKhách trả ${tien(thu)}${thu ? ' (' + hinhThuc + ')' : ''}${thu < phaiTra ? ', còn nợ ' + tien(phaiTra - thu) : ''}.`;
+    const may = gio.find(l => /^máy$/i.test(l.DVT.trim()) && !l.IMEI);
+    if (may) return setLoi(`${may.TenHang} là máy: quét hoặc gõ IMEI của từng máy để thêm vào đơn.`);
+    if (tongCu > tong.cong) return setLoi('Giá máy cũ lớn hơn tiền hàng.');
+    if (thu > tong.tong) return setLoi('Số tiền khách trả lớn hơn tổng đơn.');
+    const ten = khach.TenKH, cau = `${tong.soMay} sản phẩm${tongCu ? `, tiền hàng ${tien(tong.cong)}, máy cũ trừ ${tien(tongCu)}` : ''}, tổng ${tien(tong.tong)}.\nKhách trả ${tien(thu)}${thu ? ' (' + hinhThuc + ')' : ''}${thu < phaiTra ? ', còn nợ ' + tien(phaiTra - thu) : ''}.`;
     if (!(await hoi(`Bán cho ${ten}?`, cau, 'Bán'))) return;
     setDangLuu(true);
     try {
@@ -121,13 +143,13 @@ export default function BanMan() {
       boNho.mot<TongQuan>('tongQuanMay', [], tq => tongQuanSauBan(tq, r, homNay()));
       boNho.mot<HoSoKhach>('chiTietKhach', [r.MaKH], hs => hoSoSauBan(hs, r, homNay()));
       boNho.moi<DsKhach>('dsKhachMay', ds => dsKhachDoiNo(ds, r.MaKH, r.TongCong - r.daThu));
-      dlKho.tai(); // tồn kho mới từ máy chủ
+      dlKho.tai(); dlMa.tai(); // tồn kho, máy trong kho mới từ máy chủ
     } catch (e) { setLoi((e as Error).message); } finally { setDangLuu(false); }
   };
 
   const donMoi = () => {
     maGhi.current = '';
-    setGio([]); setKhach(null); setSoThu(null); setMayCu([]); setGiamGia(0); setGhiChu(''); setKq(null); setLoi(''); setLoiMa(''); setMaGo(''); setMaChuaCo('');
+    setGio([]); setKhach(null); setSoThu(null); setMayCu([]); setGiamGia(0); setGhiChu(''); setKq(null); setLoi(''); setLoiMa(''); setMaGo(''); setMaChuaCo(''); setChonMay(null);
     setVat(ch?.vat ?? 0); router.setParams({ ma: undefined, ten: undefined });
   };
 
@@ -151,7 +173,18 @@ export default function BanMan() {
             <Ionicons name={camera ? 'close' : 'scan'} size={22} color="#fff" />
           </Pressable>
         </View>
-        {goiY ? <Text style={s.goiY}>{goiY}</Text> : null}
+        {goiY && !goiYTon.length ? <Text style={s.goiY}>{goiY}</Text> : null}
+        {goiYTon.length ? (
+          <View style={s.goiYTon} testID="goi-y-ma-ton">
+            <Text style={s.goiYNhan}>{`Máy trong kho khớp "${maGo.trim()}" · bấm để thêm`}</Text>
+            {goiYTon.map((m, i) => (
+              <View key={m.IMEI}>
+                {i ? <Vach /> : null}
+                <Dong chinh={m.IMEI} phu={m.TenHang + (m.giuDen ? ` · máy cũ giữ đến ${ngay(m.giuDen)}` : '')} onPress={() => chonMaTon(m)} testID={'ma-ton-' + m.IMEI} />
+              </View>
+            ))}
+          </View>
+        ) : null}
         <View style={{ marginTop: camera ? 12 : 0 }}>
           <KhungQuet bat={camera && focus} onMa={coMa} onLoi={setLoiMa} cao={220} huongDan="Quét lần lượt từng máy" />
         </View>
@@ -164,6 +197,21 @@ export default function BanMan() {
         <Nut chu={chonHang && !maChuaCo ? 'Đóng danh sách hàng' : 'Thêm phụ kiện / dịch vụ'} phu bieuTuong={chonHang && !maChuaCo ? 'close' : 'add-circle-outline'}
           onPress={() => { setChonHang(!chonHang || !!maChuaCo); setMaChuaCo(''); }} style={{ marginTop: 12, minHeight: 46 }} testID="nut-them-hang" />
         {chonHang ? <ChonHang hang={hang} onChon={chon} choMay={!!maChuaCo} /> : null}
+        {chonMay ? (
+          <View style={s.goiYTon} testID="chon-may-trong-kho">
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={[s.goiYNhan, { flex: 1 }]}>{chonMay.TenHang}: chọn máy trong kho ({mayCuaHang.length})</Text>
+              <Pressable onPress={() => setChonMay(null)} hitSlop={10} accessibilityLabel="Đóng danh sách máy"><Ionicons name="close" size={20} color={mau.chuNhat} /></Pressable>
+            </View>
+            {!maTon ? <ChuNhat chu="Đang tải máy trong kho…" /> : !mayCuaHang.length ? <ChuNhat chu="Không còn máy nào của mặt hàng này trong kho (đã bán hết, hoặc phiếu nhập chưa ghi IMEI)." /> : null}
+            {mayCuaHang.map((m, i) => (
+              <View key={m.IMEI}>
+                {i ? <Vach /> : null}
+                <Dong chinh={m.IMEI} phu={`Nhập ${ngay(m.Ngay)} · ${m.SoPK}` + (m.giuDen ? ` · máy cũ giữ đến ${ngay(m.giuDen)}` : '')} onPress={() => chonMaTon(m)} testID={'may-kho-' + m.IMEI} />
+              </View>
+            ))}
+          </View>
+        ) : null}
       </The>
 
       {/* 2. Khách */}
@@ -174,6 +222,8 @@ export default function BanMan() {
       {/* 3. Thanh toán */}
       <The nhan="3 · Thanh toán" style={s.muc} testID="the-thanh-toan">
         <View style={s.dongTien}><Text style={s.nhanTien}>Tiền hàng</Text><Text style={s.giaTri}>{tien(tong.cong)}</Text></View>
+        <ThuMayCu ds={mayCu} setDs={setMayCu} />
+        {tongCu > tong.cong ? <ChuLoi chu="Giá máy cũ lớn hơn tiền hàng." /> : null}
         <View style={s.dongTien}>
           <Text style={s.nhanTien}>Giảm giá</Text>
           <TextInput style={[s.o, s.oGiam]} value={giamGia ? soTienNhap(giamGia) : ''} onChangeText={t => setGiamGia(docTien(t))} keyboardType="number-pad" placeholder="0" placeholderTextColor={mau.xam} testID="o-giam-gia" />
@@ -184,10 +234,8 @@ export default function BanMan() {
             {[0, 8, 10].map(v => <Chip key={v} chu={v + '%'} chon={vat === v} onPress={() => setVat(v)} testID={'vat-' + v} />)}
           </View>
         </View>
-        <View style={s.dongTien}><Text style={[s.nhanTien, { fontWeight: '800', color: mau.chu }]}>Tổng cộng</Text><Text style={s.tong} testID="tong-cong">{tien(tong.tong)}</Text></View>
+        <View style={s.dongTien}><Text style={[s.nhanTien, { fontWeight: '800', color: mau.chu }]}>{tongCu ? 'Tổng cộng (đã trừ máy cũ)' : 'Tổng cộng'}</Text><Text style={s.tong} testID="tong-cong">{tien(tong.tong)}</Text></View>
         <Vach />
-        <ThuMayCu ds={mayCu} setDs={setMayCu} />
-        {tongCu ? <View style={s.dongTien}><Text style={[s.nhanTien, { fontWeight: '800', color: mau.chu }]}>Còn phải trả</Text><Text style={s.tong} testID="phai-tra">{tien(phaiTra)}</Text></View> : null}
         <Text style={[s.nhanTien, { marginTop: 12 }]}>Khách trả</Text>
         <View style={s.hangNhap}>
           <TextInput style={[s.o, { fontWeight: '800' }]} value={soTienNhap(thu)} onChangeText={t => setSoThu(docTien(t))} keyboardType="number-pad"
@@ -196,7 +244,7 @@ export default function BanMan() {
           <Chip chu="Nợ hết" chon={soThu === 0} onPress={() => setSoThu(0)} testID="no-het" />
         </View>
         {thu < phaiTra ? <Text style={s.goiY} testID="con-no">Khách còn nợ {tien(phaiTra - thu)}</Text> : null}
-        {thu > phaiTra ? <ChuLoi chu={tongCu ? 'Tiền khách trả cộng giá máy cũ lớn hơn tổng đơn.' : 'Số tiền khách trả lớn hơn tổng đơn.'} /> : null}
+        {thu > phaiTra ? <ChuLoi chu="Số tiền khách trả lớn hơn tổng đơn." /> : null}
         {thu > 0 ? (
           <View style={s.chips}>
             {(ch?.hinhThuc ?? ['Tiền mặt', 'Chuyển khoản']).map(h => <Chip key={h} chu={h} chon={hinhThuc === h} onPress={() => setHinhThuc(h)} testID={'ht-' + boDau(h).replace(/\s+/g, '-')} />)}
@@ -214,9 +262,26 @@ export default function BanMan() {
 }
 
 type MayCu = { k: number; TenHang: string; IMEI: string; GiaThu: number };
-/** Thu cũ đổi mới: máy cũ của khách (tên, IMEI, giá thu) trừ vào đơn; máy chủ nhập máy cũ vào kho */
+/** Thu cũ đổi mới (đơn lên đời): máy cũ của khách (tên, IMEI, giá thu) thành dòng −1 của đơn; máy chủ nhập máy cũ vào kho và giữ 7 ngày */
 function ThuMayCu({ ds, setDs }: { ds: MayCu[]; setDs: React.Dispatch<React.SetStateAction<MayCu[]>> }) {
+  const { goi } = useAuth();
   const [mo, setMo] = useState(false), [ten, setTen] = useState(''), [imei, setImei] = useState(''), [gia, setGia] = useState(0), [loi, setLoi] = useState('');
+  const [lichSu, setLichSu] = useState(''), daTra = useRef('');
+  // Gõ / quét xong IMEI máy cũ: tra lịch sử. Máy cửa hàng từng bán thì tự điền tên máy; máy đang trong kho thì báo ngay (không thu được)
+  const traLichSu = async () => {
+    const ma = chuanHoaMa(imei);
+    if (ma.length < 8 || ma === daTra.current) return;
+    daTra.current = ma; setLichSu('');
+    try {
+      const r = await goi<MaKho>('traMaKho', ma);
+      if (r.trangThai === 'trongKho') return setLoi(`Máy ${r.ma} đang trong kho (${r.TenHang}, phiếu ${r.SoPK}): kiểm tra lại IMEI.`);
+      setLoi('');
+      if (r.trangThai === 'daBan') {
+        if (!ten.trim() && r.TenHang) setTen(r.TenHang);
+        setLichSu(`Máy cửa hàng đã bán ngày ${ngay(r.Ngay)}${r.DoiTac ? ' cho ' + r.DoiTac : ''}${r.SoDH ? ' (đơn ' + r.SoDH + ')' : ''}: ${r.TenHang}.`);
+      }
+    } catch { /* mất mạng: vẫn thu được, máy chủ kiểm lại khi bán */ }
+  };
   const them = () => {
     const ma = chuanHoaMa(imei);
     if (!ten.trim()) return setLoi('Nhập tên máy cũ, vd: iPhone 12 64GB.');
@@ -224,7 +289,7 @@ function ThuMayCu({ ds, setDs }: { ds: MayCu[]; setDs: React.Dispatch<React.SetS
     if (gia <= 0) return setLoi('Nhập giá thu.');
     if (ds.some(m => m.IMEI === ma)) return setLoi('Máy cũ này đã thêm.');
     setDs(d => [...d, { k: Date.now(), TenHang: ten.trim(), IMEI: ma, GiaThu: gia }]);
-    setTen(''); setImei(''); setGia(0); setLoi(''); setMo(false);
+    setTen(''); setImei(''); setGia(0); setLoi(''); setLichSu(''); daTra.current = ''; setMo(false);
   };
   return (
     <View style={{ marginTop: 12 }} testID="thu-may-cu">
@@ -241,7 +306,9 @@ function ThuMayCu({ ds, setDs }: { ds: MayCu[]; setDs: React.Dispatch<React.SetS
       {mo ? (
         <View style={{ gap: 8, marginTop: 4 }}>
           <TextInput style={[s.o, { flex: 0 }]} value={ten} onChangeText={setTen} placeholder="Tên máy cũ (vd: iPhone 12 64GB)" placeholderTextColor={mau.xam} testID="o-ten-may-cu" />
-          <TextInput style={[s.o, { flex: 0 }]} value={imei} onChangeText={setImei} placeholder="IMEI / serial máy cũ" placeholderTextColor={mau.xam} autoCapitalize="characters" autoCorrect={false} testID="o-imei-may-cu" />
+          <TextInput style={[s.o, { flex: 0 }]} value={imei} onChangeText={setImei} placeholder="IMEI / serial máy cũ" placeholderTextColor={mau.xam} autoCapitalize="characters" autoCorrect={false}
+            onEndEditing={traLichSu} onSubmitEditing={traLichSu} testID="o-imei-may-cu" />
+          {lichSu ? <Text style={[s.phu, { marginTop: 0 }]} testID="lich-su-may-cu">{lichSu}</Text> : null}
           <View style={s.hangNhap}>
             <TextInput style={s.o} value={soTienNhap(gia)} onChangeText={t => setGia(docTien(t))} keyboardType="number-pad" placeholder="Giá thu" placeholderTextColor={mau.xam} testID="o-gia-may-cu" />
             <Nut chu="Thêm" bieuTuong="add" onPress={them} style={{ minHeight: 48 }} testID="nut-them-may-cu" />
@@ -249,7 +316,10 @@ function ThuMayCu({ ds, setDs }: { ds: MayCu[]; setDs: React.Dispatch<React.SetS
           <ChuLoi chu={loi} />
         </View>
       ) : (
-        <Nut chu="Thu máy cũ của khách (trừ vào đơn)" phu bieuTuong="swap-horizontal" onPress={() => setMo(true)} style={{ minHeight: 46 }} testID="nut-may-cu" />
+        <>
+          <Nut chu="Thu máy cũ của khách (trừ vào đơn)" phu bieuTuong="swap-horizontal" onPress={() => setMo(true)} style={{ minHeight: 46 }} testID="nut-may-cu" />
+          {ds.length ? <Text style={[s.phu, { marginTop: 6 }]}>Khách trả máy mới trong 7 ngày thì nhận lại đúng máy cũ này; quá 7 ngày không nhận trả.</Text> : null}
+        </>
       )}
     </View>
   );
@@ -284,10 +354,8 @@ function DongHang({ l, setGio }: { l: DongGio; setGio: React.Dispatch<React.SetS
 
 function ChonHang({ hang, onChon, choMay }: { hang: HangKho[] | null; onChon: (h: HangKho | { MaHH: ''; TenHang: string; GiaLe: number }) => void; choMay: boolean }) {
   const [q, setQ] = useState(''), [gia, setGia] = useState(0);
-  const ds = useMemo(() => {
-    const w = boDau(q).split(/\s+/).filter(Boolean);
-    return (hang ?? []).filter(h => w.every(x => boDau(h.TenHang + ' ' + h.MaHH + ' ' + h.Model).includes(x))).slice(0, 30);
-  }, [hang, q]);
+  // tìm kiếm thông minh: không dấu, viết liền ("ip15pm"), viết tắt, gõ sai một chữ; khớp nhiều hơn xếp trước
+  const ds = useMemo(() => timKiem(hang ?? [], q, h => h.TenHang + ' ' + h.MaHH + ' ' + h.Model).slice(0, 30), [hang, q]);
   return (
     <View style={{ marginTop: 12 }} testID="chon-hang">
       <OTim value={q} onChangeText={setQ} placeholder="Tìm hàng theo tên" testID="o-tim-hang" />
@@ -358,7 +426,7 @@ function ChonKhach({ khach, setKhach }: { khach: Khach | null; setKhach: (k: Kha
 
 function KetQua({ kq, qr, hinhThuc, onMoi }: { kq: BanNhanhKQ; qr: CauHinh['qr']; hinhThuc: string; onMoi: () => void }) {
   const phieu = useGuiPhieu();
-  const cu = kq.thuCu ?? [], tienCu = cu.reduce((s, m) => s + m.GiaThu, 0), tienMat = kq.daThu - tienCu; // daThu gồm cả giá máy cũ
+  const cu = kq.thuCu ?? [], tienMat = kq.daThu; // TongCong đã trừ máy cũ, daThu là tiền thật khách trả
   const [them, setThem] = useState(() => daThuThem(kq.SoDH));
   useFocusEffect(useCallback(() => { setThem(daThuThem(kq.SoDH)); }, [kq.SoDH])); // quay về từ Thu tiền: còn nợ theo số vừa thu
   const no = Math.max(0, kq.TongCong - kq.daThu - them);
@@ -403,6 +471,8 @@ const s = StyleSheet.create({
   hangNhap: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   o: { flex: 1, minWidth: 0, backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 14, borderWidth: 1, borderColor: mau.vach, paddingHorizontal: 14, paddingVertical: 12, fontSize: 17, color: mau.chu },
   nutVuong: { width: 50, height: 50, borderRadius: 14, backgroundColor: mau.cam, alignItems: 'center', justifyContent: 'center' },
+  goiYTon: { marginTop: 10, borderWidth: 1, borderColor: mau.vach, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
+  goiYNhan: { fontSize: 13, color: mau.chuNhat, fontWeight: '700', marginVertical: 4 },
   goiY: { color: mau.vang, fontSize: 14, marginTop: 10, fontWeight: '600', lineHeight: 19 },
   dongHang: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: mau.vach },
   tenHang: { fontSize: 16, fontWeight: '700', color: mau.chu },

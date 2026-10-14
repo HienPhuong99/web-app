@@ -7,12 +7,14 @@ export type HangChon = { MaHH: string; TenHang: string; DVT?: string; GiaLe?: nu
 let dem = 0;
 const khoaMoi = () => 'd' + Date.now().toString(36) + (++dem).toString(36);
 
-/** giam: giảm giá cả đơn (trừ trước VAT, không quá tiền hàng); cong: cộng các dòng trước khi giảm */
-export function tongGio(ds: DongGio[], vat = 0, giam = 0): { cong: number; giam: number; tienHang: number; tienVAT: number; tong: number; soMay: number } {
-  const cong = ds.reduce((s, l) => s + Math.round(l.SoLuong * l.DonGia), 0), g = Math.min(Math.max(0, cong), Math.max(0, Math.round(Number(giam) || 0)));
-  const tienHang = cong - g;
+/** giam: giảm giá cả đơn (trừ trước VAT, không quá tiền hàng); cong: cộng các dòng trước khi giảm.
+ *  truCu: giá các máy cũ thu lại (đơn lên đời) trừ vào tiền hàng trước giảm giá và VAT, như máy chủ (dòng −1 của đơn). */
+export function tongGio(ds: DongGio[], vat = 0, giam = 0, truCu = 0): { cong: number; tienCu: number; giam: number; tienHang: number; tienVAT: number; tong: number; soMay: number } {
+  const cong = ds.reduce((s, l) => s + Math.round(l.SoLuong * l.DonGia), 0), tienCu = Math.max(0, Math.round(Number(truCu) || 0)), sauCu = Math.max(0, cong - tienCu);
+  const g = Math.min(sauCu, Math.max(0, Math.round(Number(giam) || 0)));
+  const tienHang = sauCu - g;
   const tienVAT = Math.round(tienHang * (Number(vat) || 0) / 100);
-  return { cong, giam: g, tienHang, tienVAT, tong: tienHang + tienVAT, soMay: ds.reduce((s, l) => s + l.SoLuong, 0) };
+  return { cong, tienCu, giam: g, tienHang, tienVAT, tong: tienHang + tienVAT, soMay: ds.reduce((s, l) => s + l.SoLuong, 0) };
 }
 
 /** Thêm một máy theo IMEI/serial. Máy đã có trong giỏ thì báo lỗi (quét trùng). */

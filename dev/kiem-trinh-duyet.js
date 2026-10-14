@@ -92,10 +92,10 @@ BUOC.push(['Danh sách: sắp xếp, lọc mới, Bỏ lọc, nhớ lựa chọn
   // Phiếu kho: tạo 1 phiếu nhập 5 máy, 1 phiếu nhập 1 cái, 1 phiếu xuất 2 máy
   await page.evaluate(async () => {
     const h = S.hang.find(x => /iPhone 16/.test(x.TenHang)), op = S.hang.find(x => x.TenHang === 'Ốp nhập thử');
-    const dong = (x, sl) => ({ MaHH: x.MaHH, TenHang: x.TenHang, DVT: x.DVT, SoLuong: sl });
-    await api('luuChungTu', 'NK', { Ngay: '2026-01-05', DoiTac: 'Nhà cung cấp A', lines: [dong(h, 5)] });
+    const dong = (x, sl, im) => ({ MaHH: x.MaHH, TenHang: x.TenHang, DVT: x.DVT, SoLuong: sl, IMEI: im || '' }); // máy: mỗi máy một IMEI
+    await api('luuChungTu', 'NK', { Ngay: '2026-01-05', DoiTac: 'Nhà cung cấp A', lines: [dong(h, 5, 'DS0001, DS0002, DS0003, DS0004, DS0005')] });
     await api('luuChungTu', 'NK', { Ngay: '2026-01-06', DoiTac: 'Nhà cung cấp B', lines: [dong(op, 1)] });
-    await api('luuChungTu', 'XK', { Ngay: '2026-01-07', DoiTac: 'Khách lẻ', lines: [dong(h, 2)] });
+    await api('luuChungTu', 'XK', { Ngay: '2026-01-07', DoiTac: 'Khách lẻ', lines: [dong(h, 2, 'DS0001, DS0002')] });
     await loadAll();
   });
   await page.click('#nav a[data-go="kho"]');
@@ -148,6 +148,9 @@ BUOC.push(['Tài chính: giá nhập ở phiếu nhập, nợ nhà cung cấp, p
   await page.fill('tr[data-i="0"] [data-f="SoLuong"]', '2');
   await page.fill('tr[data-i="0"] [data-f="GiaVon"]', '10000000');
   assert.match(await page.locator('#view [data-t="GiaTri"]').innerText(), /20\.000\.000/);
+  await page.locator('#topActions .btn', { hasText: 'Lưu' }).click(); // máy chưa ghi IMEI: không lưu được
+  await page.waitForSelector('#toast div:has-text("ghi IMEI/serial của từng máy")');
+  await page.fill('tr[data-i="0"] [data-f="IMEI"]', 'TC0001, TC0002');
   await page.locator('#topActions .btn', { hasText: 'Lưu' }).click();
   await page.waitForFunction(() => document.querySelector('#title').textContent === 'Nhập – xuất kho', null, { timeout: 8000 }); // lưu xong về danh sách
   // Nợ nhà cung cấp: trả một phần bằng phiếu chi
@@ -167,6 +170,9 @@ BUOC.push(['Tài chính: giá nhập ở phiếu nhập, nợ nhà cung cấp, p
   const tm = async () => +(await page.locator('#view [data-ton] .stat').first().locator('.v').innerText()).replace(/\D/g, '') * ((await page.locator('#view [data-ton] .stat').first().locator('.v').innerText()).includes('-') ? -1 : 1);
   const truoc = await tm();
   await page.locator('#topActions .btn', { hasText: 'Lập phiếu chi' }).click();
+  assert.ok(!(await page.locator('#modal [data-imei-chi]').isVisible()));
+  await page.selectOption('#modal [name=Loai]', 'Làm lại máy cũ'); // chi phí làm lại một máy: hỏi IMEI máy
+  assert.ok(await page.locator('#modal [data-imei-chi]').isVisible());
   await page.selectOption('#modal [name=Loai]', 'Vận chuyển');
   await page.fill('#modal [name=SoTien]', '30000');
   await page.locator('#modal .btn', { hasText: 'Lưu' }).click();
@@ -178,7 +184,38 @@ BUOC.push(['Tài chính: giá nhập ở phiếu nhập, nợ nhà cung cấp, p
   await page.click('#nav a[data-go="baocao"]');
   await page.click('#view [data-tab="loi"]');
   await page.waitForSelector('#view [data-loi]');
-  assert.match(await page.locator('#view [data-loi]').innerText(), /Lãi gộp/);
+  assert.match(await page.locator('#view [data-loi]').innerText(), /Lãi gộp[\s\S]*Lãi bán máy mới[\s\S]*Lãi máy cũ \(bán lại máy thu về\)/);
+}]);
+BUOC.push(['Xuất kho: gõ vài số cuối là ra máy trong kho, bấm ô IMEI hiện máy còn lại của mặt hàng; tìm gõ sai vẫn ra', async page => {
+  const ghi = d => d.accept();
+  page.on('dialog', ghi);
+  try {
+    await page.click('#nav a[data-go="kho"]');
+    await page.locator('#topActions .btn', { hasText: 'Xuất kho' }).click();
+    await page.fill('input[data-h="DoiTac"]', 'Khách xuất thử');
+    await page.locator('tr[data-i="0"] [data-f="IMEI"]').pressSequentially('0002'); // máy TC0002 nhập ở bước trên
+    await page.waitForSelector('#picker:not(.hidden) [data-i]');
+    assert.match(await page.locator('#picker [data-i]').first().innerText(), /TC0002[\s\S]*iPhone 15/);
+    await page.keyboard.press('Enter'); // chọn máy gợi ý đầu tiên
+    await page.waitForFunction(() => S.doc.lines[0].MaHH && /^TC0002, $/.test(S.doc.lines[0].IMEI), null, { timeout: 5000 });
+    assert.deepStrictEqual(await page.evaluate(() => [S.doc.lines[0].SoLuong, /iPhone 15/.test(S.doc.lines[0].TenHang)]), [1, true]);
+    // dòng đã là máy iPhone 15: bấm lại ô IMEI thì hiện các máy iPhone 15 còn trong kho, trừ máy đã ghi
+    await page.locator('tr[data-i="0"] [data-f="Model"]').click();
+    await page.locator('tr[data-i="0"] [data-f="IMEI"]').click();
+    await page.waitForSelector('#picker:not(.hidden) [data-i]:has-text("TC0001")');
+    assert.strictEqual(await page.locator('#picker [data-i]:has-text("TC0002")').count(), 0);
+    await page.locator('#picker [data-i]:has-text("TC0001")').click();
+    await page.waitForFunction(() => S.doc.lines[0].SoLuong === 2 && /TC0002, TC0001/.test(S.doc.lines[0].IMEI), null, { timeout: 5000 });
+    // danh sách hàng: gõ sai chính tả vẫn ra, có ghi "gần đúng"
+    await page.click('#nav a[data-go="hang"]');
+    await page.fill('#view .search input', 'iphnoe 15');
+    await page.waitForFunction(() => /gần đúng/.test(document.querySelector('#view .count').textContent), null, { timeout: 5000 }); // danh sách lọc sau khi ngừng gõ
+    assert.ok(await page.locator('#view tbody tr:has-text("iPhone 15")').count() > 0);
+    await page.fill('#view .search input', 'ip15');
+    await page.waitForFunction(() => !/gần đúng/.test(document.querySelector('#view .count').textContent), null, { timeout: 5000 });
+    assert.ok(await page.locator('#view tbody tr:has-text("iPhone 15")').count() > 0);
+    await page.fill('#view .search input', '');
+  } finally { page.off('dialog', ghi); }
 }]);
 BUOC.push(['Nhận máy sửa chữa, đổi trạng thái, trả máy lập đơn dịch vụ; thu máy cũ trừ vào đơn', async page => {
   const hoi = [];
@@ -222,8 +259,16 @@ BUOC.push(['Nhận máy sửa chữa, đổi trạng thái, trả máy lập đ�
     await page.fill('#modal [name=GiaThu]', '1000000');
     await page.locator('#modal .btn', { hasText: 'Thu máy' }).click();
     await page.waitForSelector('#modal', { state: 'hidden' });
-    await page.waitForSelector('#view .side-cards :text("Thu máy cũ")');
+    // Đơn lên đời: máy cũ thành dòng −1 của đơn (chỉ xem), tổng đơn giảm; không còn nút Hủy đơn (hủy bằng Khách trả hàng)
+    await page.waitForSelector('#view tr.thu-cu');
+    assert.match(await page.inputValue('#view tr.thu-cu input'), /^iPhone 8 64GB \(máy cũ\) · IMEI 356000999888777$/);
+    assert.match(await page.locator('#view tr.thu-cu [data-c="ThanhTien"]').innerText(), /-1\.000\.000/);
     assert.match(await page.locator('#view .side-cards').innerText(), /Còn nợ\s*500\.000/);
+    assert.ok(!(await page.locator('#topActions .btn', { hasText: 'Hủy đơn' }).count()));
+    // Sửa ghi chú rồi lưu: dòng máy cũ giữ nguyên, máy chủ nhận
+    await page.fill('input[data-h="GhiChu"]', 'Khách lên đời');
+    await page.locator('#topActions .btn', { hasText: 'Lưu' }).click();
+    await page.waitForFunction(() => document.querySelector('#title').textContent === 'Đơn hàng', null, { timeout: 8000 });
   } finally { page.off('dialog', ghi); }
 }]);
 BUOC.push(['Giảm giá đơn hàng, kiểm kho theo IMEI, khách trả hàng (hủy đơn, trả lại tiền)', async page => {
@@ -255,15 +300,16 @@ BUOC.push(['Giảm giá đơn hàng, kiểm kho theo IMEI, khách trả hàng (h
     await page.waitForSelector('#modal [data-kq] .stats');
     assert.match(await page.locator('#modal [data-kq]').innerText(), /Chưa nhập kho/);
     await page.locator('#modal [data-close]').first().click();
-    // Khách trả hết hàng của đơn sửa chữa (đã giao, đã trừ máy cũ 1.000.000): hủy đơn, trả lại 1.000.000
+    // Khách trả hết hàng của đơn sửa chữa (đã giao, đã trừ máy cũ 1.000.000, chưa trả tiền): hủy đơn, trả lại khách đúng máy cũ, không có tiền trả lại
     await page.click('#nav a[data-go="donhang"]');
     await page.locator('#view tbody tr:has-text("Khách Sửa Mới")').first().click();
     await page.waitForFunction(() => /Đơn hàng \d{3}-\d{4}\/DH/.test(document.querySelector('#title').textContent), null, { timeout: 8000 });
     await page.locator('#topActions .btn', { hasText: 'Khách trả hàng' }).click();
     await page.fill('#modal [data-sl="0"]', '1');
     await page.waitForFunction(() => /trả lại tối đa/.test(document.querySelector('#modal [data-xem]').textContent), null, { timeout: 8000 });
-    assert.match(await page.locator('#modal [data-xem]').innerText(), /hủy đơn.*trả lại tối đa 1\.000\.000/);
-    assert.strictEqual(await page.inputValue('#modal [name=SoTien]'), '1.000.000');
+    assert.match(await page.locator('#modal [data-xem]').innerText(), /hủy đơn.*trả lại tối đa 0 ₫[\s\S]*Trả lại khách máy cũ: iPhone 8 64GB \(máy cũ\) · IMEI 356000999888777/);
+    assert.match(await page.locator('#modal').innerText(), /Đơn lên đời: khách trả máy thì cửa hàng trả lại đúng máy cũ/);
+    assert.strictEqual(await page.inputValue('#modal [name=SoTien]'), '0');
     await page.locator('#modal .btn', { hasText: 'Nhận hàng trả' }).click();
     await page.waitForSelector('#modal', { state: 'hidden' });
     await page.waitForSelector('#topActions .btn:has-text("Khôi phục đơn")');

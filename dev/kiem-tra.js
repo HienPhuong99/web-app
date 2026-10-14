@@ -105,7 +105,7 @@ const psBg = G.luuChungTu(admin, 'BG', { Ngay: today, MaKH: 'KH00001', TenKH: 'A
   { MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', SoLuong: 1, LoaiGia: 'Giá lẻ', DonGia: 11300000 }] }).doc;
 assert.deepStrictEqual([psBg.SoBG, psBg.TongCong], [`001-${year}/BG`, 11300000]);
 assert.strictEqual(G.luuKhach(admin, { TenKH: 'Chị Hoa' }).MaKH, 'KH00002');
-assert.strictEqual(G.luuChungTu(admin, 'NK', { Ngay: today, DoiTac: 'Tồn đầu kỳ', lines: [{ MaHH: 'HH0001', TenHang: 'iPhone', SoLuong: 3 }] }).doc.SoPK, `001-${year}/NK`);
+assert.strictEqual(G.luuChungTu(admin, 'NK', { Ngay: today, DoiTac: 'Tồn đầu kỳ', lines: [{ MaHH: 'HH0001', TenHang: 'iPhone', SoLuong: 3, IMEI: 'TD-01, TD-02, TD-03' }] }).doc.SoPK, `001-${year}/NK`);
 d = G.taiDuLieu(admin);
 assert.deepStrictEqual([d.khach.length, d.baoGia.length, d.donHang.length, plain(d.ton)], [2, 1, 0, { HH0001: { nhap: 3, xuat: 0 } }]);
 assert.deepStrictEqual([sheets.DM_KhachHang.rows.length, sheets.PS_BaoGia.rows.length, sheets.DM_BaoGia.rows.length], [4, 2, 3]);
@@ -775,7 +775,13 @@ assert.ok(du.coViec);
 assert.deepStrictEqual([du.homQua, du.homQuaBan.don >= 0, typeof du.homQuaThu], [ngayTu(-1), true, 'number']);
 const duThu = plain(G.tongHopSang_(ngayTu(1))); // ngày mai: "hôm qua" là hôm nay
 assert.strictEqual(duThu.homQuaBan.don, G.readTable_('DonHang').filter(x => x.TrangThai !== 'Hủy' && String(x.Ngay).slice(0, 10) === today).length);
-assert.strictEqual(duThu.homQuaThu, G.readTable_('ThuTien').filter(x => String(x.Ngay).slice(0, 10) === today).reduce((a, x) => a + (+x.SoTien || 0), 0));
+// Đã thu = tiền thật khách đưa (khớp dòng Thu sổ quỹ); máy cũ thu về và tiền trả lại khách ghi riêng
+const ptHomNay = G.readTable_('ThuTien').filter(x => String(x.Ngay).slice(0, 10) === today && x.HinhThuc !== 'Thu máy cũ');
+const nkCuHomNay = new Set(G.readTable_('PhieuKho').filter(p => p.Loai === 'Nhập' && String(p.Ngay).slice(0, 10) === today && /^Thu cũ đổi mới/.test(p.GhiChu)).map(p => p.SoPK));
+const tienMong = { thu: ptHomNay.reduce((a, x) => a + Math.max(0, +x.SoTien || 0), 0), traLai: ptHomNay.reduce((a, x) => a + Math.max(0, -(+x.SoTien || 0)), 0),
+  mayCu: G.readTable_('PhieuKhoCT').filter(l => nkCuHomNay.has(l.SoPK)).reduce((a, l) => a + l.SoLuong * l.GiaVon, 0) };
+assert.deepStrictEqual([duThu.homQuaThu, duThu.homQuaTien], [tienMong.thu, tienMong]);
+console.log('  đã thu hôm nay', JSON.stringify(tienMong));
 // Hết hạn hôm nay: còn 0 ngày
 const hdHomNay = G.luuHopDong(admin, { LoaiHD: 'Hợp đồng mua bán', TenDN: 'Hết Hôm Nay', TrangThai: 'Đang hiệu lực', NgayHetHan: today, VAT: 0, lines: [] }).doc;
 assert.ok(G.dungEmailSang_('X', plain(G.tongHopSang_(today)), false).text.includes('hết hạn hôm nay'));
@@ -938,6 +944,7 @@ assert.deepStrictEqual(plain(G.xoaCuaHangDaBo_()), []); // chạy lại không l
   vm.runInContext('BANG_DA_DOC_ = null; TIEU_DE_DA_DOC_ = null;', G);
 }
 
+require('./kiem-tra-tim-kiem'); // tìm kiếm thông minh: cùng mã ở web và máy chủ, đúng các mẫu
 require('./kiem-tra-html'); // giao diện: cú pháp, và các chỗ Apps Script sẽ cắt nhầm khi xóa chú thích
 // API app điện thoại: tiến trình riêng để có dữ liệu sạch
 ['kiem-tra-api.js', 'kiem-tra-du-lieu-thu.js'].forEach(f => require('child_process').execFileSync(process.execPath, [require('path').join(__dirname, f)], { stdio: ['ignore', 'pipe', 'inherit'] })

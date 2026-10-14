@@ -58,3 +58,7 @@ export function congNgay(n: number, d: Date = new Date()): string {
   v.setUTCDate(v.getUTCDate() + n);
   return v.toISOString().slice(0, 10);
 }
+
+/** Dòng nhỏ dưới "Đã thu" (tiền thật khách đưa): máy cũ thu về và tiền trả lại khách, không tính vào "Đã thu". Rỗng khi không có. */
+export const phuThu = (mayCu?: number, traLai?: number) =>
+  [mayCu ? `Máy cũ thu về ${tien(mayCu)}` : '', traLai ? `Trả lại khách ${tien(traLai)}` : ''].filter(Boolean).join(' · ');

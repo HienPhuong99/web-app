@@ -208,6 +208,25 @@ buoc('Thu nốt tiền còn nợ của đơn vừa bán → hồ sơ khách hế
   await v(page, 'o-imei-ban').waitFor();
 });
 
+buoc('Bán nhanh: gõ vài số cuối IMEI là ra máy trong kho; chọn mặt hàng máy (tìm "ip16pm") thì chọn máy trong kho', async page => {
+  await v(page, 'o-imei-ban').fill('5706'); // máy 356789012345706 đang trong kho
+  await v(page, 'ma-ton-356789012345706').click({ timeout: 15000 });
+  await page.getByText('IMEI 356789012345706').waitFor();
+  assert.strictEqual(await v(page, 'o-imei-ban').inputValue(), '');
+  await v(page, 'nut-them-hang').click();
+  await v(page, 'o-tim-hang').fill('ip16pm'); // tìm kiếm thông minh: viết liền, "pm" = Pro Max
+  await v(page, 'hang-HH0001').click();
+  await v(page, 'chon-may-trong-kho').waitFor();
+  assert.strictEqual(await v(page, 'may-kho-356789012345706').count(), 0); // máy đã có trong đơn không hiện lại
+  await v(page, 'may-kho-356789012345714').click();
+  await page.getByText('IMEI 356789012345714').waitFor();
+  assert.strictEqual(await v(page, 'dong-gio').count(), 2);
+  await khongTranNgang(page);
+  page.once('dialog', d => d.accept());
+  await page.getByText('Xóa đơn đang soạn').click();
+  await page.waitForFunction(() => !document.querySelector('[data-testid="dong-gio"]'), null, { timeout: 5000 });
+});
+
 buoc('Khách: tìm không dấu, mở hồ sơ; thêm khách mới', async page => {
   await page.getByTestId('tab-khach').click();
   await v(page, 'o-tim-khach').fill('chi lan');
@@ -393,13 +412,14 @@ buoc('Thu cũ đổi mới khi bán nhanh; nhận bảo hành từ kết quả t
   await v(page, 'o-imei-may-cu').fill('356000999888111');
   await v(page, 'o-gia-may-cu').fill('300000');
   await v(page, 'nut-them-may-cu').click();
-  await v(page, 'phai-tra').getByText('200.000 đ').waitFor();
+  await v(page, 'tong-cong').getByText('200.000 đ').waitFor(); // đơn lên đời: tổng đơn đã trừ máy cũ
   assert.strictEqual(await v(page, 'o-khach-tra').inputValue(), '200.000');
   page.once('dialog', d => d.accept());
   await v(page, 'nut-ban').click();
   await v(page, 'da-ban').waitFor({ timeout: 20000 });
   const kq = await v(page, 'ket-qua-ban').textContent();
   assert.match(kq, /Máy cũ thu về.*iPhone 8 64GB \(máy cũ\).*300\.000/);
+  assert.match(kq, /Phiếu thu.*200\.000/); // tiền thật khách trả, không gồm giá máy cũ
   assert.ok(!/Còn nợ/.test(kq), 'Trả đủ sau khi trừ máy cũ: ' + kq);
   const may = await page.evaluate(() => localStorage.getItem('may'));
   assert.strictEqual((await api(c, { may, fn: 'traMaKho', args: ['356000999888111'] })).result.trangThai, 'trongKho');

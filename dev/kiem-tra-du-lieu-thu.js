@@ -110,12 +110,35 @@ assert.ok(ds.phieuKho.every(p => p.SoLuong > 0 && p.Hang));
 const dong = PS().map(k => sheets[k].rows.length).join();
 G.napDuLieuThu();
 assert.strictEqual(PS().filter(k => k !== 'PS_NhatKy').map(k => sheets[k].rows.length).join(), dong.split(',').filter((_, i) => PS()[i] !== 'PS_NhatKy').join());
+// Mã máy nhập từ website: tồn đầu kỳ 45 máy, không IMEI (ghi thẳng vào Sheet như bản cũ)
+const may13 = G.luuHang(admin, { TenHang: 'iPhone 13 128GB web', DVT: 'Máy', NhomHang: 'iPhone 13 Series', GiaLe: 12000000 });
+const themDong = (t, o) => sheets['PS_' + t].rows.push(sheets['PS_' + t].rows[0].map(c => o[c] === undefined ? '' : o[c]));
+themDong('PhieuKho', { SoPK: '900-2026/NK', Ngay: '2026-09-30', Loai: 'Nhập', DoiTac: 'Tồn đầu kỳ (theo website)', GhiChu: 'Số lượng lấy từ website', NguoiTao: 'Nhập từ website', NgayTao: '2026-09-30 12:00' });
+themDong('PhieuKhoCT', { SoPK: '900-2026/NK', STT: 1, MaHH: may13.MaHH, TenHang: may13.TenHang, DVT: 'Máy', SoLuong: 45 });
 // Đã xóa bớt dữ liệu thử (một mặt hàng mẫu, một hợp đồng mẫu): lần nâng cấp sau không tự tạo lại
 const soTruoc = soThu(), hdTruoc = dem('HopDong'), hhTruoc = dem('HangHoa');
 G.xoaHang(admin, soTruoc['h:11']); G.xoaHopDong(admin, soTruoc['hd:ctv']);
-props.set('schema', '9'); props.set('boSung.10', ''); cache.delete('schema');
+const tonTruoc = plain(G.tonKho_()), hangMay = G.readTable_('HangHoa').filter(h => h.DVT === 'Máy' && h.NhomHang !== 'Máy cũ').map(h => h.MaHH);
+props.set('schema', '9'); props.set('boSung.10', ''); props.set('tonMay.15', ''); cache.delete('schema');
 G.taiDuLieu(admin);
 assert.deepStrictEqual([dem('HangHoa'), dem('HopDong')], [hhTruoc - 1, hdTruoc - 1]);
+// Bản 15 tự chuẩn hóa một lần: mỗi mã máy còn 2–3 máy, máy nào cũng có IMEI (15 số hợp lệ, không trùng); phụ kiện giữ nguyên
+{
+  const tonSau = plain(G.tonKho_()), loai = {}, net = {};
+  G.readTable_('PhieuKho').forEach(p => { loai[p.SoPK] = p.Loai; });
+  G.readTable_('PhieuKhoCT').forEach(l => G.imeiList_(l.IMEI).forEach(x => { const k = l.MaHH + '|' + x; net[k] = (net[k] || 0) + (loai[l.SoPK] === 'Nhập' ? 1 : -1); }));
+  hangMay.filter(m => tonTruoc[m]).forEach(m => {
+    const con = tonSau[m].nhap - tonSau[m].xuat;
+    assert.ok(con >= 2 && con <= 3, m + ' còn ' + con);
+    assert.strictEqual(Object.keys(net).filter(k => k.startsWith(m + '|') && net[k] > 0).length, con, m); // máy nào cũng có IMEI
+  });
+  Object.keys(tonTruoc).filter(m => !hangMay.includes(m)).forEach(m => assert.deepStrictEqual(tonSau[m], tonTruoc[m], m));
+  const tatCa = G.readTable_('PhieuKhoCT').flatMap(l => G.imeiList_(l.IMEI)).filter(x => /^357/.test(x));
+  assert.ok(tatCa.length >= 2 && tatCa.every(x => /^\d{15}$/.test(x) && luhn(x)));
+  assert.ok(G.readTable_('NhatKy').some(n => n.HanhDong === 'Chuẩn hóa tồn kho máy'));
+  assert.match(G.chuanHoaTonMay()[0], /không có gì cần sửa/); // chạy lại: không đổi gì
+  kiemTon();
+}
 // Sửa giờ lệch (chỉ trên Sheet của cửa hàng, đúng các dòng trong danh sách): chuỗi giờ Việt Nam sai → giờ của file Sheet
 const { ss } = require('./chay-thu'), GL = vm.runInContext('GIO_LECH_', G), idCu = ss.id;
 const o = (t, r, c) => sheets[t].rows[r - 1][sheets[t].rows[0].indexOf(c)], dat = (t, r, c, v) => { sheets[t].rows[r - 1][sheets[t].rows[0].indexOf(c)] = v; };
@@ -128,6 +151,6 @@ assert.deepStrictEqual([o('PS_KhachHang', 2, 'NgayTao'), o('PS_DonHang', 2, 'Nga
 assert.strictEqual(G.suaGioLech_(), 0); // chỉ một lần
 ss.id = idCu;
 G.xoaDuLieuThu();
-assert.deepStrictEqual([dem('HangHoa'), dem('KhachHang'), dem('DonHang'), dem('PhieuKho'), dem('HopDong')], [truoc.HangHoa, truoc.KhachHang, 0, 0, 0]);
+assert.deepStrictEqual([dem('HangHoa'), dem('KhachHang'), dem('DonHang'), dem('PhieuKho'), dem('HopDong')], [truoc.HangHoa + 1, truoc.KhachHang, 0, 1, 0]); // còn mã + phiếu tồn đầu kỳ nhập tay ở trên
 
 console.log('OK - dữ liệu thử: nạp, chạy lại, gỡ dấu [THỬ] bản cũ, xóa');
