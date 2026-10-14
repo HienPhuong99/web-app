@@ -94,6 +94,8 @@ buoc('Tra bảo hành: còn hạn, hết hạn, theo SĐT, không thấy, mã EA
   await chup(page, '4-tra-het-han');
   await tra('0911 000 001');
   await page.getByTestId('so-ket-qua').getByText('1 máy khớp "0911000001"').waitFor({ timeout: 15000 });
+  await tra('Minh Anh'); // tên khách nhiều từ: giữ dấu cách (bỏ cách thành "MINHANH" thì không khớp "Anh Minh")
+  await page.getByTestId('so-ket-qua').getByText('1 máy khớp "Minh Anh"').waitFor({ timeout: 15000 });
   await tra('999999999999999');
   await page.getByText('Không tìm thấy máy nào khớp "999999999999999"').waitFor({ timeout: 15000 });
   await page.getByText(/sai số kiểm tra/).waitFor(); // IMEI 15 số sai Luhn: gợi ý quét/gõ nhầm

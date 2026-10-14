@@ -2,8 +2,9 @@
 // Phiếu chi (trang PhieuChi): tiền chi ra – trả nhà cung cấp hoặc chi phí cửa hàng. Cùng phiếu thu (ThuTien) làm thành sổ quỹ:
 // quỹ tiền mặt (hình thức "Tiền mặt") và tiền trong ngân hàng (mọi hình thức khác: chuyển khoản, thẻ, ví…).
 // Số dư đầu kỳ của hai quỹ do quản trị đặt một lần (CaiDat 'soDuDau.<cửa hàng>'); sổ quỹ tính từ ngày đó.
-// Giá vốn: giá nhập một đơn vị ghi ở dòng phiếu nhập (PhieuKhoCT.GiaVon), tính bình quân theo mọi lần nhập có giá của mặt hàng,
-// cộng các phiếu chi "Làm lại máy cũ" (thay pin, màn… của một máy theo IMEI) vào giá vốn của mặt hàng máy đó.
+// Giá vốn: giá nhập một đơn vị ghi ở dòng phiếu nhập (PhieuKhoCT.GiaVon). Lãi gộp (giaVonLai_) tính máy có IMEI theo giá vốn đích danh
+// (giá nhập của chính máy đó + phiếu chi "Làm lại máy cũ" của máy đó), hàng không IMEI theo bình quân các lần nhập tính đến ngày bán.
+// giaVonBQ_ (bình quân mọi lần nhập) chỉ còn dùng để gợi ý giá nhập trên web.
 // Lãi gộp = doanh thu (chưa VAT) − giá vốn hàng đã bán, tách lãi máy cũ (bán lại máy thu về) và lãi bán hàng mới. Chỉ quản trị xem được.
 // File này dùng chung phạm vi với Code.gs (readTable_, withLock_, user_, upsert_…).
 
@@ -45,6 +46,98 @@ function giaVonBQ_(phieuKho, pkCT) {
   const kq = {};
   Object.keys(t).forEach(k => { kq[k] = Math.round(t[k].tien / t[k].sl); });
   return kq;
+}
+
+/**
+ * Giá vốn để tính lãi gộp (báo cáo lợi nhuận, lãi một đơn):
+ * - Máy có IMEI đã giao theo đơn: giá vốn đích danh = giá nhập của chính máy đó (lần nhập có giá gần nhất trước khi xuất) cộng phiếu chi
+ *   "Làm lại máy cũ" của máy đó. Hai máy cũ cùng tên thu giá khác nhau (máy đẹp 9tr, máy xấu 5tr) thì lãi mỗi máy vẫn đúng.
+ * - Hàng không IMEI (phụ kiện) hoặc đơn chưa giao: bình quân các lần nhập có giá tính đến ngày lập đơn, nên nhập hàng sau này
+ *   không làm đổi lãi các kỳ đã qua.
+ * - Máy cũ thu đổi rồi trả lại khách (khách trả máy mới) không còn là hàng của cửa hàng: không tính vào bình quân.
+ * Trả { mayDon(soDH) → { MaHH: [giá vốn từng máy khách đang giữ, null = máy chưa có giá nhập] }, bq(MaHH, ngay) → giá | undefined }.
+ */
+function giaVonLai_() {
+  const pk = {}, ct = readTable_('PhieuKhoCT');
+  readTable_('PhieuKho').forEach(p => { pk[p.SoPK] = p; });
+  const ngay10 = v => String(v == null ? '' : v).slice(0, 10), khoa = p => ngay10(p.Ngay) + String(p.NgayTao || '');
+  const soDon = (p, re) => { const m = re.exec(String(p.GhiChu || '')); return m ? m[1] : ''; };
+  const traLai = {}; // 'SoDH|IMEI gọn' của máy cũ đã trả lại khách (phiếu xuất "Trả lại máy cũ · đơn …")
+  ct.forEach(l => {
+    const p = pk[l.SoPK], so = p && p.Loai === 'Xuất' ? soDon(p, /^Trả lại máy cũ · đơn (\S+)/) : '';
+    if (so) imeiList_(l.IMEI).forEach(x => { traLai[so + '|' + gonMa_(x)] = 1; });
+  });
+  const nhap = [];
+  ct.forEach(l => {
+    const p = pk[l.SoPK], gv = +l.GiaVon || 0, sl = +l.SoLuong || 0;
+    if (!p || p.Loai !== 'Nhập' || !l.MaHH || gv <= 0 || sl <= 0) return;
+    const im = imeiList_(l.IMEI), so = laNhapThuCu_(p) ? soDon(p, /^Thu cũ đổi mới · đơn (\S+)/) : '';
+    if (so && im.length && im.every(x => traLai[so + '|' + gonMa_(x)])) return;
+    nhap.push({ k: khoa(p), ngay: ngay10(p.Ngay), MaHH: l.MaHH, sl: sl, tien: sl * gv, gv: gv, im: im });
+  });
+  const chi = readTable_('PhieuChi').filter(c => c.Loai === LAM_LAI_MAY && c.MaHH && +c.SoTien > 0)
+    .map(c => ({ k: ngay10(c.Ngay) + String(c.NgayTao || ''), ngay: ngay10(c.Ngay), MaHH: c.MaHH, sl: 0, tien: +c.SoTien, may: gonMa_(c.IMEI) }));
+  const theoGio = (a, b) => (a.k < b.k ? -1 : a.k > b.k ? 1 : 0);
+  // Bình quân cộng dồn theo thời gian từng mặt hàng (chi làm lại máy cộng vào tiền, không thêm số lượng)
+  const bq = {};
+  nhap.concat(chi).sort(theoGio).forEach(x => {
+    const a = bq[x.MaHH] || (bq[x.MaHH] = []), t = a[a.length - 1] || { sl: 0, tien: 0 };
+    a.push({ ngay: x.ngay, sl: t.sl + x.sl, tien: t.tien + x.tien });
+  });
+  // Các lần nhập có giá của từng máy (IMEI gọn), cũ trước; lần nhập gần nhất trước thời điểm k (không có thì lần đầu)
+  const goc = {};
+  nhap.sort(theoGio).forEach(x => x.im.forEach(m => { (goc[gonMa_(m)] = goc[gonMa_(m)] || []).push({ k: x.k, gv: x.gv, chi: 0 }); }));
+  const truoc = (a, k) => { let r = a[0]; for (let i = 0; i < a.length && a[i].k <= k; i++) r = a[i]; return r; };
+  chi.forEach(c => { const a = goc[c.may]; if (a) truoc(a, c.k).chi += c.tien; });
+  // Máy khách đang giữ theo đơn: xuất theo đơn (+1), khách trả lại (−1, phiếu nhập ghi số đơn hoặc ghi chú "Khách trả hàng · đơn …")
+  const may = {};
+  ct.forEach(l => {
+    const p = pk[l.SoPK];
+    if (!p || !l.IMEI || !l.MaHH) return;
+    const xuat = p.Loai === 'Xuất', so = xuat ? String(p.SoDH || '') : p.Loai === 'Nhập' ? String(p.SoDH || '') || soDon(p, /^Khách trả hàng · đơn (\S+)/) : '';
+    if (!so) return;
+    const d = may[so] || (may[so] = {});
+    imeiList_(l.IMEI).forEach(x => {
+      const g = gonMa_(x), m = d[g] || (d[g] = { MaHH: l.MaHH, n: 0, k: '' });
+      m.n += xuat ? 1 : -1;
+      if (xuat && khoa(p) >= m.k) { m.k = khoa(p); m.MaHH = l.MaHH; }
+    });
+  });
+  return {
+    mayDon: soDH => {
+      const d = may[String(soDH)] || {}, kq = {};
+      Object.keys(d).filter(g => d[g].n > 0).sort((a, b) => theoGio(d[a], d[b])).forEach(g => {
+        const r = goc[g] ? truoc(goc[g], d[g].k) : null;
+        (kq[d[g].MaHH] = kq[d[g].MaHH] || []).push(r ? r.gv + r.chi : null);
+      });
+      return kq;
+    },
+    bq: (ma, ngay) => {
+      const a = bq[ma] || [];
+      let r = null;
+      for (let i = 0; i < a.length && a[i].ngay <= ngay; i++) if (a[i].sl > 0) r = a[i];
+      if (!r) r = a.find(x => x.sl > 0); // bán trước lần nhập có giá đầu tiên (nhập ghi lùi ngày): lấy lần nhập đầu
+      return r ? Math.round(r.tien / r.sl) : undefined;
+    },
+  };
+}
+
+/** Giá vốn một dòng đơn (số lượng > 0, có mã hàng): máy khách đang giữ theo giá đích danh, phần còn lại theo bình quân đến ngày đơn.
+ * mayDon = g.mayDon(SoDH) của đơn đó (dùng dần qua các dòng cùng mặt hàng). Trả { von, du } (du = false: có đơn vị chưa có giá nhập). */
+function giaVonDong_(g, mayDon, ngay, l) {
+  const sl = +l.SoLuong || 0, ma = l.MaHH;
+  if (!ma || sl <= 0) return { von: 0, du: true };
+  const ds = mayDon[ma] || [], dich = ds.splice(0, Math.min(Math.floor(sl), ds.length));
+  let von = 0, con = sl, du = true;
+  dich.forEach(x => { if (x !== null) { von += x; con--; } });
+  if (con > 0) { const b = g.bq(ma, ngay); if (b === undefined) du = false; else von += con * b; }
+  return { von: Math.round(von), du: du };
+}
+
+/** Giá vốn từng dòng của một đơn đã lưu (web hiện lãi gộp khi mở đơn) */
+function giaVonDon_(dh, lines) {
+  const g = giaVonLai_(), m = g.mayDon(dh.SoDH), ngay = String(dh.Ngay).slice(0, 10);
+  return lines.map(l => (+l.SoLuong < 0 ? { von: +l.ThanhTien || 0, du: true } : giaVonDong_(g, m, ngay, l)));
 }
 
 // ===== Phiếu chi =====
@@ -131,13 +224,14 @@ const NGUON_KHONG_NO_ = /tồn đầu|đầu kỳ|kiểm kê|chuyển kho/i, NHA
 function dsNCC_() {
   const ten = readTable_('PhieuKho').filter(p => p.Loai === 'Nhập' && !p.SoDH && String(p.DoiTac || '').trim() && !NGUON_KHONG_NO_.test(p.DoiTac) && !NHAP_TU_KHACH_.test(String(p.GhiChu || '').trim()))
     .map(p => String(p.DoiTac).trim()).concat(readTable_('PhieuChi').map(c => String(c.DoiTac || '').trim()));
-  return ten.filter((x, i) => x && ten.indexOf(x) === i).sort((a, b) => a.localeCompare(b, 'vi'));
+  const khoa = x => x.toLowerCase().replace(/\s+/g, ' '), da = {}; // cùng tên khác hoa thường / khoảng trắng: gợi ý một lần
+  return ten.filter(x => x && !da[khoa(x)] && (da[khoa(x)] = 1)).sort((a, b) => a.localeCompare(b, 'vi'));
 }
 
 // ===== Lợi nhuận =====
-/** Lãi gộp trong khoảng ngày (đơn không hủy, theo ngày lập đơn). Dòng không có mã hàng (dịch vụ) coi như giá vốn 0. */
+/** Lãi gộp trong khoảng ngày (đơn không hủy, theo ngày lập đơn). Giá vốn theo giaVonLai_; dòng không có mã hàng (dịch vụ) coi như giá vốn 0. */
 function loiNhuanKy_(from, to) {
-  const gv = giaVonBQ_(), nhom = {};
+  const g = giaVonLai_(), mayDon = {}, nhom = {};
   readTable_('HangHoa').forEach(h => { nhom[h.MaHH] = h.NhomHang || 'Chưa phân nhóm'; });
   const don = {};
   readTable_('DonHang').forEach(d => { const n = String(d.Ngay).slice(0, 10); if (d.TrangThai !== 'Hủy' && n >= from && n <= to) don[d.SoDH] = d; });
@@ -158,14 +252,15 @@ function loiNhuanKy_(from, to) {
       them(theoDon, d.SoDH, { SoDH: d.SoDH, Ngay: d.Ngay, MaKH: d.MaKH, TenKH: d.TenKH }, dt, dt);
       return;
     }
-    if (ma && gv[ma] === undefined) thieu[ma] = l.TenHang;
-    const von = ma ? Math.round(sl * (gv[ma] || 0)) : 0;
+    const gd = giaVonDong_(g, mayDon[l.SoDH] || (mayDon[l.SoDH] = g.mayDon(l.SoDH)), String(d.Ngay).slice(0, 10), l), von = gd.von;
+    if (!gd.du) thieu[ma] = l.TenHang;
     tong.doanhThu += dt; tong.giaVon += von;
     if (ma && nhom[ma] === NHOM_MAY_CU) laiMayCu += dt - von;
     them(theoThang, String(d.Ngay).slice(0, 7), { thang: String(d.Ngay).slice(0, 7) }, dt, von);
     them(theoNhom, ma ? nhom[ma] || 'Chưa phân nhóm' : 'Dịch vụ / khác', { nhom: ma ? nhom[ma] || 'Chưa phân nhóm' : 'Dịch vụ / khác' }, dt, von);
-    them(theoHang, ma || l.TenHang, { MaHH: ma || '', TenHang: l.TenHang, soLuong: 0, coGiaVon: !ma || gv[ma] !== undefined }, dt, von);
+    them(theoHang, ma || l.TenHang, { MaHH: ma || '', TenHang: l.TenHang, soLuong: 0, coGiaVon: true }, dt, von);
     theoHang[ma || l.TenHang].soLuong += sl;
+    if (!gd.du) theoHang[ma].coGiaVon = false;
     them(theoDon, d.SoDH, { SoDH: d.SoDH, Ngay: d.Ngay, MaKH: d.MaKH, TenKH: d.TenKH }, dt, von);
   });
   // Giảm giá cả đơn: trừ vào doanh thu của đơn, tháng, tổng; theo nhóm / mặt hàng thì thành một dòng riêng

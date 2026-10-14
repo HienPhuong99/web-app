@@ -582,14 +582,15 @@ function nhapHang(token, rows) {
 
 // ===== Chứng từ có dòng hàng: báo giá (BG), đơn hàng (DH), phiếu nhập (NK), phiếu xuất/giao hàng (XK) =====
 function layChungTu(token, loai, so) {
-  user_(token);
+  const user = user_(token);
   const c = ct_(loai);
   const lines = readTable_(c.lines).filter(l => String(l[TABLES[c.lines][0]]) === String(so)).sort((a, b) => a.STT - b.STT);
   if (loai === 'XK') {
     const p = findObj_('PhieuKho', so), han = hanBaoHanh_();
     lines.forEach(l => { l.HetHan = han(p && p.Ngay, l.MaHH); });
   }
-  return { lines: lines, daGiao: loai === 'DH' ? daGiao_(so) : null };
+  // giaVon: giá vốn từng dòng của đơn (quản trị) để web hiện lãi gộp đúng như báo cáo lợi nhuận (SoQuy.gs giaVonDon_)
+  return { lines: lines, daGiao: loai === 'DH' ? daGiao_(so) : null, giaVon: loai === 'DH' && user.vaiTro === 'admin' ? giaVonDon_(findObj_('DonHang', so) || { SoDH: so }, lines) : null };
 }
 
 function luuChungTu(token, loai, doc) {

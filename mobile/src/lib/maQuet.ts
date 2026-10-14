@@ -27,6 +27,17 @@ export function chuanHoaMa(raw: string): string {
   return gon.replace(/^(S\/N|SN|SERIALNO|SERIALNUMBER|SERIAL)[:=#]?/, '');
 }
 
+/**
+ * Chữ gõ ở ô Tra bảo hành (IMEI/serial, số điện thoại hoặc tên khách): IMEI, serial, số điện thoại chuẩn hóa như chuanHoaMa;
+ * tên khách nhiều từ ("Nguyễn Minh") giữ dấu cách để máy chủ tìm theo từng từ (bỏ cách thành "NGUYỄNMINH" thì không khớp "Nguyễn Văn Minh").
+ */
+export function chuanHoaTra(raw: string): string {
+  const s = String(raw ?? '').trim().replace(/\s+/g, ' ');
+  const ma = chuanHoaMa(s);
+  if (/^\d{15}$/.test(ma) || /^(S\/N|SN|SERIAL)\b/i.test(s) || !/ /.test(s) || !/\p{L}/u.test(s)) return ma;
+  return s;
+}
+
 export function loaiMa(ma: string): LoaiMa {
   if (/^\d{15}$/.test(ma)) return dungLuhn(ma) ? 'imei' : 'imei-sai';
   if (/^\d{8}$|^\d{12,13}$/.test(ma)) return 'ean';

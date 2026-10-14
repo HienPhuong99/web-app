@@ -1,12 +1,13 @@
 // Sổ quỹ: tiền mặt tại quầy và tiền trong ngân hàng cuối ngày, thu – chi trong ngày (lật ngày trước / sau), từng phiếu thu / chi.
 // Ghi phiếu chi ngay trên máy: trả nhà cung cấp, ship, điện nước… (sửa / xóa phiếu chi làm trên web, chỉ quản trị).
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../lib/auth';
 import type { PhieuChi, SoQuy } from '../lib/api';
+import { taoMaGhi } from '../lib/ghiMotLan';
 import { ngay as dmy, thu, tien, tienGon } from '../lib/dinhDang';
 import { docTien, soTienNhap } from '../lib/gioHang';
 import { timKiem } from '../lib/timKiem';
@@ -71,7 +72,8 @@ export default function SoQuyMan() {
 }
 
 function PhieuChiMoi({ sq, onXong, onHuy }: { sq: SoQuy; onXong: () => void; onHuy: () => void }) {
-  const { goi } = useAuth();
+  const { goiGhi } = useAuth();
+  const maGhi = useRef(''); // mã lần gửi: bấm lại sau lỗi mạng không ghi phiếu chi thứ hai
   const boNho = useSuaBoNho();
   const [loai, setLoai] = useState(sq.loaiChi[sq.loaiChi.length - 1] || 'Chi khác'), [soTien, setSoTien] = useState<number | null>(null);
   const [hinhThuc, setHinhThuc] = useState(sq.hinhThuc.includes('Tiền mặt') ? 'Tiền mặt' : sq.hinhThuc[0] || 'Tiền mặt');
@@ -87,7 +89,9 @@ function PhieuChiMoi({ sq, onXong, onHuy }: { sq: SoQuy; onXong: () => void; onH
     if (lamLai && !imei.trim()) return setLoi('Nhập IMEI của máy được làm lại.');
     setDang(true);
     try {
-      const pc = await goi<PhieuChi>('luuPhieuChi', { Ngay: sq.ngay, Loai: loai, DoiTac: doiTac.trim(), SoTien: soTien, HinhThuc: hinhThuc, GhiChu: ghiChu.trim(), IMEI: lamLai ? imei.trim() : '' });
+      if (!maGhi.current) maGhi.current = taoMaGhi();
+      const pc = await goiGhi<PhieuChi>(maGhi.current, 'luuPhieuChi', { Ngay: sq.ngay, Loai: loai, DoiTac: doiTac.trim(), SoTien: soTien, HinhThuc: hinhThuc, GhiChu: ghiChu.trim(), IMEI: lamLai ? imei.trim() : '' });
+      maGhi.current = '';
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       // Máy chủ đã ghi: sổ quỹ ngày này hiện ngay phiếu vừa ghi
       const tm = pc.HinhThuc.trim().toLowerCase() === 'tiền mặt';

@@ -528,6 +528,12 @@ const doiNgay = (bang, so, ngay) => { const sh = sheets['PS_' + bang], c = sh.ro
   const hdLD = G.luuHopDong(t, { LoaiHD: 'Hợp đồng mua bán', TenDN: kh.TenKH, MaKH: kh.MaKH, SoDH: r.SoDH, VAT: 0, lines: dong.map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, DVT: l.DVT, SoLuong: l.SoLuong, DonGia: l.DonGia })) }).doc;
   assert.strictEqual(hdLD.TongCong, 7000000);
   assert.throws(() => G.luuHopDong(t, { LoaiHD: 'Hợp đồng mua bán', TenDN: kh.TenKH, lines: [{ TenHang: 'x', SoLuong: -1, DonGia: 1 }] }), /số âm chỉ dùng cho máy cũ/);
+  // Giảm giá của đơn chép sang hợp đồng: dòng không mã hàng, đơn giá âm; dòng có mã hàng thì không được âm; tổng không âm
+  const hdGiam = G.luuHopDong(t, { LoaiHD: 'Hợp đồng mua bán', TenDN: kh.TenKH, VAT: 10, lines: [{ MaHH: 'HH0002', TenHang: 'iPhone', SoLuong: 1, DonGia: 12000000 }, { TenHang: 'Giảm giá', SoLuong: 1, DonGia: -1000000 }] }).doc;
+  assert.deepStrictEqual([hdGiam.TienHang, hdGiam.TongCong], [11000000, 12100000]);
+  G.xoaHopDong(t, hdGiam.SoHD);
+  assert.throws(() => G.luuHopDong(t, { LoaiHD: 'Hợp đồng mua bán', TenDN: kh.TenKH, lines: [{ MaHH: 'HH0002', TenHang: 'iPhone', SoLuong: 1, DonGia: -1 }] }), /không được âm/);
+  assert.throws(() => G.luuHopDong(t, { LoaiHD: 'Hợp đồng mua bán', TenDN: kh.TenKH, lines: [{ TenHang: 'iPhone', SoLuong: 1, DonGia: 100 }, { TenHang: 'Giảm giá', SoLuong: 1, DonGia: -200 }] }), /lớn hơn tiền hàng/);
   G.xoaHopDong(t, hdLD.SoHD);
   // Web: thu máy cũ cho đơn đã lập: thêm dòng −1, cùng tên máy dùng lại mặt hàng; không quá số còn nợ
   const dh = G.luuChungTu(t, 'DH', { Ngay: today, MaKH: kh.MaKH, TenKH: kh.TenKH, VAT: 0, lines: [{ MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', SoLuong: 1, DonGia: 12000000 }] }).doc;
@@ -598,9 +604,10 @@ const doiNgay = (bang, so, ngay) => { const sh = sheets['PS_' + bang], c = sh.ro
   const ban = goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [{ MaHH: hX, SoLuong: 1, DonGia: 3500000, IMEI: '359999000000041' }] });
   assert.strictEqual(G.luuPhieuChi(t, Object.assign({}, pin, { SoTien: 250000 })).MaHH, hX); // máy đã bán vẫn sửa được phiếu chi
   G.luuPhieuChi(t, Object.assign({}, pin, { SoTien: 200000 }));
-  // Lãi: dòng máy cũ −1 lãi 0 (đơn 12tr − 5tr: doanh thu 7tr, giá vốn 10,5tr − 5tr); bán lại máy cũ 3,5tr, vốn 3tr + 200k → lãi máy cũ 300k
+  // Lãi: dòng máy cũ −1 lãi 0 (đơn 12tr − 5tr: doanh thu 7tr, giá vốn = giá nhập đích danh máy SQ0002 10tr − 5tr, không phải bình quân 10,5tr);
+  // bán lại máy cũ 3,5tr, vốn 3tr + 200k → lãi máy cũ 300k
   const ln = G.loiNhuan(t, today, today), dR = ln.theoDon.find(x => x.SoDH === r.SoDH), dBan = ln.theoDon.find(x => x.SoDH === ban.SoDH);
-  assert.deepStrictEqual([dR.doanhThu, dR.giaVon, dR.lai, dBan.lai], [7000000, 5500000, 1500000, 300000]);
+  assert.deepStrictEqual([dR.doanhThu, dR.giaVon, dR.lai, dBan.lai], [7000000, 5000000, 2000000, 300000]);
   assert.deepStrictEqual([ln.tong.laiMayCu - lnTruoc.tong.laiMayCu, ln.tong.laiMayMoi + ln.tong.laiMayCu, ln.tong.laiMayMoi - lnTruoc.tong.laiMayMoi], [300000, ln.tong.lai, 0]);
   assert.ok(ln.theoHang.some(x => x.TenHang === 'Máy cũ thu vào (trừ vào đơn)' && x.lai === 0 && x.soLuong >= 3));
   assert.throws(() => goi(binh4, 'traHang', { SoDH: c.SoDH, lines: [{ MaHH: 'HH0002', IMEI: 'SQ0004' }], xemTruoc: true }), /Máy cũ 359999000000041 không còn trong kho \(đã xuất ở phiếu/);
@@ -805,6 +812,60 @@ const doiNgay = (bang, so, ngay) => { const sh = sheets['PS_' + bang], c = sh.ro
   // Ốp đã giao: nhập lại kho, đơn hết hàng thì hủy
   r = goi(binh4, 'traHang', { SoDH: d.SoDH, lines: [{ MaHH: op.MaHH, SoLuong: 1 }] });
   assert.deepStrictEqual([!!r.SoPK, ton(op.MaHH), r.huy], [true, tonOp + 1, true]);
+}
+
+// Khách trả một phần đơn có giảm giá cả đơn: giảm giá chia theo tiền hàng, món còn lại không thành 0 đ
+{
+  const t = G.dangNhap('admin', adminPass).token, kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Giảm Giá Trả', SDT: '0966000666' });
+  const op = G.luuHang(t, { TenHang: 'Ốp MagSafe thử giảm giá', DVT: 'Cái', GiaLe: 500000 });
+  G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'NCC', lines: [{ MaHH: op.MaHH, TenHang: op.TenHang, SoLuong: 2 },
+    { MaHH: 'HH0001', TenHang: 'iPhone 16 Pro Max 256GB - Titan Đen', SoLuong: 1, IMEI: '357000000000052' }] });
+  const b = goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [{ MaHH: 'HH0001', SoLuong: 1, DonGia: 30000000, IMEI: '357000000000052' }, { MaHH: op.MaHH, SoLuong: 1, DonGia: 500000 }],
+    GiamGia: 600000, thu: { SoTien: 29900000, HinhThuc: 'Tiền mặt' } });
+  assert.strictEqual(b.TongCong, 29900000);
+  // giảm 600k chia theo tiền hàng: ốp 500k / 30,5tr → giảm còn 9.836 đ; đơn còn 490.164 đ, trả lại khách tối đa 29.409.836 đ
+  const xem = goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0001', IMEI: '357000000000052' }], xemTruoc: true });
+  assert.deepStrictEqual([xem.tongMoi, xem.hoanToiDa], [490164, 29409836]);
+  assert.throws(() => goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0001', IMEI: '357000000000052' }], hoan: { SoTien: 29900000 } }), /tối đa 29409836/);
+  const r = goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0001', IMEI: '357000000000052' }], hoan: { SoTien: 29409836, HinhThuc: 'Tiền mặt' } });
+  const dh = G.findObj_('DonHang', b.SoDH);
+  assert.deepStrictEqual([r.TongCong, dh.GiamGia, dh.TienHang, goi(binh4, 'chiTietKhach', kh.MaKH).no], [490164, 9836, 490164, 0]);
+}
+
+// Lãi gộp: máy có IMEI theo giá vốn đích danh; hàng không IMEI theo bình quân tính đến ngày bán; máy cũ đã trả lại khách không vào bình quân
+{
+  const t = G.dangNhap('admin', adminPass).token, kh = goi(binh4, 'luuKhach', { TenKH: 'Khách Giá Vốn', SDT: '0966000777' });
+  const cu = G.luuHang(t, { TenHang: 'iPhone 13 128GB thử giá vốn (máy cũ)', NhomHang: 'Máy cũ', DVT: 'Máy', GiaLe: 10000000 });
+  const pk = G.luuHang(t, { TenHang: 'Cáp sạc thử giá vốn', DVT: 'Cái', GiaLe: 300000 });
+  const thang8 = ngayLui(60), thang10 = ngayLui(1);
+  // Hai máy cũ cùng tên: máy đẹp thu 9tr, máy xấu 5tr. Bán máy đẹp 10tr: lãi 1tr (bình quân 7tr sẽ báo lãi 3tr)
+  G.luuChungTu(t, 'NK', { Ngay: thang8, DoiTac: 'Khách bán máy', lines: [{ MaHH: cu.MaHH, TenHang: cu.TenHang, SoLuong: 1, IMEI: '359111000000001', GiaVon: 9000000 },
+    { MaHH: cu.MaHH, TenHang: cu.TenHang, SoLuong: 1, IMEI: '359111000000002', GiaVon: 5000000 }] });
+  // Cáp: tháng trước nhập 1 cái 200k, bán 300k (lãi 100k)
+  G.luuChungTu(t, 'NK', { Ngay: thang8, DoiTac: 'NCC', lines: [{ MaHH: pk.MaHH, TenHang: pk.TenHang, SoLuong: 1, GiaVon: 200000 }] });
+  const d8 = G.luuChungTu(t, 'DH', { Ngay: thang8, MaKH: kh.MaKH, TenKH: kh.TenKH, lines: [{ MaHH: cu.MaHH, TenHang: cu.TenHang, SoLuong: 1, DonGia: 10000000 }, { MaHH: pk.MaHH, TenHang: pk.TenHang, SoLuong: 1, DonGia: 300000 }] }).doc;
+  G.luuChungTu(t, 'XK', { Ngay: thang8, SoDH: d8.SoDH, DoiTac: kh.TenKH, lines: [{ MaHH: cu.MaHH, TenHang: cu.TenHang, SoLuong: 1, IMEI: '359111000000001' }, { MaHH: pk.MaHH, TenHang: pk.TenHang, SoLuong: 1 }] });
+  const laiDon = () => G.loiNhuan(t, thang8, thang8).theoDon.find(x => x.SoDH === d8.SoDH);
+  assert.deepStrictEqual([laiDon().giaVon, laiDon().lai], [9200000, 1100000]);
+  // Tháng sau nhập thêm 3 cáp 100k: lãi tháng trước không đổi
+  G.luuChungTu(t, 'NK', { Ngay: thang10, DoiTac: 'NCC', lines: [{ MaHH: pk.MaHH, TenHang: pk.TenHang, SoLuong: 3, GiaVon: 100000 }] });
+  assert.deepStrictEqual([laiDon().giaVon, laiDon().lai], [9200000, 1100000]);
+  // Mở đơn trên web: lãi gộp theo cùng giá vốn
+  const ld = plain(G.layChungTu(t, 'DH', d8.SoDH).giaVon);
+  assert.deepStrictEqual(ld.map(x => x.von), [9000000, 200000]);
+  assert.deepStrictEqual(plain(G.layChungTu(G.dangNhap('binh', 'binh-456').token, 'DH', d8.SoDH).giaVon), null); // nhân viên không thấy giá vốn
+  // Máy cũ còn lại (máy xấu) bán sau: đúng giá nhập máy đó 5tr, không phải bình quân
+  const d2 = G.luuChungTu(t, 'DH', { Ngay: thang10, MaKH: kh.MaKH, TenKH: kh.TenKH, lines: [{ MaHH: cu.MaHH, TenHang: cu.TenHang, SoLuong: 1, DonGia: 6000000 }] }).doc;
+  G.luuChungTu(t, 'XK', { Ngay: thang10, SoDH: d2.SoDH, DoiTac: kh.TenKH, lines: [{ MaHH: cu.MaHH, TenHang: cu.TenHang, SoLuong: 1, IMEI: '359111000000002' }] });
+  assert.strictEqual(G.loiNhuan(t, thang10, thang10).theoDon.find(x => x.SoDH === d2.SoDH).giaVon, 5000000);
+  // Máy cũ thu đổi rồi trả lại khách (trả máy mới trong 7 ngày): giá thu của máy đó không làm lệch bình quân của mặt hàng
+  G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'NCC', lines: [{ MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', SoLuong: 1, IMEI: 'GV0001', GiaVon: 15000000 }] });
+  const ld1 = goi(binh4, 'banNhanh', { MaKH: kh.MaKH, lines: [{ MaHH: 'HH0002', SoLuong: 1, DonGia: 25000000, IMEI: 'GV0001' }], thuCu: [{ TenHang: 'iPhone 8 thử giá vốn', IMEI: '359222000000001', GiaThu: 14000000 }], thu: { SoTien: 11000000 } });
+  goi(binh4, 'traHang', { SoDH: ld1.SoDH, lines: [{ MaHH: 'HH0002', IMEI: 'GV0001' }], hoan: { SoTien: 11000000, HinhThuc: 'Tiền mặt' } });
+  const h8 = ld1.thuCu[0].MaHH;
+  G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'Khách bán máy', lines: [{ MaHH: h8, TenHang: 'iPhone 8 thử giá vốn (máy cũ)', SoLuong: 1, GiaVon: 10000000, IMEI: '359222000000002' }] });
+  const d3 = G.luuChungTu(t, 'DH', { Ngay: today, MaKH: kh.MaKH, TenKH: kh.TenKH, lines: [{ MaHH: h8, TenHang: 'iPhone 8 thử giá vốn (máy cũ)', SoLuong: 1, DonGia: 11000000 }] }).doc; // chưa giao: bình quân
+  assert.strictEqual(G.loiNhuan(t, today, today).theoDon.find(x => x.SoDH === d3.SoDH).giaVon, 10000000);
 }
 
 // Phiếu bán hàng PDF để gửi khách; nhắc khách sắp hết bảo hành

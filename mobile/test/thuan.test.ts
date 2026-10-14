@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { tien, tienGon, ngay, tinhTrangBaoHanh, loiChao, thu, homNay, congNgay } from '../src/lib/dinhDang.ts';
-import { dungLuhn, chuanHoaMa, loaiMa, goiYMa } from '../src/lib/maQuet.ts';
+import { dungLuhn, chuanHoaMa, chuanHoaTra, loaiMa, goiYMa } from '../src/lib/maQuet.ts';
 
 test('tiền', () => {
   assert.equal(tien(28200000), '28.200.000 đ');
@@ -79,6 +79,15 @@ test('chuẩn hóa mã quét', () => {
   assert.equal(chuanHoaMa('SF2LXK0ABC9'), 'SF2LXK0ABC9'); // chữ S đầu mã vạch serial: máy chủ tự thử bỏ
   assert.equal(chuanHoaMa('0911 000 001'), '0911000001');
   assert.equal(chuanHoaMa(''), '');
+  // ô Tra bảo hành: tên khách giữ dấu cách; IMEI, serial, số điện thoại vẫn gọn như chuanHoaMa
+  assert.equal(chuanHoaTra('  Nguyễn   Minh '), 'Nguyễn Minh');
+  assert.equal(chuanHoaTra('NGUYỄN MINH'), 'NGUYỄN MINH');
+  assert.equal(chuanHoaTra('minh'), 'MINH');
+  assert.equal(chuanHoaTra('49 015420 323751 8'), '490154203237518');
+  assert.equal(chuanHoaTra('IMEI: 490154203237518'), '490154203237518');
+  assert.equal(chuanHoaTra('S/N: f2lxk0abc9'), 'F2LXK0ABC9');
+  assert.equal(chuanHoaTra('Serial No. F2LXK0ABC9'), 'F2LXK0ABC9');
+  assert.equal(chuanHoaTra('0911 000 001'), '0911000001');
 });
 
 test('hôm nay theo giờ Việt Nam', () => {

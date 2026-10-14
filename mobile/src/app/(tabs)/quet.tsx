@@ -6,7 +6,7 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/auth';
 import type { TraBaoHanhKQ } from '../../lib/api';
-import { chuanHoaMa, goiYMa } from '../../lib/maQuet';
+import { chuanHoaTra, goiYMa } from '../../lib/maQuet';
 import { KhungTrang } from '../../ui/DanhSach';
 import { KhungQuet } from '../../ui/KhungQuet';
 import { Nut } from '../../ui/Nut';
@@ -24,7 +24,7 @@ export default function QuetMan() {
   useFocusEffect(useCallback(() => { setDangXem(true); return () => setDangXem(false); }, []));
 
   const tra = async (raw: string) => {
-    const ma = chuanHoaMa(raw);
+    const ma = chuanHoaTra(raw); // tên khách giữ dấu cách giữa các từ
     Keyboard.dismiss();
     setQ(ma); setLoi('');
     if (ma.length < 3) { setLoi('Nhập ít nhất 3 ký tự: IMEI/serial, số điện thoại hoặc tên khách.'); khoa.current = false; return; }

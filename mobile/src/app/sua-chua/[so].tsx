@@ -1,6 +1,6 @@
 // Một phiếu bảo hành – sửa chữa. so = 'moi': nhận máy mới (có thể điền sẵn khách / máy / IMEI từ tra bảo hành, hồ sơ khách).
 // Phiếu đã có: gọi khách, đổi trạng thái, ghi kết quả / chi phí, thêm ảnh, trả máy cho khách (có phí thì máy chủ lập đơn dịch vụ).
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Linking, Platform, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -11,6 +11,7 @@ import { congNgay, ngay, tien } from '../../lib/dinhDang';
 import { docTien, soTienNhap } from '../../lib/gioHang';
 import { linkGoi, linkZalo, soDienThoai } from '../../lib/lienHe';
 import { luu } from '../../lib/boNho';
+import { taoMaGhi } from '../../lib/ghiMotLan';
 import { useDuLieu, useKhoaBoNho } from '../../lib/useDuLieu';
 import { Chip } from '../../ui/Chip';
 import { ChuLoi, DongTT, KhungTrang } from '../../ui/DanhSach';
@@ -29,7 +30,8 @@ export default function PhieuSuaMan() {
 }
 
 function NhanMay({ goiY }: { goiY: { ma?: string; ten?: string; sdt?: string; may?: string; imei?: string; loai?: string } }) {
-  const { goi } = useAuth();
+  const { goiGhi } = useAuth();
+  const maGhi = useRef(''); // mã lần gửi: bấm lại sau lỗi mạng không lập phiếu nhận máy thứ hai
   const taoKhoa = useKhoaBoNho();
   const [loai, setLoai] = useState(goiY.loai === 'Bảo hành' ? 'Bảo hành' : 'Sửa chữa');
   const [maKH, setMaKH] = useState(goiY.ma ?? ''), [tenKH, setTenKH] = useState(goiY.ten ?? ''), [sdt, setSdt] = useState(goiY.sdt ?? '');
@@ -43,10 +45,12 @@ function NhanMay({ goiY }: { goiY: { ma?: string; ten?: string; sdt?: string; ma
     if (!tinhTrang.trim()) return setLoi('Nhập tình trạng, lỗi khách báo.');
     setDang(true);
     try {
-      const kq = await goi<PhieuSua>('luuSuaChua', {
+      if (!maGhi.current) maGhi.current = taoMaGhi();
+      const kq = await goiGhi<PhieuSua>(maGhi.current, 'luuSuaChua', {
         Loai: loai, ...(maKH ? { MaKH: maKH } : { khachMoi: { TenKH: tenKH.trim(), SDT: sdt.trim() } }),
         TenMay: tenMay.trim(), IMEI: imei.trim(), TinhTrang: tinhTrang.trim(), PhuKien: phuKien.trim(), MatKhauMay: matKhau.trim(), NgayHen: hen, ChiPhi: chiPhi,
       });
+      maGhi.current = '';
       rung();
       luu(taoKhoa('chiTietSuaChua', kq.SoPN), kq); // mở chi tiết là có ngay
       router.replace({ pathname: '/sua-chua/[so]', params: { so: maDuongDan(kq.SoPN) } });
@@ -92,7 +96,8 @@ function NhanMay({ goiY }: { goiY: { ma?: string; ten?: string; sdt?: string; ma
 }
 
 function ChiTiet({ so }: { so: string }) {
-  const { goi } = useAuth();
+  const { goi, goiGhi } = useAuth();
+  const maTra = useRef(''); // mã lần gửi của lần trả máy: bấm lại sau lỗi mạng không lập đơn dịch vụ / phiếu thu thứ hai
   const taoKhoa = useKhoaBoNho();
   const dl = useDuLieu<PhieuSua>('chiTietSuaChua', [so]), p = dl.du, keo = useKeo(dl.lamMoi);
   const ch = useDuLieu<CauHinh>('cauHinhMay', []).du;
@@ -118,7 +123,9 @@ function ChiTiet({ so }: { so: string }) {
   });
   const cp = chiPhi ?? p?.ChiPhi ?? 0, tra = khachTra ?? cp, hinhThuc = ht || ch?.hinhThuc[0] || 'Tiền mặt';
   const traMay = () => chay('tra', async () => {
-    const kq = await goi<PhieuSua & { don: { SoDH: string } | null }>('traMaySua', so, { ChiPhi: cp, KetQua: ketQua ?? p?.KetQua, thu: { SoTien: tra, HinhThuc: hinhThuc } });
+    if (!maTra.current) maTra.current = taoMaGhi();
+    const kq = await goiGhi<PhieuSua & { don: { SoDH: string } | null }>(maTra.current, 'traMaySua', so, { ChiPhi: cp, KetQua: ketQua ?? p?.KetQua, thu: { SoTien: tra, HinhThuc: hinhThuc } });
+    maTra.current = '';
     capNhat(kq); setMoTra(false); rung();
   });
   const sdt = soDienThoai(p?.SDT), daTra = p?.TrangThai === 'Đã trả khách';

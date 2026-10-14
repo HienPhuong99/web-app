@@ -230,7 +230,8 @@ assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { TenDN: '' }))
 assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { Ngay: '2026-02-30' })), /Ngày ký không hợp lệ/);
 assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { NgayHieuLuc: '2026-03-01', NgayHetHan: '2026-02-01' })), /hết hạn phải sau/);
 assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { lines: [{ TenHang: 'X', SoLuong: 0, DonGia: 1 }] })), /số lượng phải lớn hơn 0/);
-assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { lines: [{ TenHang: 'X', SoLuong: 1, DonGia: -5 }] })), /không được âm/);
+assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { lines: [{ MaHH: 'HH0001', TenHang: 'X', SoLuong: 1, DonGia: -5 }] })), /không được âm/);
+assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { lines: [{ TenHang: 'Giảm giá', SoLuong: 1, DonGia: -5 }] })), /lớn hơn tiền hàng/); // dòng giảm giá âm được, tổng thì không
 assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { SoDH: 'khong-co' })), /Không tìm thấy đơn hàng/);
 assert.throws(() => G.luuHopDong(admin, Object.assign({}, hdMau, { SoHD: '999-2026/HD' })), /Không tìm thấy hợp đồng/);
 assert.strictEqual(sheets.PS_HopDong.rows.length, 1); // lỗi thì không ghi gì
