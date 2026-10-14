@@ -44,8 +44,9 @@ const TABLES = {
   PhieuKho: ['SoPK', 'Ngay', 'Loai', 'SoDH', 'DoiTac', 'GhiChu', 'NguoiTao', 'NgayTao', 'NgaySua'],
   PhieuKhoCT: ['SoPK', 'STT', 'MaHH', 'TenHang', 'Model', 'DVT', 'SoLuong', 'IMEI', 'GiaVon'], // GiaVon: giá nhập một đơn vị (dòng của phiếu nhập) để tính lợi nhuận
   ThuTien: ['SoPT', 'Ngay', 'MaKH', 'TenKH', 'SoDH', 'SoTien', 'HinhThuc', 'GhiChu', 'NguoiTao', 'NgayTao'],
-  SuaChua: ['SoPN', 'NgayNhan', 'Loai', 'MaKH', 'TenKH', 'SDT', 'TenMay', 'IMEI', 'TinhTrang', 'PhuKien', 'MatKhauMay', 'NgayHen', 'TrangThai', 'ChiPhi', 'KetQua', 'NgayTra', 'SoDH', 'Anh', 'NguoiTao', 'NgayTao', 'NgaySua'], // phiếu nhận bảo hành – sửa chữa; DichVu.gs
+  SuaChua: ['SoPN', 'NgayNhan', 'Loai', 'MaKH', 'TenKH', 'SDT', 'TenMay', 'IMEI', 'TinhTrang', 'PhuKien', 'MatKhauMay', 'NgayHen', 'TrangThai', 'ChiPhi', 'KetQua', 'NgayTra', 'SoDH', 'Anh', 'NguoiTao', 'NgayTao', 'NgaySua', 'LinhKien'], // LinhKien: JSON linh kiện lấy từ kho [{ MaHH, TenHang, DVT, SoLuong }]; phiếu nhận bảo hành – sửa chữa; DichVu.gs
   PhieuChi: ['SoPC', 'Ngay', 'Loai', 'DoiTac', 'SoTien', 'HinhThuc', 'GhiChu', 'NguoiTao', 'NgayTao', 'MaHH', 'IMEI'], // sổ quỹ: tiền chi ra (trả nhà cung cấp, chi phí); SoQuy.gs
+  GiaiNgan: ['SoGN', 'Ngay', 'HinhThuc', 'SoTien', 'ThucNhan', 'GhiChu', 'NguoiTao', 'NgayTao'], // tiền chờ giải ngân (trả góp, thẻ…) về ngân hàng: SoTien rời quỹ chờ, ThucNhan vào ngân hàng, chênh = phí; SoQuy.gs
   NhatKy: ['ThoiGian', 'NguoiDung', 'HanhDong', 'DoiTuong', 'ChiTiet'],
   // Hợp đồng: bên A = khách (các cột TenDN…NganHang), bên B = cửa hàng (lấy từ cài đặt cửa hàng khi tạo file)
   HopDong: ['SoHD', 'Ngay', 'LoaiHD', 'SoDH', 'MaKH', 'TenDN', 'DiaChi', 'VanPhongGD', 'MST', 'NguoiDaiDien', 'ChucVu', 'SDT', 'SoTK', 'NganHang', 'SoCCCD', 'CCCDCap', 'IMEI',
@@ -64,9 +65,9 @@ const NGAN_HANG = [['970436', 'Vietcombank'], ['970415', 'VietinBank'], ['970418
   ['970438', 'BaoViet Bank'], ['970433', 'VietBank'], ['970430', 'PGBank'], ['970454', 'Viet Capital Bank'], ['970414', 'MBV'], ['970446', 'Co-opBank'],
   ['970424', 'Shinhan Bank'], ['970457', 'Woori Bank'], ['422589', 'CIMB'], ['668888', 'KBank'], ['546034', 'CAKE'], ['546035', 'Ubank'], ['963388', 'Timo']];
 const SHARED = ['TaiKhoan', 'CaiDat', 'ThietBi']; // trang dùng chung cho mọi cửa hàng, không có tiền tố
-const NUMBER_COLS = ['Dot', 'BaoTruocNgay', 'ThangGiaHan', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien', 'GiaVon', 'ChiPhi', 'GiamGia'];
+const NUMBER_COLS = ['Dot', 'BaoTruocNgay', 'ThangGiaHan', 'GiaSi', 'GiaLe', 'TonToiThieu', 'BaoHanh', 'TienHang', 'VAT', 'TienVAT', 'TongCong', 'STT', 'SoLuong', 'DonGia', 'ThanhTien', 'SoTien', 'GiaVon', 'ChiPhi', 'GiamGia', 'ThucNhan'];
 const SESSION_TTL = 6 * 60 * 60; // giây; tối đa của CacheService, tự gia hạn khi còn dùng
-const SCHEMA = '15'; // tăng số này khi thêm bảng/cột ở TABLES (hoặc cần sửa dữ liệu một lần): app tự làm ở lần gọi đầu sau khi triển khai
+const SCHEMA = '16'; // tăng số này khi thêm bảng/cột ở TABLES (hoặc cần sửa dữ liệu một lần): app tự làm ở lần gọi đầu sau khi triển khai
 
 // Loại chứng từ có dòng hàng. Số chứng từ dạng 001-2026/DH, mỗi năm đánh lại từ 001 (riêng từng cửa hàng).
 const CT = {
@@ -317,6 +318,7 @@ function luuCuaHang(token, o) {
     nganHang: str(o.nganHang, 300), qrNganHang: str(o.qrNganHang, 6), qrSoTK: str(o.qrSoTK, 40).replace(/\s/g, ''), qrChuTK: str(o.qrChuTK, 60),
     kyTen: str(o.kyTen, 60), vatMacDinh: num(o.vatMacDinh, 100), baoHanhThang: Math.round(num(o.baoHanhThang, 120)), hinhThuc: list(o.hinhThuc),
   };
+  c.choGiaiNgan = docChoGiaiNgan_(o.choGiaiNgan, c.hinhThuc); // SoQuy.gs
   if (!c.ten) throw new Error('Nhập tên cửa hàng in trên chứng từ.');
   if (!c.hinhThuc.length) throw new Error('Nhập ít nhất 1 hình thức thu tiền.');
   if ((c.qrNganHang || c.qrSoTK) && !(/^\d{6}$/.test(c.qrNganHang) && /^[A-Za-z0-9]{4,19}$/.test(c.qrSoTK))) {
@@ -430,7 +432,7 @@ function taiDuLieu(token) {
     user: user, congTy: ch.congTy,
     cuaHang: { id: CUR_SHOP, ten: ch.ten, moTa: ch.moTa, icon: s.icon, mau: s.mau }, dsCuaHang: ds,
     khach: readTable_('KhachHang'), hang: hang, baoGia: readTable_('BaoGia'), donHang: donHang,
-    phieuKho: phieuKho, thuTien: readTable_('ThuTien'), phieuChi: readTable_('PhieuChi'), soDuDau: soDuDau_(cd), loaiChi: LOAI_CHI,
+    phieuKho: phieuKho, thuTien: readTable_('ThuTien'), phieuChi: readTable_('PhieuChi'), giaiNgan: readTable_('GiaiNgan'), soDuDau: soDuDau_(cd), loaiChi: LOAI_CHI,
     suaChua: readTable_('SuaChua'), ttSua: TT_SUA, loaiSua: LOAI_SUA, htMayCu: HT_MAY_CU,
     giaVon: user.vaiTro === 'admin' ? giaVonBQ_(phieuKho, pkCT) : {}, hopDong: readTable_('HopDong').map(h => hdChoUser_(user, h)), mauHD: user.vaiTro === 'admin' ? mauHD : [], loaiHD: loaiHopDong_(mauHD), hopDongLich: readTable_('HopDongLich'), nganHang: NGAN_HANG, emailSang: user.vaiTro === 'admin' ? cauHinhEmailSang_(CUR_SHOP, cd) : null,
     ton: tonKho_(phieuKho, pkCT), thongKe: thongKe_(donHang, hang, Utilities.formatDate(new Date(Date.now() - 90 * 864e5), tz_(), 'yyyy-MM-dd'), '', 8),

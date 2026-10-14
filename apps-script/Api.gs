@@ -15,8 +15,8 @@ function apiHam_() {
     luuKhach: luuKhach, luuChungTu: luuChungTu, luuThuTien: luuThuTien, doiMatKhau: doiMatKhau,
     cauHinhMay: cauHinhMay, khoMay: khoMay, traMaKho: traMaKho, dsMaTon: dsMaTon, dsKhachMay: dsKhachMay, chiTietKhach: chiTietKhach, banNhanh: banNhanh,
     dsHopDongMay: dsHopDongMay, taiPdfHopDong: taiPdfHopDong, dsThietBi: dsThietBi, xoaThietBi: xoaThietBi, thuThongBao: thuThongBao, chiTietTongQuan: chiTietTongQuan,
-    soQuyMay: soQuyMay, luuPhieuChi: luuPhieuChi, loiNhuan: loiNhuan,
-    kiemKho: kiemKho, traHang: traHang, phieuBanHangPdf: phieuBanHangPdf, dsSuaChua: dsSuaChua, chiTietSuaChua: chiTietSuaChua, luuSuaChua: luuSuaChua, traMaySua: traMaySua, luuAnhSuaChua: luuAnhSuaChua,
+    soQuyMay: soQuyMay, luuPhieuChi: luuPhieuChi, luuGiaiNgan: luuGiaiNgan, loiNhuan: loiNhuan,
+    kiemKho: kiemKho, traHang: traHang, phieuBanHangPdf: phieuBanHangPdf, dsSuaChua: dsSuaChua, chiTietSuaChua: chiTietSuaChua, luuSuaChua: luuSuaChua, traMaySua: traMaySua, luuAnhSuaChua: luuAnhSuaChua, anhSuaChua: anhSuaChua, phieuNhanMayPdf: phieuNhanMayPdf,
   };
 }
 
@@ -79,7 +79,7 @@ function goiApi_(q) {
   if (maGhi) { try { CacheService.getScriptCache().put(maGhi, JSON.stringify(r === undefined ? null : r), 600); } catch (e) { boGiu_(maGhi); } }
   return r;
 }
-const GHI_MOT_LAN_ = ['banNhanh', 'luuThuTien', 'luuPhieuChi', 'traHang', 'traMaySua', 'luuSuaChua'], DANG_GHI_ = '…đang ghi';
+const GHI_MOT_LAN_ = ['banNhanh', 'luuThuTien', 'luuPhieuChi', 'luuGiaiNgan', 'traHang', 'traMaySua', 'luuSuaChua'], DANG_GHI_ = '…đang ghi';
 
 function bamMay_(may) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(may), Utilities.Charset.UTF_8)
@@ -396,7 +396,16 @@ function banNhanh(token, o) {
   const vat = Math.min(100, Math.max(0, +o.VAT || 0)), cong = lines.reduce((s, l) => s + Math.round(l.SoLuong * l.DonGia), 0) - tongCu;
   if (cong < 0) throw new Error('Giá máy cũ (' + tongCu + ' đ) lớn hơn tiền hàng (' + (cong + tongCu) + ' đ).');
   const giam = Math.min(cong, Math.max(0, Math.round(+o.GiamGia || 0))), tienHang = cong - giam; // giảm giá cả đơn, trước VAT
-  const tong = tienHang + Math.round(tienHang * vat / 100), thu = o.thu || {}, soThu = Math.round(+thu.SoTien || 0);
+  // Tiền khách trả: một hình thức { SoTien, HinhThuc } hoặc trả kết hợp nhiều hình thức [{ SoTien, HinhThuc }, …] (vd 10tr tiền mặt + 20tr chuyển khoản)
+  const tong = tienHang + Math.round(tienHang * vat / 100), dsThu = [];
+  (Array.isArray(o.thu) ? o.thu : [o.thu || {}]).slice(0, 4).forEach(x => {
+    x = x || {};
+    const tien = Math.round(+x.SoTien || 0), ht = String(x.HinhThuc || 'Tiền mặt').trim().slice(0, 60) || 'Tiền mặt';
+    if (tien < 0) throw new Error('Số tiền khách trả không được âm.');
+    const cung = dsThu.find(y => y.HinhThuc === ht);
+    if (cung) cung.SoTien += tien; else if (tien > 0) dsThu.push({ SoTien: tien, HinhThuc: ht });
+  });
+  const soThu = dsThu.reduce((s, x) => s + x.SoTien, 0);
   if (soThu < 0 || soThu > tong) throw new Error('Số tiền khách trả phải từ 0 đến ' + tong + ' đ' + (tongCu ? ' (đã trừ máy cũ ' + tongCu + ' đ)' : '') + '.');
   // Khách: chọn sẵn, hoặc khách mới (trùng số điện thoại với khách cũ thì dùng khách cũ)
   let kh, khMoi = false;
@@ -436,12 +445,14 @@ function banNhanh(token, o) {
       throw e;
     }
   }
-  let pt = null, loiThu = '';
-  if (soThu > 0) {
-    try { pt = luuThuTien(token, { Ngay: ngay, SoDH: dh.SoDH, SoTien: soThu, HinhThuc: String(thu.HinhThuc || 'Tiền mặt').slice(0, 60), GhiChu: 'Bán nhanh trên app' }); }
+  const dsPT = [];
+  let loiThu = '';
+  dsThu.forEach(x => {
+    if (loiThu) return;
+    try { const pt = luuThuTien(token, { Ngay: ngay, SoDH: dh.SoDH, SoTien: x.SoTien, HinhThuc: x.HinhThuc, GhiChu: 'Bán nhanh trên app' }); dsPT.push({ SoPT: pt.SoPT, SoTien: x.SoTien, HinhThuc: x.HinhThuc }); }
     catch (e) { loiThu = String(e && e.message || e); }
-  }
-  return { SoDH: dh.SoDH, SoPK: pk.SoPK, SoPT: pt ? pt.SoPT : '', TongCong: dh.TongCong, daThu: pt ? soThu : 0, thuCu: mayCu.map(m => ketQuaMayCu_(m, nk.SoPK)), MaKH: kh.MaKH, TenKH: kh.TenKH,
+  });
+  return { SoDH: dh.SoDH, SoPK: pk.SoPK, SoPT: dsPT.map(x => x.SoPT).join(', '), dsPT: dsPT, TongCong: dh.TongCong, daThu: dsPT.reduce((s, x) => s + x.SoTien, 0), thuCu: mayCu.map(m => ketQuaMayCu_(m, nk.SoPK)), MaKH: kh.MaKH, TenKH: kh.TenKH,
     lines: pk.lines.map(l => ({ TenHang: l.TenHang, SoLuong: l.SoLuong, IMEI: l.IMEI, HetHan: l.HetHan })), loiThu: loiThu };
 }
 

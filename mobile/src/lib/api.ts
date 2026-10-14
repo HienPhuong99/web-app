@@ -67,6 +67,8 @@ export type PhieuSua = {
   SoPN: string; NgayNhan: string; Loai: 'Bảo hành' | 'Sửa chữa' | string; MaKH: string; TenKH: string; SDT: string; TenMay: string; IMEI: string;
   TinhTrang: string; PhuKien: string; MatKhauMay: string; NgayHen: string; TrangThai: string; ChiPhi: number; KetQua: string; NgayTra: string; SoDH: string;
   Anh: string[]; conNgay: number | null; NguoiTao: string;
+  /** linh kiện lấy từ kho để sửa: trả máy thì xuất kho theo đơn dịch vụ (máy chủ cũ không có) */
+  LinhKien?: { MaHH: string; TenHang: string; DVT: string; SoLuong: number }[];
 };
 export const TT_SUA = ['Đã nhận', 'Đang sửa', 'Chờ linh kiện', 'Đã sửa xong', 'Không sửa được', 'Đã trả khách'] as const;
 export type LaiGop = { doanhThu: number; giaVon: number; lai: number; laiMayMoi?: number; laiMayCu?: number }; // laiMayCu: lãi bán lại máy thu về
@@ -74,9 +76,12 @@ export type LaiGop = { doanhThu: number; giaVon: number; lai: number; laiMayMoi?
 /** soQuyMay(ngày): tồn quỹ cuối ngày (tiền mặt / ngân hàng), thu – chi trong ngày và từng phiếu */
 export type SoQuy = {
   ngay: string; homNay: string; truoc: string; sau: string; batDau: string;
-  ton: { tienMat: number; nganHang: number }; trongNgay: { thu: number; chi: number };
-  ds: { loai: 'thu' | 'chi'; so: string; noiDung: string; SoTien: number; HinhThuc: string; MaKH: string; luc: string }[];
+  ton: { tienMat: number; nganHang: number; cho?: number }; trongNgay: { thu: number; chi: number };
+  /** giaiNgan: tiền chờ giải ngân về ngân hàng (SoTien = số thực nhận) */
+  ds: { loai: 'thu' | 'chi' | 'giaiNgan'; so: string; noiDung: string; SoTien: number; HinhThuc: string; MaKH: string; luc: string }[];
   loaiChi: string[]; hinhThuc: string[]; ncc?: string[]; // ncc: tên nhà cung cấp / người nhận đã dùng (gợi ý ô Chi cho)
+  /** hình thức chờ giải ngân (trả góp, thẻ…): % phí, số đang chờ tới hết ngày đang xem; máy chủ cũ không có */
+  choGiaiNgan?: { HinhThuc: string; Phi: number; con: number }[];
 };
 export type PhieuChi = { SoPC: string; Ngay: string; Loai: string; DoiTac: string; SoTien: number; HinhThuc: string; GhiChu: string };
 
@@ -108,6 +113,8 @@ export type HoSoKhach = {
 
 export type BanNhanhKQ = {
   SoDH: string; SoPK: string; SoPT: string; TongCong: number; daThu: number; MaKH: string; TenKH: string; loiThu: string;
+  /** từng phiếu thu (trả kết hợp nhiều hình thức: mỗi hình thức một phiếu); máy chủ cũ không có */
+  dsPT?: { SoPT: string; SoTien: number; HinhThuc: string }[];
   lines: { TenHang: string; SoLuong: number; IMEI: string; HetHan: string }[];
   /** máy cũ thu lại (đơn lên đời): mỗi máy là dòng −1 của đơn, TongCong đã trừ; daThu là tiền thật khách trả */
   thuCu?: { MaHH: string; TenHang: string; IMEI: string; GiaThu: number; SoPK: string }[];

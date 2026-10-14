@@ -29,3 +29,17 @@ export function useGuiPhieu() {
   }, [goi]);
   return { dang, loi, gui };
 }
+
+/** Phiếu nhận máy bảo hành – sửa chữa (PDF) để gửi khách qua Zalo…: mở bảng chia sẻ */
+export function useGuiPhieuSua() {
+  const { goi } = useAuth();
+  const [dang, setDang] = useState(''), [loi, setLoi] = useState('');
+  const gui = useCallback(async (soPN: string) => {
+    setDang(soPN); setLoi('');
+    try {
+      const f = await goi<{ ten: string; base64: string }>('phieuNhanMayPdf', soPN);
+      await chiaSePdf(f.ten, f.base64);
+    } catch (e) { setLoi((e as Error).message); } finally { setDang(''); }
+  }, [goi]);
+  return { dang, loi, gui };
+}
