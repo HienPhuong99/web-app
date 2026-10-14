@@ -8,7 +8,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/auth';
 import type { TongQuan } from '../../lib/api';
-import { loiChao, ngay, tien, tienGon } from '../../lib/dinhDang';
+import { loiChao, ngay, phuThu, tien, tienGon } from '../../lib/dinhDang';
 import { maDuongDan } from '../../lib/phieuSua';
 import { useDuLieu } from '../../lib/useDuLieu';
 import { BieuDo7Ngay } from '../../ui/BieuDo7Ngay';
@@ -72,6 +72,7 @@ export default function TongQuanMan() {
                   <So bieuTuong="wallet-outline" mauBT={mau.xanh} so={tienGon(du.thu)} nhan="Đã thu" onPress={() => xemNgay()} testID="so-thu" />
                   <So bieuTuong="time-outline" mauBT={mau.vang} so={tienGon(du.no.tong)} nhan="Khách còn nợ" onPress={xemNo} testID="so-no" />
                 </View>
+                {phuThu(du.mayCu, du.traLai) ? <Text style={s.phuThu} testID="phu-thu">{phuThu(du.mayCu, du.traLai)}</Text> : null}
                 {du.lai ? (
                   <Text style={s.lai} testID="lai-hom-nay">Lãi gộp hôm nay <Text style={{ color: du.lai.lai >= 0 ? mau.xanh : mau.do }}>{tien(du.lai.lai)}</Text>{du.lai.laiMayCu ? <Text> · máy cũ {tien(du.lai.laiMayCu)}</Text> : null}</Text>
                 ) : null}
@@ -219,5 +220,6 @@ const s = StyleSheet.create({
   lienKet: { fontSize: 15, color: mau.camDam, fontWeight: '700' },
   lienKetNho: { color: mau.camDam, fontWeight: '700' },
   goiY: { fontSize: 12, color: mau.chuNhat, marginTop: 10 },
+  phuThu: { fontSize: 13, color: mau.chuNhat, marginTop: 8, textAlign: 'center' },
   lai: { fontSize: 14, color: mau.chuPhu, fontWeight: '700', marginTop: 12 },
 });

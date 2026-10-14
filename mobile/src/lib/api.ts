@@ -49,7 +49,7 @@ export type TraBaoHanhKQ = { q: string; tong: number; ds: MayBaoHanh[] };
 
 export type TongQuan = {
   user: NguoiDung; cuaHang: { ten: string; moTa: string }; homNay: string;
-  ban: { don: number; tien: number }; thu: number; homQua: { don: number; tien: number }; ban7: { ngay: string; tien: number }[];
+  ban: { don: number; tien: number }; thu: number; traLai?: number; mayCu?: number; homQua: { don: number; tien: number }; ban7: { ngay: string; tien: number }[];
   hopDong: { SoHD: string; MaKH: string; TenDN: string; NgayHetHan: string; het: boolean; n: number; bao: number; quyetDinh: number; tuGiaHan: boolean }[];
   dot: { SoHD: string; MaKH: string; TenDN: string; Nhan: string; NgayDen: string; SoTien: number; quaHan: boolean; n: number }[];
   donTre: { SoDH: string; MaKH: string; TenKH: string; NgayGiao: string; TongCong: number }[];
@@ -85,7 +85,7 @@ export type ChiTietNgay = {
   ngay: string; homNay: string; truoc: string; sau: string;
   don: { SoDH: string; MaKH: string; TenKH: string; TongCong: number; daThu: number; TrangThai: string; gio: string }[];
   thu: { SoPT: string; MaKH: string; TenKH: string; SoDH: string; SoTien: number; HinhThuc: string; GhiChu: string }[];
-  tong: { don: number; tien: number; thu: number; huy: number };
+  tong: { don: number; tien: number; thu: number; traLai?: number; mayCu?: number; huy: number }; // thu = tiền thật khách đưa
 };
 /** chiTietTongQuan('no'): mọi khách còn nợ, nhiều nhất trước */
 export type KhachNo = { tong: number; ds: { MaKH: string; TenKH: string; SDT: string; tien: number }[] };

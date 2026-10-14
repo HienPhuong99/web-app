@@ -97,7 +97,7 @@ assert.deepStrictEqual([ct.ngay, ct.tong.don, ct.tong.tien, ct.tong.thu, ct.sau,
 assert.deepStrictEqual([ct.don[0].daThu, typeof ct.don[0].MaKH, ct.truoc < today], [30000000, 'string', true]);
 const ctTruoc = goi(lan, 'chiTietTongQuan', 'ngay', ct.truoc);
 assert.deepStrictEqual([ctTruoc.ngay, ctTruoc.sau, ctTruoc.tong.tien], [ct.truoc, today, tq.ban7[5].tien]);
-assert.deepStrictEqual(goi(lan, 'chiTietTongQuan', 'ngay', '2024-03-10').tong, { don: 0, tien: 0, thu: 0, huy: 0 });
+assert.deepStrictEqual(goi(lan, 'chiTietTongQuan', 'ngay', '2024-03-10').tong, { don: 0, tien: 0, thu: 0, traLai: 0, mayCu: 0, huy: 0 });
 assert.throws(() => goi(lan, 'chiTietTongQuan', 'ngay', '2024-02-30'), /Ngày không hợp lệ/);
 assert.throws(() => goi(lan, 'chiTietTongQuan', 'la'), /Không có số liệu/);
 const ctNo = goi(lan, 'chiTietTongQuan', 'no');
@@ -557,13 +557,19 @@ const doiNgay = (bang, so, ngay) => { const sh = sheets['PS_' + bang], c = sh.ro
   G.luuChungTu = function (tk, loai) { if (loai === 'DH' && !lan++) throw new Error('giả lập lỗi sửa đơn'); return goc.apply(this, arguments); };
   try { assert.throws(() => goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0002', IMEI: 'SQ0003' }], hoan: { SoTien: 20000000 } }), /Chưa ghi gì.*giả lập lỗi sửa đơn/); } finally { G.luuChungTu = goc; }
   assert.deepStrictEqual([sheets.PS_PhieuKho.rows.length, goi(binh4, 'traMaKho', 'SQ0003').trangThai, goi(binh4, 'traMaKho', '359999000000033').trangThai], [pk1, 'daBan', 'trongKho']);
-  const tmTruoc2 = goi(binh4, 'soQuyMay', '').ton.tienMat;
+  const tmTruoc2 = goi(binh4, 'soQuyMay', '').ton.tienMat, tq0 = goi(binh4, 'tongQuanMay');
   const tr = goi(binh4, 'traHang', { SoDH: b.SoDH, lines: [{ MaHH: 'HH0002', IMEI: 'SQ0003' }], hoan: { SoTien: 20000000, HinhThuc: 'Tiền mặt' } });
   assert.deepStrictEqual([tr.TongCong, tr.huy, !!tr.SoPK, !!tr.SoPKCu, tr.mayCuTra.length], [200000, false, true, true, 1]);
   assert.deepStrictEqual([goi(binh4, 'traMaKho', 'SQ0003').trangThai, goi(binh4, 'traMaKho', '359999000000033').trangThai], ['trongKho', 'daBan']);
   assert.ok(!goi(binh4, 'traBaoHanh', '359999000000033').ds.length); // máy cũ trả lại khách: không phải bán, không có bảo hành
   assert.deepStrictEqual([goi(binh4, 'chiTietKhach', kh2.MaKH).no, goi(binh4, 'soQuyMay', '').ton.tienMat], [0, tmTruoc2 - 20000000]);
   assert.ok(!G.readTable_('DonHangCT').some(l => l.SoDH === b.SoDH && l.SoLuong < 0));
+  // "Đã thu" chỉ là tiền thật khách đưa: tiền trả lại khách và máy cũ thu về hiện riêng, không trừ / cộng vào
+  const tq1 = goi(binh4, 'tongQuanMay'), ct1 = goi(binh4, 'chiTietTongQuan', 'ngay');
+  assert.ok(tq0.mayCu >= 5000000 + 5000000); // hai đơn lên đời hôm nay (máy cũ 5tr mỗi đơn)
+  assert.deepStrictEqual([tq1.thu, tq1.traLai, tq1.mayCu], [tq0.thu, tq0.traLai + 20000000, tq0.mayCu]);
+  assert.deepStrictEqual([ct1.tong.thu, ct1.tong.traLai, ct1.tong.mayCu], [tq1.thu, tq1.traLai, tq1.mayCu]);
+  assert.match(G.dungEmailSang_('X', plain(G.tongHopSang_(ngayLui(-1))), false).text, /đã thu [\d.]+ đ \(máy cũ thu về [\d.]+ đ · trả lại khách [\d.]+ đ\)\./);
   // Quá 7 ngày: không nhận trả; máy cũ hết thời gian giữ thì bán được
   const c = goi(binh4, 'banNhanh', { MaKH: kh2.MaKH, lines: [{ MaHH: 'HH0002', SoLuong: 1, DonGia: 25000000, IMEI: 'SQ0004' }], thuCu: [{ TenHang: 'iPhone X', IMEI: '359999000000041', GiaThu: 3000000 }], thu: { SoTien: 22000000 } });
   doiNgay('DonHang', c.SoDH, ngayLui(8));

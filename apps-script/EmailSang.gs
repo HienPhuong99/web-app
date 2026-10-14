@@ -107,6 +107,25 @@ function dsNo_(song, thu, khach) {
   return Object.keys(Object.assign({}, mua, da)).map(k => ({ MaKH: k, tien: (mua[k] || 0) - (da[k] || 0) })).filter(x => x.tien > 0).sort((a, b) => b.tien - a.tien)
     .map(x => ({ MaKH: x.MaKH, TenKH: x.MaKH && khach[x.MaKH] ? khach[x.MaKH].TenKH : (x.MaKH || 'Khách lẻ'), SDT: x.MaKH && khach[x.MaKH] ? khach[x.MaKH].SDT : '', tien: x.tien }));
 }
+// "Đã thu" = tiền thật khách đưa, khớp dòng Thu của sổ quỹ: bỏ phiếu ghi giá máy cũ (cách ghi cũ) và phiếu trả lại tiền khách (số âm).
+// Ghi riêng: tiền trả lại khách và giá máy cũ thu về (theo phiếu nhập "Thu cũ đổi mới", cả cách ghi cũ lẫn mới). Web (vHome) tính cùng cách.
+function giaThuCuTheoNgay_(phieuKho, pkCT) {
+  const ngay = {}, theoNgay = {};
+  phieuKho.forEach(p => { if (laNhapThuCu_(p)) ngay[p.SoPK] = String(p.Ngay).slice(0, 10); });
+  pkCT.forEach(l => { const n = ngay[l.SoPK]; if (n) theoNgay[n] = (theoNgay[n] || 0) + (+l.SoLuong || 0) * (+l.GiaVon || 0); });
+  return theoNgay;
+}
+function tienNgay_(thu, thuCu, n) {
+  const r = { thu: 0, traLai: 0, mayCu: thuCu[n] || 0 };
+  thu.forEach(p => {
+    if (String(p.Ngay).slice(0, 10) !== n || p.HinhThuc === HT_MAY_CU) return;
+    const t = +p.SoTien || 0;
+    if (t < 0) r.traLai -= t; else r.thu += t;
+  });
+  return r;
+}
+const tienPhuEmail_ = t => [t.mayCu ? 'máy cũ thu về ' + tienEmail_(t.mayCu) : '', t.traLai ? 'trả lại khách ' + tienEmail_(t.traLai) : ''].filter(Boolean).join(' · ');
+
 function tongHopSang_(homNay) {
   const homQua = new Date(Date.parse(homNay) - 864e5).toISOString().slice(0, 10), ngay = v => String(v == null ? '' : v).slice(0, 10);
   const donHang = readTable_('DonHang'), thu = readTable_('ThuTien'), khach = {};
@@ -127,18 +146,18 @@ function tongHopSang_(homNay) {
     .sort((a, b) => String(a.NgayGiao).localeCompare(String(b.NgayGiao)))
     .map(d => ({ SoDH: d.SoDH, MaKH: d.MaKH || '', TenKH: d.TenKH, NgayGiao: ngay(d.NgayGiao), TongCong: +d.TongCong || 0 }));
   // Hàng sắp hết: tồn <= mức tối thiểu (hàng có nhập xuất), hoặc có đặt mức tối thiểu mà chưa có phiếu kho nào
-  const ton = tonKho_();
+  const phieuKho = readTable_('PhieuKho'), pkCT = readTable_('PhieuKhoCT'), ton = tonKho_(phieuKho, pkCT), thuCu = giaThuCuTheoNgay_(phieuKho, pkCT);
   // Máy cũ thu về (mỗi mã một chiếc) bán xong là tồn 0: không tính sắp hết trừ khi có đặt mức tối thiểu, kẻo sáng nào cũng có "việc"
   const hang = readTable_('HangHoa').filter(h => !(h.NhomHang === NHOM_MAY_CU && !(+h.TonToiThieu > 0)) && (ton[h.MaHH] ? ton[h.MaHH].nhap - ton[h.MaHH].xuat <= (+h.TonToiThieu || 0) : h.TonToiThieu !== '' && +h.TonToiThieu > 0))
     .map(h => ({ MaHH: h.MaHH, TenHang: h.TenHang, ton: ton[h.MaHH] ? ton[h.MaHH].nhap - ton[h.MaHH].xuat : 0, toiThieu: +h.TonToiThieu || 0 }))
     .sort((a, b) => (a.ton - a.toiThieu) - (b.ton - b.toiThieu));
   const noDs = dsNo_(song, thu, khach);
   const ban = n => { const ds = song.filter(d => ngay(d.Ngay) === n); return { don: ds.length, tien: ds.reduce((s, d) => s + (+d.TongCong || 0), 0) }; };
-  const daThu = n => thu.filter(p => ngay(p.Ngay) === n).reduce((s, p) => s + (+p.SoTien || 0), 0);
+  const tienHomQua = tienNgay_(thu, thuCu, homQua), tienHomNay = tienNgay_(thu, thuCu, homNay);
   const du = {
     homNay: homNay, homQua: homQua,
-    homQuaBan: ban(homQua), homQuaThu: daThu(homQua),
-    homNayBan: ban(homNay), homNayThu: daThu(homNay), // màn hình Tổng quan của app điện thoại (Api.gs)
+    homQuaBan: ban(homQua), homQuaThu: tienHomQua.thu, homQuaTien: tienHomQua,
+    homNayBan: ban(homNay), homNayThu: tienHomNay.thu, homNayTien: tienHomNay, // màn hình Tổng quan của app điện thoại (Api.gs)
     ban7: [6, 5, 4, 3, 2, 1, 0].map(i => { const n = new Date(Date.parse(homNay) - i * 864e5).toISOString().slice(0, 10); return { ngay: n, tien: ban(n).tien }; }),
     hopDong: hopDong, dot: dot, donTre: donTre, hang: hang, suaChua: suaCanLam_(homNay), // máy sửa đến hẹn / đã xong chờ trả (DichVu.gs)
     sapHetBH: sapHetBaoHanh_(homNay), // khách có máy còn 0–15 ngày bảo hành: mời quay lại (không tính vào việc cần làm)
@@ -167,7 +186,7 @@ function dungEmailSang_(tenCH, du, thu) {
   them('Đơn hàng quá hạn giao', du.donTre, x => x.SoDH + ' · ' + (x.TenKH || 'Khách lẻ') + ' · hẹn giao ' + ngayEmail_(x.NgayGiao) + ' · ' + tienEmail_(x.TongCong));
   them('Hàng sắp hết', du.hang, x => x.TenHang + ' · tồn ' + x.ton + (x.toiThieu ? ' (tối thiểu ' + x.toiThieu + ')' : ''));
   if (du.no.soKhach) muc.push(['Khách còn nợ: ' + tienEmail_(du.no.tong) + ' (' + du.no.soKhach + ' khách)', du.no.top.map(x => x.TenKH + (x.SDT ? ' · ' + x.SDT : '') + ' · ' + tienEmail_(x.tien))]);
-  const dau = 'Hôm qua (' + ngayEmail_(du.homQua) + '): ' + du.homQuaBan.don + ' đơn, doanh số ' + tienEmail_(du.homQuaBan.tien) + ', đã thu ' + tienEmail_(du.homQuaThu) + '.';
+  const dau = 'Hôm qua (' + ngayEmail_(du.homQua) + '): ' + du.homQuaBan.don + ' đơn, doanh số ' + tienEmail_(du.homQuaBan.tien) + ', đã thu ' + tienEmail_(du.homQuaThu) + (tienPhuEmail_(du.homQuaTien) ? ' (' + tienPhuEmail_(du.homQuaTien) + ')' : '') + '.';
   const ghiChu = thu ? 'Đây là thư gửi thử.' + (du.coViec ? '' : ' Hôm nay chưa có việc nào cần chú ý, nên bình thường app sẽ không gửi thư.') : '';
   const tieuDe = '[' + tenCH + '] Tổng hợp sáng ' + ngayEmail_(du.homNay).slice(0, 5) + (du.soMuc ? ': ' + du.soMuc + ' việc cần chú ý' : '');
   const text = [ghiChu, 'Chào buổi sáng! ' + dau, ''].filter((x, i) => i || x).concat(...muc.map(m => [m[0] + ':'].concat(m[1].map(l => '- ' + l)).concat([''])), ['Mở app để xử lý. Tắt thư này trong Cài đặt → Email tổng hợp sáng.']).join('\n');

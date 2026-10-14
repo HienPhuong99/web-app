@@ -159,7 +159,7 @@ function tongQuanMay(token) {
   const du = tongHopSang_(homNay_()), ch = cuaHang_(CUR_SHOP);
   return {
     user: { u: user.u, ten: user.ten, vaiTro: user.vaiTro }, cuaHang: { ten: ch.ten, moTa: ch.moTa },
-    homNay: du.homNay, ban: du.homNayBan, thu: du.homNayThu, homQua: du.homQuaBan, ban7: du.ban7,
+    homNay: du.homNay, ban: du.homNayBan, thu: du.homNayThu, traLai: du.homNayTien.traLai, mayCu: du.homNayTien.mayCu, homQua: du.homQuaBan, ban7: du.ban7,
     hopDong: du.hopDong.slice(0, 20), dot: du.dot.slice(0, 20), donTre: du.donTre.slice(0, 20), hang: du.hang.slice(0, 20), suaChua: du.suaChua.slice(0, 20), sapHetBH: du.sapHetBH.slice(0, 20),
     soMuc: du.soMuc, no: { soKhach: du.no.soKhach, tong: du.no.tong, top: du.no.top },
     lai: user.vaiTro === 'admin' ? loiNhuanKy_(du.homNay, du.homNay).tong : null, // lãi gộp hôm nay: chỉ quản trị
@@ -189,8 +189,9 @@ function chiTietTongQuan(token, loai, ngay) {
     .map(d => ({ SoDH: d.SoDH, MaKH: d.MaKH, TenKH: d.TenKH, TongCong: +d.TongCong || 0, daThu: thuDon[d.SoDH] || 0, TrangThai: d.TrangThai || 'Chờ giao', gio: String(d.NgayTao || '').slice(11, 16) }))
     .sort((a, b) => String(b.gio + b.SoDH).localeCompare(String(a.gio + a.SoDH)));
   const song = don.filter(d => d.TrangThai !== 'Hủy'), lech = k => Utilities.formatDate(new Date(Date.parse(n + 'T12:00:00Z') + k * 864e5), 'UTC', 'yyyy-MM-dd');
+  const tienNgay = tienNgay_(tatCaThu, giaThuCuTheoNgay_(readTable_('PhieuKho'), readTable_('PhieuKhoCT')), n); // đã thu = tiền thật, như Tổng quan
   return { ngay: n, homNay: homNay_(), truoc: lech(-1), sau: n < homNay_() ? lech(1) : '', don: don, thu: thu,
-    tong: { don: song.length, tien: song.reduce((s, d) => s + d.TongCong, 0), thu: thu.reduce((s, p) => s + p.SoTien, 0), huy: don.length - song.length } };
+    tong: { don: song.length, tien: song.reduce((s, d) => s + d.TongCong, 0), thu: tienNgay.thu, traLai: tienNgay.traLai, mayCu: tienNgay.mayCu, huy: don.length - song.length } };
 }
 
 const boDau_ = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();

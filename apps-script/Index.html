@@ -969,6 +969,10 @@ const CT_HANG = [
   { t: 'Số lượng', cls: 'num', f: r => `${money(r.SoLuong)} ${esc(r.DVT || '')}` }, { t: 'Doanh số (chưa VAT)', cls: 'num', f: r => `<b>${money(r.ThanhTien)}</b>` },
 ];
 
+// "Đã thu" = tiền thật khách đưa, khớp dòng Thu của sổ quỹ: không tính phiếu ghi giá máy cũ (cách ghi cũ) và phiếu trả lại tiền khách (âm).
+// Máy cũ thu về (phiếu nhập "Thu cũ đổi mới") và tiền trả lại khách hiện riêng ở dòng nhỏ. Cùng cách tính với email sáng / app (tienNgay_).
+const tienThat = p => p.HinhThuc === S.htMayCu ? 0 : Math.max(0, +p.SoTien || 0);
+const laNhapThuCu = p => p.Loai === 'Nhập' && /^Thu cũ đổi mới/.test(String(p.GhiChu || ''));
 function vHome(el) {
   setTop('Tổng quan', 'Bảng điều khiển', [{ t: 'Tải lại', ic: 'refresh', fn: run(async () => { await loadAll(); if (S.q.home) S.q.home.tk = null; render(); toast('Đã tải lại dữ liệu.'); }) }]);
   const st = S.q.home || (S.q.home = { ky: 'thang' });
@@ -977,7 +981,9 @@ function vHome(el) {
   const live = S.donHang.filter(d => d.TrangThai !== 'Hủy');
   const donKy = trongKy(live, tu, den), thuKy = trongKy(S.thuTien, tu, den), bgKy = trongKy(S.baoGia, tu, den);
   const ds = sum(donKy, d => d.TongCong), dsTruoc = sum(trongKy(live, tu0, den0), d => d.TongCong);
-  const daThuKy = sum(thuKy, p => p.SoTien), thuTruoc = sum(trongKy(S.thuTien, tu0, den0), p => p.SoTien);
+  const daThuKy = sum(thuKy, tienThat), thuTruoc = sum(trongKy(S.thuTien, tu0, den0), tienThat);
+  const traLaiKy = sum(thuKy, p => p.HinhThuc === S.htMayCu ? 0 : Math.max(0, -(+p.SoTien || 0))), mayCuKy = sum(trongKy(S.phieuKho, tu, den).filter(laNhapThuCu), p => p.GiaTri);
+  const phuThu = [mayCuKy ? 'Máy cũ thu về ' + money(mayCuKy) + ' ₫' : '', traLaiKy ? 'Trả lại khách ' + money(traLaiKy) + ' ₫' : ''].filter(Boolean).join(' · ');
   const chot = bgKy.filter(b => D.dhBG[b.SoBG]);
   const noList = Object.entries(D.noKH).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
   const choGiao = live.filter(d => d.TrangThai === 'Chờ giao' || d.TrangThai === 'Giao một phần')
@@ -1001,7 +1007,7 @@ function vHome(el) {
   const months = [];
   for (let i = 11; i >= 0; i--) months.push(iso(new Date(d0.getFullYear(), d0.getMonth() - i, 1)).slice(0, 7));
   const inM = (l, mm) => l.filter(x => String(x.Ngay).startsWith(mm));
-  const ds12 = months.map(mm => sum(inM(live, mm), d => d.TongCong)), thu12 = months.map(mm => sum(inM(S.thuTien, mm), p => p.SoTien));
+  const ds12 = months.map(mm => sum(inM(live, mm), d => d.TongCong)), thu12 = months.map(mm => sum(inM(S.thuTien, mm), tienThat));
   const max = Math.max(1, ...ds12, ...thu12);
   const donTrongKy = trongKy(S.donHang, tu, den);
   const statuses = [['Chờ giao', '#f59e0b'], ['Giao một phần', '#3b82f6'], ['Đã giao', '#16a34a'], ['Hủy', '#cbd2dc']]
@@ -1016,7 +1022,7 @@ function vHome(el) {
   const CT = {
     ds: () => ({ tieuDe: `Doanh số ${kyChu}: ${money(ds)} ₫`, moTa: `Đơn hàng từ ${dmy(tu)} đến ${dmy(den)}, không gồm đơn đã hủy. Kỳ trước (${dmy(tu0)} – ${dmy(den0)}): ${money(dsTruoc)} ₫.`,
       cols: CT_DON, rows: donKy, foot: ctFootDon, mo: r => openDoc('DH', r), ds: { view: 'donhang', id: 'donhang', f: { tt: 'khongHuy', ngayFrom: tu, ngayTo: den } } }),
-    thu: () => ({ tieuDe: `Đã thu ${kyChu}: ${money(daThuKy)} ₫`, moTa: `Phiếu thu từ ${dmy(tu)} đến ${dmy(den)}. Kỳ trước: ${money(thuTruoc)} ₫.`,
+    thu: () => ({ tieuDe: `Đã thu ${kyChu}: ${money(daThuKy)} ₫`, moTa: `Tiền thật khách đưa từ ${dmy(tu)} đến ${dmy(den)}, khớp dòng Thu của sổ quỹ${phuThu ? ' (ngoài ra: ' + phuThu.toLowerCase() + ')' : ''}. Kỳ trước: ${money(thuTruoc)} ₫.`,
       cols: CT_THU, rows: thuKy, foot: ctFootThu, mo: r => openThu(r), ds: { view: 'congno', tab: 'pt', id: 'phieuthu', f: { ngayFrom: tu, ngayTo: den } } }),
     no: () => ({ tieuDe: `Công nợ phải thu: ${money(sum(noList, x => x[1]))} ₫`, moTa: `${noList.length} khách còn nợ, nhiều nhất trước. Nợ = tổng đơn (không gồm đơn hủy) trừ tiền đã thu.`,
       cols: [{ t: 'Khách hàng', cls: 'wrap', f: r => `<b>${esc(r.k.TenKH)}</b><span class="sub">${esc(r.k.MaKH)} · ${esc(r.k.SDT)}</span>` },
@@ -1051,7 +1057,7 @@ function vHome(el) {
       rows: dotThu, foot: rs => `<span>${rs.length} đợt</span><span>Cần thu <b class="red">${money(sum(rs, r => r.SoTien))} ₫</b></span>`,
       mo: r => openHD(hdTheoSo[r.SoHD]), ds: { view: 'hdlich', id: 'hdlich', f: { loc: 'can' } } }),
     thang: mm => { const don = inM(live, mm), pt = inM(S.thuTien, mm), cuoi = iso(new Date(+mm.slice(0, 4), +mm.slice(5), 0));
-      return { tieuDe: `Doanh số ${tenThang(mm)}: ${money(sum(don, d => d.TongCong))} ₫`, moTa: `${don.length} đơn hàng (không gồm đơn hủy); đã thu trong tháng ${money(sum(pt, p => p.SoTien))} ₫ (${pt.length} phiếu thu).`,
+      return { tieuDe: `Doanh số ${tenThang(mm)}: ${money(sum(don, d => d.TongCong))} ₫`, moTa: `${don.length} đơn hàng (không gồm đơn hủy); đã thu trong tháng ${money(sum(pt, tienThat))} ₫ (${pt.length} phiếu thu).`,
         cols: CT_DON, rows: don, foot: ctFootDon, mo: r => openDoc('DH', r), ds: { view: 'donhang', id: 'donhang', f: { tt: 'khongHuy', ngayFrom: mm + '-01', ngayTo: cuoi } } }; },
     tt: t => { const rs = donTrongKy.filter(d => (d.TrangThai || 'Chờ giao') === t);
       return { tieuDe: `Đơn "${t}" ${kyChu}: ${rs.length}`, moTa: `Đơn hàng từ ${dmy(tu)} đến ${dmy(den)} đang ở trạng thái ${t}.`, cols: CT_DON, rows: rs, foot: ctFootDon,
@@ -1074,7 +1080,7 @@ function vHome(el) {
     <span class="muted">${dmy(tu)} – ${dmy(den)} · bấm vào số liệu bất kỳ để xem chi tiết</span></div>
   <div class="kpis">
     ${kpi('ds', 'trend', S.cuaHang.mau.brand50, S.cuaHang.mau.brand, 'Doanh số ' + kyChu, money(ds) + ' ₫', `${donKy.length} đơn · ${tangGiam(soSanh(ds, dsTruoc))}`)}
-    ${kpi('thu', 'card', '#e7f6ec', '#16a34a', 'Đã thu ' + kyChu, money(daThuKy) + ' ₫', `${thuKy.length} phiếu thu · ${tangGiam(soSanh(daThuKy, thuTruoc))}`)}
+    ${kpi('thu', 'card', '#e7f6ec', '#16a34a', 'Đã thu ' + kyChu, money(daThuKy) + ' ₫', `${thuKy.length} phiếu thu · ${tangGiam(soSanh(daThuKy, thuTruoc))}${phuThu ? `<br><span class="muted" data-phu-thu>${phuThu}</span>` : ''}`)}
     ${kpi('no', 'alert', '#fff3df', '#d97706', 'Công nợ phải thu', money(sum(noList, x => x[1])) + ' ₫', noList.length + ' khách còn nợ')}
     ${kpi('giao', 'truck', '#e8f0fe', '#2563eb', 'Đơn chờ giao', choGiao.length, quaHan.length ? `<span class="red">${quaHan.length} đơn quá hẹn giao</span>` : 'Không có đơn quá hẹn')}
     ${kpi('bg', 'file', '#f1ebfe', '#7c3aed', 'Báo giá ' + kyChu, bgKy.length, bgKy.length ? `Đã chốt ${chot.length}/${bgKy.length} (${Math.round(chot.length / bgKy.length * 100)}%)` : 'Chưa có báo giá')}
