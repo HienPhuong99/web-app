@@ -399,10 +399,13 @@ BUOC.push(['Phiếu nhập từ khách (thu cũ, khách trả hàng) không thà
       { SoPK: 'T-TRA', Loai: 'Nhập', Ngay: '2026-10-02', SoDH: d.SoDH, DoiTac: d.TenKH, GhiChu: 'Khách trả hàng · đơn ' + d.SoDH, GiaTri: 1000000 },
     ];
     S.phieuKho.push(...them);
-    const ncc = noNCC().map(x => x.ten);
-    return { ncc, so: d.SoDH };
+    S.phieuChi.push({ SoPC: 'T-PC', Loai: S.loaiChi[0], DoiTac: '  công ty  phân phối a ', SoTien: 5000000 }); // gõ khác hoa thường: vẫn là một nhà cung cấp
+    const ds = noNCC(), ncc = ds.map(x => x.ten), a = ds.filter(x => /phân phối a/i.test(x.ten));
+    S.phieuChi = S.phieuChi.filter(c => c.SoPC !== 'T-PC');
+    return { ncc, a: a.map(x => [x.ten, x.no]), so: d.SoDH };
   });
   assert.ok(r.ncc.includes('Công ty Phân Phối A'), 'Nhà cung cấp thật vẫn có: ' + r.ncc);
+  assert.deepStrictEqual(r.a, [['Công ty Phân Phối A', 0]]);
   assert.ok(!r.ncc.includes('Anh Khách Đổi') && r.ncc.every(t => !/Khách Đổi/.test(t)), 'Khách thu cũ không là nhà cung cấp: ' + r.ncc);
   await page.evaluate(so => openDoc('DH', S.donHang.find(x => x.SoDH === so)), r.so);
   await page.waitForSelector('tr[data-go="pk:T-TRA"]');

@@ -185,7 +185,10 @@ module.exports = BUOC => {
 
   BUOC.push(['Hợp đồng: lập từ đơn hàng, nhân bản', async page => {
     await page.evaluate(async () => {
-      const r = await api('luuChungTu', 'DH', { Ngay: today(), MaKH: 'KH00001', TenKH: 'Anh Minh', VAT: 10, lines: [{ MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', DVT: 'Máy', SoLuong: 3, DonGia: 11300000 }] });
+      const may = { MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', DVT: 'Máy', SoLuong: 1, IMEI: '358900000000011' };
+      const r = await api('luuChungTu', 'DH', { Ngay: today(), MaKH: 'KH00001', TenKH: 'Anh Minh', VAT: 10, GiamGia: 1000000, lines: [{ MaHH: 'HH0002', TenHang: 'iPhone 15 128GB - Đen', DVT: 'Máy', SoLuong: 3, DonGia: 11300000 }] });
+      await api('luuChungTu', 'NK', { Ngay: today(), DoiTac: 'NCC', lines: [may] });
+      await api('luuChungTu', 'XK', { Ngay: today(), SoDH: r.doc.SoDH, DoiTac: 'Anh Minh', lines: [may] }); // giao 1 máy: IMEI vào hợp đồng
       await loadAll(); await openDoc('DH', S.donHang.find(d => d.SoDH === r.doc.SoDH)); // đúng đơn vừa lập (nhiều đơn cùng phút thì thứ tự không cố định)
     });
     await nut(page, 'Tạo hợp đồng').click();
@@ -193,14 +196,16 @@ module.exports = BUOC => {
     assert.strictEqual(await page.inputValue('input[data-h="TenDN"]'), 'Anh Minh');
     assert.match(await page.inputValue('select[data-h="SoDH"]'), /^\d{3}-\d{4}\/DH$/);
     assert.match(await page.inputValue('tr[data-i="0"] [data-f="TenHang"]'), /iPhone 15/);
-    assert.strictEqual(so(await page.locator('[data-t="tong"]').textContent()), '37290000'); // 3 x 11.300.000 + 10%
+    assert.strictEqual(await page.inputValue('tr[data-i="0"] [data-f="IMEI"]'), '358900000000011');
+    assert.strictEqual(await page.inputValue('tr[data-i="1"] [data-f="TenHang"]'), 'Giảm giá');
+    assert.strictEqual(so(await page.locator('[data-t="tong"]').textContent()), '36190000'); // (3 x 11.300.000 − 1.000.000) + 10%: bằng tổng đơn
     await luu(page);
     await page.waitForFunction(() => /Hợp đồng \d{3}-\d{4}\/HD/.test(document.querySelector('#title').textContent), null, { timeout: 8000 });
     const so1 = await page.evaluate(() => S.hd.SoHD);
     assert.ok((await page.evaluate(() => S.hd.SoDH)).length > 0, 'Hợp đồng phải gắn với đơn hàng');
     await nut(page, 'Nhân bản').click();
     await page.waitForFunction(() => document.querySelector('#title').textContent.startsWith('Hợp đồng mới'));
-    assert.strictEqual(so(await page.locator('[data-t="tong"]').textContent()), '37290000');
+    assert.strictEqual(so(await page.locator('[data-t="tong"]').textContent()), '36190000');
     assert.strictEqual(await page.inputValue('input[data-h="NgayHetHan"]'), '');
     await luu(page);
     await page.waitForFunction(old => /Hợp đồng \d{3}-\d{4}\/HD/.test(document.querySelector('#title').textContent) && !document.querySelector('#title').textContent.includes(old), so1, { timeout: 8000 });
@@ -314,20 +319,20 @@ module.exports = BUOC => {
     await page.evaluate(h => openHD(S.hopDong.find(x => x.SoHD === h)), so);
     await page.waitForSelector('[data-gen="soKy"]');
     const tong = await page.evaluate(() => hdTotal().tong);
-    assert.strictEqual(tong, 37290000);
-    await page.fill('[data-gen="traTruoc"]', '10000000');
+    assert.strictEqual(tong, 36190000); // đơn 3 × 11,3tr giảm 1tr, VAT 10%
+    await page.fill('[data-gen="traTruoc"]', '9000000');
     await page.fill('[data-gen="soKy"]', '3');
     await page.fill('[data-gen="ngayDau"]', await page.evaluate(() => ngayCong(-1))); // kỳ 1 đã quá hạn 1 ngày
     await page.click('[data-act="lich-tao"]');
     const so4 = await page.locator('[data-lich] tbody tr').count();
     assert.strictEqual(so4, 4);
     const tien = await page.locator('[data-lf="SoTien"]').evaluateAll(els => els.map(e => e.value.replace(/\D/g, '')));
-    assert.deepStrictEqual(tien, ['10000000', '9096666', '9096666', '9096668']); // số dư lẻ dồn vào kỳ cuối
+    assert.deepStrictEqual(tien, ['9000000', '9063333', '9063333', '9063334']); // số dư lẻ dồn vào kỳ cuối
     assert.match(await page.locator('[data-lc]').textContent(), /Khớp giá trị hợp đồng/);
     const oTien = page.locator('tr[data-lr="2"] [data-lf="SoTien"]');
     await oTien.fill(''); await oTien.fill('9000000'); // sửa tay một đợt: hiện chênh lệch ngay (ô tiền của app bỏ vùng chọn khi bấm vào, nên xóa trước rồi nhập)
-    assert.match(await page.locator('[data-lc]').textContent(), /Chênh 96\.666/);
-    await oTien.fill(''); await oTien.fill('9096666');
+    assert.match(await page.locator('[data-lc]').textContent(), /Chênh 63\.333/);
+    await oTien.fill(''); await oTien.fill('9063333');
     await luu(page);
     await page.waitForFunction(() => !S.dirty && S.hd.lich.every(r => r.Dot), null, { timeout: 8000 });
     assert.strictEqual(await page.evaluate(h => S.hopDongLich.filter(r => r.SoHD === h).length, so), 4);
@@ -349,14 +354,14 @@ module.exports = BUOC => {
     await page.waitForSelector('#modal', { state: 'hidden' });
     const thuSau = await page.evaluate(h => { const d = S.hopDong.find(x => x.SoHD === h); return [S.thuTien.length, D.thuDH[d.SoDH] || 0, S.hd.lich[1].SoPT]; }, so);
     assert.strictEqual(thuSau[0], thuTruoc[0] + 1);
-    assert.strictEqual(thuSau[1], thuTruoc[1] + 10000000); // công nợ của đơn giảm đúng 10 triệu
+    assert.strictEqual(thuSau[1], thuTruoc[1] + 9000000); // công nợ của đơn giảm đúng 9 triệu
     assert.match(thuSau[2], /^\d{3}-\d{4}\/PT$/);
     assert.ok(/Đã thu/.test(await page.locator('tr[data-lr="1"]').textContent()) && await page.locator('tr[data-lr="1"] input').count() === 0, 'Đợt đã thu không sửa được');
     // Nhắc đợt quá hạn
     await page.locator('tr[data-lr="0"] [data-act="lich-nhac"]').click();
     await page.waitForSelector('#modal [data-tin]');
     const tin = await page.inputValue('#modal [data-tin]');
-    assert.ok(/Kỳ 1\/3/.test(tin) && /đã quá hạn 1 ngày/.test(tin) && /9\.096\.666 đồng/.test(tin), tin);
+    assert.ok(/Kỳ 1\/3/.test(tin) && /đã quá hạn 1 ngày/.test(tin) && /9\.063\.333 đồng/.test(tin), tin);
     await page.keyboard.press('Escape');
     // Màn hình Lịch thanh toán: thu ngay từ danh sách
     await page.click('#nav a[data-go="hdlich"]');

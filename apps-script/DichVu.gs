@@ -383,7 +383,10 @@ function traHang_(token, o) {
     });
   }
   const conLai = moi.filter(l => l.SoLuong !== 0), huy = !conLai.some(l => l.SoLuong > 0);
-  const cong = conLai.reduce((s, l) => s + Math.round(l.SoLuong * (+l.DonGia || 0)), 0), giam = Math.min(Math.max(0, cong), +dh.GiamGia || 0);
+  // Giảm giá cả đơn chia theo tiền hàng: trả món nào thì bớt phần giảm giá của món đó (giảm 600k trên máy 30tr + ốp 500k, trả máy thì ốp không thành 0 đ)
+  const tienBan = ls => ls.reduce((s, l) => s + (l.SoLuong > 0 ? Math.round(l.SoLuong * (+l.DonGia || 0)) : 0), 0), banCu = tienBan(cu.map(l => ({ SoLuong: +l.SoLuong || 0, DonGia: l.DonGia })));
+  const cong = conLai.reduce((s, l) => s + Math.round(l.SoLuong * (+l.DonGia || 0)), 0);
+  const giam = Math.min(Math.max(0, cong), banCu > 0 ? Math.round((+dh.GiamGia || 0) * tienBan(conLai) / banCu) : 0);
   const tongMoi = huy ? 0 : (cong - giam) + Math.round((cong - giam) * (+dh.VAT || 0) / 100);
   if (tongMoi < 0) throw new Error('Phần đơn còn lại nhỏ hơn giá máy cũ đã trừ: khách trả cả máy thì cửa hàng trả lại máy cũ.');
   const daThu = readTable_('ThuTien').filter(p => String(p.SoDH) === String(dh.SoDH)).reduce((s, p) => s + (+p.SoTien || 0), 0);
@@ -400,7 +403,7 @@ function traHang_(token, o) {
     if (coMa.length) pk = luuChungTu(token, 'NK', { Ngay: ngay, SoDH: dh.SoDH, DoiTac: dh.TenKH, GhiChu: 'Khách trả hàng · đơn ' + dh.SoDH + (ghiChu ? ' · ' + ghiChu : ''), lines: coMa }).doc;
     if (mayTra.length) pkCu = ghiThuCu_(() => luuChungTu(token, 'XK', { Ngay: ngay, DoiTac: dh.TenKH, GhiChu: 'Trả lại máy cũ · đơn ' + dh.SoDH,
       lines: mayTra.map(m => ({ MaHH: m.MaHH, TenHang: m.TenHang, Model: m.Model, DVT: m.DVT, SoLuong: 1, IMEI: m.IMEI })) }).doc);
-    const ghiDon = Object.assign({}, dh, huy ? { TrangThai: 'Hủy', GhiChu: [dh.GhiChu, 'Khách trả hết hàng ' + ngay].filter(Boolean).join(' · ') } : {});
+    const ghiDon = Object.assign({}, dh, huy ? { TrangThai: 'Hủy', GhiChu: [dh.GhiChu, 'Khách trả hết hàng ' + ngay].filter(Boolean).join(' · ') } : { GiamGia: giam });
     // trả hết: đơn hủy giữ các dòng đã bán để tra lại, bỏ dòng máy cũ (đã trả lại khách) để khôi phục đơn không làm sống lại máy cũ
     don = ghiThuCu_(() => luuChungTu(token, 'DH', Object.assign(ghiDon, { lines: (huy ? cu.filter(l => !(+l.SoLuong < 0)) : conLai).map(l => { const x = Object.assign({}, l); delete x.SoDH; return x; }) })).doc);
     if (hoan > 0) {

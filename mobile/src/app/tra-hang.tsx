@@ -1,12 +1,13 @@
 // Khách trả máy: máy (IMEI) của một đơn nhập lại kho, đơn giảm theo (trả hết thì hủy đơn), trả lại tiền cho khách nếu đã thu nhiều hơn.
 // Mở từ thẻ máy trong hồ sơ khách / kết quả tra bảo hành. Đổi máy = khách trả máy này rồi bán máy khác.
 // Đơn lên đời (có máy cũ trừ vào đơn): chỉ trả trong 7 ngày kể từ ngày bán, và cửa hàng trả lại khách đúng máy cũ đã thu.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../lib/auth';
+import { taoMaGhi } from '../lib/ghiMotLan';
 import type { CauHinh } from '../lib/api';
 import { ngay, tien } from '../lib/dinhDang';
 import { docTien, soTienNhap } from '../lib/gioHang';
@@ -25,7 +26,8 @@ type KetQua = { SoDH: string; TrangThai: string; TongCong: number; SoPK: string;
 
 export default function TraHangMan() {
   const p = useLocalSearchParams<{ don: string; ma: string; ten: string; imei: string; kh?: string; tenKH?: string }>();
-  const { goi } = useAuth();
+  const { goi, goiGhi } = useAuth();
+  const maGhi = useRef(''); // mã lần gửi: bấm lại sau lỗi mạng không nhận trả / trả tiền lần hai
   const ch = useDuLieu<CauHinh>('cauHinhMay', []).du;
   const dong = [{ MaHH: p.ma, TenHang: p.ten, SoLuong: 1, IMEI: p.imei }];
   const [xem, setXem] = useState<XemTruoc | null>(null), [hoan, setHoan] = useState<number | null>(null), [ht, setHt] = useState(''), [ghiChu, setGhiChu] = useState('');
@@ -37,7 +39,9 @@ export default function TraHangMan() {
   const nhan = async () => {
     setLoi(''); setDang(true);
     try {
-      setXong(await goi<KetQua>('traHang', { SoDH: p.don, lines: dong, hoan: { SoTien: soHoan, HinhThuc: hinhThuc }, GhiChu: ghiChu.trim() }));
+      if (!maGhi.current) maGhi.current = taoMaGhi();
+      setXong(await goiGhi<KetQua>(maGhi.current, 'traHang', { SoDH: p.don, lines: dong, hoan: { SoTien: soHoan, HinhThuc: hinhThuc }, GhiChu: ghiChu.trim() }));
+      maGhi.current = '';
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     } catch (e) { setLoi((e as Error).message); } finally { setDang(false); }
   };
