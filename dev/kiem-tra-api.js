@@ -965,7 +965,7 @@ const doiNgay = (bang, so, ngay) => { const sh = sheets['PS_' + bang], c = sh.ro
   G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'Khách bán máy', lines: [{ MaHH: h8, TenHang: 'iPhone 8 thử giá vốn (máy cũ)', SoLuong: 1, GiaVon: 10000000, IMEI: '359222000000002' }] });
   const d3 = G.luuChungTu(t, 'DH', { Ngay: today, MaKH: kh.MaKH, TenKH: kh.TenKH, lines: [{ MaHH: h8, TenHang: 'iPhone 8 thử giá vốn (máy cũ)', SoLuong: 1, DonGia: 11000000 }] }); // chưa giao: bình quân
   assert.strictEqual(G.giaVonBQ_()[h8], 10000000);
-  assert.strictEqual(d3.giaVonDon[0].von, 10000000);
+  assert.strictEqual(G.layChungTu(t, 'DH', d3.doc.SoDH).giaVon[0].von, 10000000); // web mở đơn: lãi gộp theo cùng giá vốn
   assert.strictEqual(G.loiNhuan(t, today, today).theoDon.find(x => x.SoDH === d3.doc.SoDH).giaVon, 10000000);
 }
 
