@@ -107,22 +107,36 @@ function luuSoDuDau(token, o) {
   });
 }
 
-/** Giá vốn bình quân mỗi mặt hàng: { MaHH: giá } từ các dòng phiếu nhập có giá (bỏ máy cũ thu đổi đã trả lại khách). Mặt hàng chưa nhập có giá thì không có trong bảng. */
-function giaVonBQ_(phieuKho, pkCT) {
-  const pk = {}, ct = pkCT || readTable_('PhieuKhoCT'), traLai = {}, t = {};
+/**
+ * Các dòng phiếu nhập có giá (giá > 0, số lượng > 0), bỏ máy cũ thu đổi đã trả lại khách (khách trả máy mới: phiếu xuất
+ * "Trả lại máy cũ · đơn …" đúng các IMEI của phiếu nhập "Thu cũ đổi mới · đơn …"), vì máy đó không còn là hàng của cửa hàng.
+ * Trả { pk: { SoPK: phiếu }, ct: dòng phiếu kho, ds: [{ p, l, sl, gv, im }] }.
+ */
+function nhapCoGia_(phieuKho, pkCT) {
+  const pk = {}, ct = pkCT || readTable_('PhieuKhoCT'), traLai = {}; // 'SoDH|IMEI gọn'
   (phieuKho || readTable_('PhieuKho')).forEach(p => { pk[p.SoPK] = p; });
   const soDon = (p, re) => { const m = re.exec(String(p.GhiChu || '')); return m ? m[1] : ''; };
   ct.forEach(l => {
     const p = pk[l.SoPK], so = p && p.Loai === 'Xuất' ? soDon(p, /^Trả lại máy cũ · đơn (\S+)/) : '';
     if (so) imeiList_(l.IMEI).forEach(x => { traLai[so + '|' + gonMa_(x)] = 1; });
   });
+  const ds = [];
   ct.forEach(l => {
     const p = pk[l.SoPK], gv = +l.GiaVon || 0, sl = +l.SoLuong || 0;
     if (!p || p.Loai !== 'Nhập' || !l.MaHH || gv <= 0 || sl <= 0) return;
     const im = imeiList_(l.IMEI), so = laNhapThuCu_(p) ? soDon(p, /^Thu cũ đổi mới · đơn (\S+)/) : '';
     if (so && im.length && im.every(x => traLai[so + '|' + gonMa_(x)])) return;
-    const x = t[l.MaHH] || (t[l.MaHH] = { sl: 0, tien: 0 });
-    x.sl += sl; x.tien += sl * gv;
+    ds.push({ p: p, l: l, sl: sl, gv: gv, im: im });
+  });
+  return { pk: pk, ct: ct, ds: ds };
+}
+
+/** Giá vốn bình quân mỗi mặt hàng: { MaHH: giá } từ các dòng phiếu nhập có giá (nhapCoGia_). Mặt hàng chưa nhập có giá thì không có trong bảng. */
+function giaVonBQ_(phieuKho, pkCT) {
+  const t = {};
+  nhapCoGia_(phieuKho, pkCT).ds.forEach(n => {
+    const x = t[n.l.MaHH] || (t[n.l.MaHH] = { sl: 0, tien: 0 });
+    x.sl += n.sl; x.tien += n.sl * n.gv;
   });
   readTable_('PhieuChi').forEach(c => { const x = c.Loai === LAM_LAI_MAY && t[c.MaHH]; if (x) x.tien += +c.SoTien || 0; }); // chi phí làm lại máy vào giá vốn
   const kq = {};
@@ -140,23 +154,10 @@ function giaVonBQ_(phieuKho, pkCT) {
  * Trả { mayDon(soDH) → { MaHH: [giá vốn từng máy khách đang giữ, null = máy chưa có giá nhập] }, bq(MaHH, ngay) → giá | undefined }.
  */
 function giaVonLai_() {
-  const pk = {}, ct = readTable_('PhieuKhoCT');
-  readTable_('PhieuKho').forEach(p => { pk[p.SoPK] = p; });
+  const nc = nhapCoGia_(), pk = nc.pk, ct = nc.ct;
   const ngay10 = v => String(v == null ? '' : v).slice(0, 10), khoa = p => ngay10(p.Ngay) + String(p.NgayTao || '');
   const soDon = (p, re) => { const m = re.exec(String(p.GhiChu || '')); return m ? m[1] : ''; };
-  const traLai = {}; // 'SoDH|IMEI gọn' của máy cũ đã trả lại khách (phiếu xuất "Trả lại máy cũ · đơn …")
-  ct.forEach(l => {
-    const p = pk[l.SoPK], so = p && p.Loai === 'Xuất' ? soDon(p, /^Trả lại máy cũ · đơn (\S+)/) : '';
-    if (so) imeiList_(l.IMEI).forEach(x => { traLai[so + '|' + gonMa_(x)] = 1; });
-  });
-  const nhap = [];
-  ct.forEach(l => {
-    const p = pk[l.SoPK], gv = +l.GiaVon || 0, sl = +l.SoLuong || 0;
-    if (!p || p.Loai !== 'Nhập' || !l.MaHH || gv <= 0 || sl <= 0) return;
-    const im = imeiList_(l.IMEI), so = laNhapThuCu_(p) ? soDon(p, /^Thu cũ đổi mới · đơn (\S+)/) : '';
-    if (so && im.length && im.every(x => traLai[so + '|' + gonMa_(x)])) return;
-    nhap.push({ k: khoa(p), ngay: ngay10(p.Ngay), MaHH: l.MaHH, sl: sl, tien: sl * gv, gv: gv, im: im });
-  });
+  const nhap = nc.ds.map(n => ({ k: khoa(n.p), ngay: ngay10(n.p.Ngay), MaHH: n.l.MaHH, sl: n.sl, tien: n.sl * n.gv, gv: n.gv, im: n.im }));
   const chi = readTable_('PhieuChi').filter(c => c.Loai === LAM_LAI_MAY && c.MaHH && +c.SoTien > 0)
     .map(c => ({ k: ngay10(c.Ngay) + String(c.NgayTao || ''), ngay: ngay10(c.Ngay), MaHH: c.MaHH, sl: 0, tien: +c.SoTien, may: gonMa_(c.IMEI) }));
   const theoGio = (a, b) => (a.k < b.k ? -1 : a.k > b.k ? 1 : 0);

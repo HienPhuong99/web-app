@@ -2133,7 +2133,7 @@ async function saveDoc(override, ve) {
     const goc = {};
     r.doc.lines.forEach(l => { if (l.MaHH) goc[l.MaHH] = (goc[l.MaHH] || 0) + (+l.SoLuong || 0); });
     S.doc = Object.assign({}, head, { lines: r.doc.lines });
-    S.extra = Object.assign({}, S.extra, { goc }, r.giaVonDon ? { giaVon: r.giaVonDon } : {});
+    S.extra = Object.assign({}, S.extra, { goc });
     S.dirty = false; ensureTail();
     toast(`Đã lưu ${c.ten.toLowerCase()} ${head[c.key]}.`);
     const dh = L === 'XK' && head.SoDH && S.donHang.find(x => x.SoDH === head.SoDH); // phiếu giao hàng: về đơn gốc để thu tiền tiếp

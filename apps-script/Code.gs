@@ -651,7 +651,7 @@ function luuChungTu(token, loai, doc) {
   }
   head.NgaySua = now_();
   if (!head[key]) { head.NguoiTao = user.ten; head.NgayTao = head.NgaySua; }
-  return withLock_(() => {
+  const kq = withLock_(() => {
     const old = head[key] ? findObj_(c.head, head[key]) : null;
     if (imeis.length) kiemIMEI_(c.loai, head[key], imeis);
     upsert_(c.head, head, () => nextSo_(c.head, c.suffix || SHOPS[CUR_SHOP].soBG, head.Ngay), ['NguoiTao', 'NgayTao']);
@@ -667,9 +667,10 @@ function luuChungTu(token, loai, doc) {
       c.loai ? [head.DoiTac, head.SoDH && 'đơn ' + head.SoDH].filter(Boolean).join(' · ') : head.TenKH + ' · ' + head.TongCong + ' đ');
     head.lines = lines;
     if (c.loai) Object.assign(head, tomTatPK_(lines)); // cho danh sách phiếu kho (không phải cột trong Sheet)
-    return { doc: head, ton: c.loai ? tonKho_() : null, donHang: donHang, giaVon: c.loai === 'Nhập' && user.vaiTro === 'admin' ? giaVonBQ_() : null,
-      giaVonDon: loai === 'DH' && user.vaiTro === 'admin' ? giaVonDon_(head, lines) : null };
+    return { doc: head, donHang: donHang };
   });
+  // Tồn kho, giá nhập bình quân: đọc sau khi nhả khóa để các lần ghi khác không phải chờ. Lãi gộp từng dòng của đơn tính khi mở đơn (layChungTu).
+  return Object.assign(kq, { ton: c.loai ? tonKho_() : null, giaVon: c.loai === 'Nhập' && user.vaiTro === 'admin' ? giaVonBQ_() : null });
 }
 
 function xoaChungTu(token, loai, so) {
