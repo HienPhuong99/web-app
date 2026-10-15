@@ -120,6 +120,20 @@ Dán code mới vào Apps Script → Lưu → Triển khai → Quản lý các l
 **Một lệnh:** `node dev/trien-khai.js` chạy kiểm tra, rồi `clasp push`, rồi tạo bản triển khai mới giữ nguyên link (dừng nếu một bước lỗi). Làm tay thì như sau.
 Máy này đã cài sẵn **clasp** (công cụ dòng lệnh của Google, đã đăng nhập), nên trong thư mục `D:\web-app` chỉ cần 2 lệnh: `clasp push` (thay bước dán code) rồi `clasp create-deployment -i AKfycbx66egogcD-sQxv48gLIjCJqeIIEeD_jwkIdmSYAKRsrHKjF_2hV1SMfa-yHRMTt02Z` (thay bước triển khai lại, link giữ nguyên).
 
+### Tự triển khai khi gộp PR (GitHub Actions)
+
+Mỗi khi `main` có thay đổi trong `apps-script/`, GitHub tự chạy `node dev/trien-khai.js` (kiểm tra → `clasp push` → bản triển khai mới, link giữ nguyên). Mỗi PR cũng tự chạy `node dev/kiem-tra.js` (thẻ *Kiểm tra*). Cài **một lần**:
+
+1. Trên máy đã đăng nhập clasp, mở PowerShell và chép thông tin đăng nhập: `Get-Content $HOME\.clasprc.json -Raw | Set-Clipboard` (chưa có file thì chạy `clasp login` trước).
+2. Trên GitHub: repo **web-app → Settings → Secrets and variables → Actions → New repository secret**. Name: `CLASPRC_JSON`, Secret: dán (Ctrl+V) → **Add secret**.
+3. Lần đầu: tab **Actions → Triển khai Apps Script → Run workflow** để triển khai ngay và thấy chạy được (dấu ✓ xanh).
+
+Lưu ý:
+- File `.clasprc.json` cho quyền sửa mã Apps Script của tài khoản Google này: chỉ dán vào Secret của GitHub (GitHub mã hóa, không ai đọc lại được, kể cả bạn), không gửi qua Zalo/email.
+- **Không chạy `clasp logout`** trên máy: lệnh này có thể thu hồi thông tin đăng nhập và GitHub không triển khai được nữa. Đổi mật khẩu Google hoặc thu hồi quyền clasp ở *myaccount.google.com → Bảo mật* cũng vậy: khi đó chạy lại `clasp login` rồi làm lại bước 1–2.
+- Triển khai lỗi (dấu ✗ đỏ ở tab Actions) thì web vẫn chạy bản cũ; bấm vào lần chạy để xem bước nào lỗi. Vẫn triển khai tay được bằng `node dev/trien-khai.js`.
+- Bản có quyền Google mới (hiếm) vẫn phải chạy `caiDat` một lần trong Apps Script để bấm **Cho phép**, như ghi chú cuối lệnh triển khai.
+
 Tên cửa hàng, thông tin in trên chứng từ, mã số thuế, VAT mặc định (0% vì giá iPhone đã gồm VAT), thời hạn bảo hành, hình thức thu tiền, tài khoản nhận chuyển khoản: quản trị sửa ngay trong app ở **Cài đặt → Thông tin cửa hàng → Sửa** (lưu ở trang `CaiDat`). Giá trị mặc định và màu giao diện nằm ở đầu tệp `Code.gs`, mục `SHOPS`.
 
 ## Hợp đồng (từ mẫu Google Docs)

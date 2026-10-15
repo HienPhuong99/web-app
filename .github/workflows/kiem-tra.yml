@@ -1,0 +1,22 @@
+# Chạy bộ kiểm tra máy chủ (node dev/kiem-tra.js) cho mỗi PR, để thấy lỗi trước khi gộp và triển khai.
+name: Kiểm tra
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  kiem-tra:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # dev/kiem-tra-du-lieu-thu.js đọc bản cũ của DuLieuThu.gs từ lịch sử git
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: node dev/kiem-tra.js
