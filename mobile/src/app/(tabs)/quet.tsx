@@ -18,10 +18,14 @@ export default function QuetMan() {
   const { goi } = useAuth();
   const [dangXem, setDangXem] = useState(false);
   const [q, setQ] = useState(''), [kq, setKq] = useState<TraBaoHanhKQ | null>(null), [loi, setLoi] = useState(''), [dangTra, setDangTra] = useState(false);
-  const khoa = useRef(false); // đang xử lý một mã: bỏ qua các lần quét trùng liên tiếp
+  const khoa = useRef(false), maDaTra = useRef(''); // đang xử lý một mã: bỏ qua các lần quét trùng liên tiếp; maDaTra: làm mới khi quay về từ màn trả hàng / nhận sửa
 
-  // Camera chỉ bật khi đang ở tab này (máy chỉ chạy được một camera và đỡ tốn pin)
-  useFocusEffect(useCallback(() => { setDangXem(true); return () => setDangXem(false); }, []));
+  // Camera chỉ bật khi đang ở tab này; đang hiện kết quả tra thì làm mới khi quay lại (máy vừa nhận trả sẽ biến mất, phiếu sửa vừa lập cập nhật)
+  useFocusEffect(useCallback(() => {
+    setDangXem(true);
+    if (maDaTra.current) goi<TraBaoHanhKQ>('traBaoHanh', maDaTra.current).then(setKq).catch(() => {});
+    return () => setDangXem(false);
+  }, [goi]));
 
   const tra = async (raw: string) => {
     const ma = chuanHoaTra(raw); // tên khách giữ dấu cách giữa các từ
@@ -29,8 +33,8 @@ export default function QuetMan() {
     setQ(ma); setLoi('');
     if (ma.length < 3) { setLoi('Nhập ít nhất 3 ký tự: IMEI/serial, số điện thoại hoặc tên khách.'); khoa.current = false; return; }
     setDangTra(true);
-    try { setKq(await goi<TraBaoHanhKQ>('traBaoHanh', ma)); }
-    catch (e) { setLoi((e as Error).message); setKq(null); }
+    try { const r = await goi<TraBaoHanhKQ>('traBaoHanh', ma); maDaTra.current = ma; setKq(r); }
+    catch (e) { maDaTra.current = ''; setLoi((e as Error).message); setKq(null); }
     finally { setDangTra(false); }
   };
 
@@ -43,7 +47,7 @@ export default function QuetMan() {
     tra(ma);
   };
 
-  const quetTiep = () => { setKq(null); setLoi(''); setQ(''); khoa.current = false; };
+  const quetTiep = () => { maDaTra.current = ''; setKq(null); setLoi(''); setQ(''); khoa.current = false; };
   const hienCamera = !kq && !dangTra && dangXem;
   const goiY = q && !(kq && kq.tong && kq.q === q) ? goiYMa(q) : ''; // đã tìm thấy máy thì không cần cảnh báo mã
 

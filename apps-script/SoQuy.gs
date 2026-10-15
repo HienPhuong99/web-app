@@ -107,13 +107,20 @@ function luuSoDuDau(token, o) {
   });
 }
 
-/** Giá vốn bình quân mỗi mặt hàng: { MaHH: giá } từ các dòng phiếu nhập có giá. Mặt hàng chưa nhập có giá thì không có trong bảng. */
+/** Giá vốn bình quân mỗi mặt hàng: { MaHH: giá } từ các dòng phiếu nhập có giá (bỏ máy cũ thu đổi đã trả lại khách). Mặt hàng chưa nhập có giá thì không có trong bảng. */
 function giaVonBQ_(phieuKho, pkCT) {
-  const nhap = {}, t = {};
-  (phieuKho || readTable_('PhieuKho')).forEach(p => { if (p.Loai === 'Nhập') nhap[p.SoPK] = true; });
-  (pkCT || readTable_('PhieuKhoCT')).forEach(l => {
-    const gv = +l.GiaVon || 0, sl = +l.SoLuong || 0;
-    if (!nhap[l.SoPK] || !l.MaHH || gv <= 0 || sl <= 0) return;
+  const pk = {}, ct = pkCT || readTable_('PhieuKhoCT'), traLai = {}, t = {};
+  (phieuKho || readTable_('PhieuKho')).forEach(p => { pk[p.SoPK] = p; });
+  const soDon = (p, re) => { const m = re.exec(String(p.GhiChu || '')); return m ? m[1] : ''; };
+  ct.forEach(l => {
+    const p = pk[l.SoPK], so = p && p.Loai === 'Xuất' ? soDon(p, /^Trả lại máy cũ · đơn (\S+)/) : '';
+    if (so) imeiList_(l.IMEI).forEach(x => { traLai[so + '|' + gonMa_(x)] = 1; });
+  });
+  ct.forEach(l => {
+    const p = pk[l.SoPK], gv = +l.GiaVon || 0, sl = +l.SoLuong || 0;
+    if (!p || p.Loai !== 'Nhập' || !l.MaHH || gv <= 0 || sl <= 0) return;
+    const im = imeiList_(l.IMEI), so = laNhapThuCu_(p) ? soDon(p, /^Thu cũ đổi mới · đơn (\S+)/) : '';
+    if (so && im.length && im.every(x => traLai[so + '|' + gonMa_(x)])) return;
     const x = t[l.MaHH] || (t[l.MaHH] = { sl: 0, tien: 0 });
     x.sl += sl; x.tien += sl * gv;
   });
@@ -212,7 +219,8 @@ function giaVonDong_(g, mayDon, ngay, l) {
 /** Giá vốn từng dòng của một đơn đã lưu (web hiện lãi gộp khi mở đơn) */
 function giaVonDon_(dh, lines) {
   const g = giaVonLai_(), m = g.mayDon(dh.SoDH), ngay = String(dh.Ngay).slice(0, 10);
-  return lines.map(l => (+l.SoLuong < 0 ? { von: +l.ThanhTien || 0, du: true } : giaVonDong_(g, m, ngay, l)));
+  return lines.map(l => Object.assign({ MaHH: l.MaHH || '', SoLuong: +l.SoLuong || 0 },
+    +l.SoLuong < 0 ? { von: +l.ThanhTien || 0, du: true } : giaVonDong_(g, m, ngay, l)));
 }
 
 // ===== Phiếu chi =====

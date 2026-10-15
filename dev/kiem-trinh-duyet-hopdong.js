@@ -198,6 +198,10 @@ module.exports = BUOC => {
     assert.match(await page.inputValue('tr[data-i="0"] [data-f="TenHang"]'), /iPhone 15/);
     assert.strictEqual(await page.inputValue('tr[data-i="0"] [data-f="IMEI"]'), '358900000000011');
     assert.strictEqual(await page.inputValue('tr[data-i="1"] [data-f="TenHang"]'), 'Giảm giá');
+    await page.click('tr[data-i="1"] [data-f="DonGia"]'); // bấm vào rồi rời ô đơn giá âm: vẫn giữ dấu trừ
+    assert.strictEqual(await page.inputValue('tr[data-i="1"] [data-f="DonGia"]'), '-1000000');
+    await page.click('input[data-h="TenDN"]');
+    assert.strictEqual(await page.inputValue('tr[data-i="1"] [data-f="DonGia"]'), '-1.000.000');
     assert.strictEqual(so(await page.locator('[data-t="tong"]').textContent()), '36190000'); // (3 x 11.300.000 − 1.000.000) + 10%: bằng tổng đơn
     await luu(page);
     await page.waitForFunction(() => /Hợp đồng \d{3}-\d{4}\/HD/.test(document.querySelector('#title').textContent), null, { timeout: 8000 });

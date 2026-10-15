@@ -667,7 +667,8 @@ function luuChungTu(token, loai, doc) {
       c.loai ? [head.DoiTac, head.SoDH && 'đơn ' + head.SoDH].filter(Boolean).join(' · ') : head.TenKH + ' · ' + head.TongCong + ' đ');
     head.lines = lines;
     if (c.loai) Object.assign(head, tomTatPK_(lines)); // cho danh sách phiếu kho (không phải cột trong Sheet)
-    return { doc: head, ton: c.loai ? tonKho_() : null, donHang: donHang, giaVon: c.loai === 'Nhập' && user.vaiTro === 'admin' ? giaVonBQ_() : null };
+    return { doc: head, ton: c.loai ? tonKho_() : null, donHang: donHang, giaVon: c.loai === 'Nhập' && user.vaiTro === 'admin' ? giaVonBQ_() : null,
+      giaVonDon: loai === 'DH' && user.vaiTro === 'admin' ? giaVonDon_(head, lines) : null };
   });
 }
 

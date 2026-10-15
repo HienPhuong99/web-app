@@ -902,9 +902,10 @@ function hienGoiY(t) {
 document.addEventListener('focusin', e => hienGoiY(e.target));
 document.addEventListener('input', e => hienGoiY(e.target));
 
-// Ô tiền: bỏ dấu chấm khi sửa (chọn sẵn cả số để gõ số mới là thay luôn), hiện dấu chấm khi rời ô
-document.addEventListener('focusin', e => { const t = e.target; if (t.classList && t.classList.contains('money')) { t.value = parseMoney(t.value); if (!t.readOnly) t.select(); } });
-document.addEventListener('focusout', e => { if (e.target.classList && e.target.classList.contains('money')) e.target.value = money(parseMoney(e.target.value)); });
+// Ô tiền: bỏ dấu chấm khi sửa (chọn sẵn cả số để gõ số mới là thay luôn), hiện dấu chấm khi rời ô; ô có data-am cho phép số âm (dòng giảm giá hợp đồng)
+const parseTienO = t => { const v = parseMoney(t.value); return v !== '' && t.dataset && t.dataset.am !== undefined && /^\s*-/.test(t.value) ? -v : v; };
+document.addEventListener('focusin', e => { const t = e.target; if (t.classList && t.classList.contains('money')) { t.value = parseTienO(t); if (!t.readOnly) t.select(); } });
+document.addEventListener('focusout', e => { if (e.target.classList && e.target.classList.contains('money')) e.target.value = money(parseTienO(e.target)); });
 
 // ===================== Danh sách dùng chung =====================
 // cfg: {id, ph, cols:[{t,k,f,cls}], data(), text(r), filters:[{id, options|type:'dates', def, t}], filter(r,f), sorts:[[id, nhãn, khoá(r), chiều]], open(r), foot(rows)}
@@ -2132,7 +2133,7 @@ async function saveDoc(override, ve) {
     const goc = {};
     r.doc.lines.forEach(l => { if (l.MaHH) goc[l.MaHH] = (goc[l.MaHH] || 0) + (+l.SoLuong || 0); });
     S.doc = Object.assign({}, head, { lines: r.doc.lines });
-    S.extra = Object.assign({}, S.extra, { goc });
+    S.extra = Object.assign({}, S.extra, { goc }, r.giaVonDon ? { giaVon: r.giaVonDon } : {});
     S.dirty = false; ensureTail();
     toast(`Đã lưu ${c.ten.toLowerCase()} ${head[c.key]}.`);
     const dh = L === 'XK' && head.SoDH && S.donHang.find(x => x.SoDH === head.SoDH); // phiếu giao hàng: về đơn gốc để thu tiền tiếp
@@ -2266,6 +2267,12 @@ function khachSource(q) {
   return xepTim(S.khach, q, khachText, 30).map(k => ({ item: k,
     html: `<b>${esc(k.TenKH)}</b><small>${esc([k.MaKH, k.SDT, k.DiaChi].filter(Boolean).join(' · '))}</small>` }));
 }
+function posPicker() {
+  const box = $('#picker'), r = P.input.getBoundingClientRect(), w = Math.min(Math.max(r.width, 380), innerWidth - 8);
+  box.style.width = w + 'px';
+  box.style.left = Math.max(4, Math.min(r.left, innerWidth - w - 4)) + 'px';
+  box.style.top = (r.bottom + box.offsetHeight + 4 > innerHeight && r.top > box.offsetHeight ? r.top - box.offsetHeight - 4 : r.bottom + 4) + 'px';
+}
 function showPicker(input, source, onPick, rong) { // rong: hiện cả khi ô trống (vd danh sách máy của mặt hàng)
   const box = $('#picker');
   P.items = input.value.trim() || rong ? source(input.value) : [];
@@ -2273,10 +2280,7 @@ function showPicker(input, source, onPick, rong) { // rong: hiện cả khi ô t
   if (!P.items.length) return hidePicker();
   box.innerHTML = P.items.map((it, i) => `<div data-i="${i}" class="${i ? '' : 'on'}">${it.html}</div>`).join('');
   box.classList.remove('hidden');
-  const r = input.getBoundingClientRect(), w = Math.min(Math.max(r.width, 380), innerWidth - 8);
-  box.style.width = w + 'px';
-  box.style.left = Math.max(4, Math.min(r.left, innerWidth - w - 4)) + 'px';
-  box.style.top = (r.bottom + box.offsetHeight + 4 > innerHeight && r.top > box.offsetHeight ? r.top - box.offsetHeight - 4 : r.bottom + 4) + 'px';
+  posPicker();
 }
 function hidePicker() { $('#picker').classList.add('hidden'); P.input = null; }
 function choose(i) { const it = P.items[i], fn = P.onPick; hidePicker(); if (it) fn(it.item); }
@@ -2292,7 +2296,7 @@ document.addEventListener('keydown', e => {
 }, true);
 $('#picker').addEventListener('mousedown', e => { const d = e.target.closest('[data-i]'); if (d) { e.preventDefault(); choose(+d.dataset.i); } });
 document.addEventListener('focusout', e => { if (e.target === P.input) setTimeout(() => { if (document.activeElement !== P.input) hidePicker(); }, 150); });
-window.addEventListener('scroll', e => { if (P.input && e.target !== $('#picker')) hidePicker(); }, { capture: true, passive: true });
+window.addEventListener('scroll', e => { if (P.input && e.target !== $('#picker') && e.target !== P.input) (P.input.isConnected ? posPicker : hidePicker)(); }, { capture: true, passive: true });
 
 // ===================== Hợp đồng =====================
 // Bên A = khách hàng, bên B = cửa hàng. Trạng thái lưu ở máy chủ; "sắp hết hạn" / "đã hết hạn" tính từ ngày hết hạn.
@@ -2816,7 +2820,7 @@ function drawHDLines(el) {
     <td><input data-f="IMEI" value="${esc(l.IMEI)}"${ro}${i === 0 ? ' placeholder="Mỗi máy một mã, cách nhau dấu phẩy"' : ''} aria-label="IMEI hoặc serial dòng ${i + 1}"></td>
     <td><input data-f="DVT" value="${esc(l.DVT)}"${ro}></td>
     <td><input data-f="SoLuong" class="num" type="number" min="0" step="any" value="${esc(l.SoLuong)}"${ro}></td>
-    <td><input data-f="DonGia" class="num money" inputmode="numeric" value="${money(l.DonGia)}"${ro} aria-label="Đơn giá dòng ${i + 1}"></td>
+    <td><input data-f="DonGia" data-am class="num money" inputmode="numeric" value="${money(l.DonGia)}"${ro} aria-label="Đơn giá dòng ${i + 1}"></td>
     <td class="c num" data-c="ThanhTien">${l.TenHang ? money(lineTotal(l)) : ''}</td>
     <td>${khoa ? '' : `<button class="icon-btn" data-act="rm" data-i="${i}" title="Xóa dòng" aria-label="Xóa dòng ${i + 1}">${icon('x')}</button>`}</td></tr>`).join('');
   ganNhanCot($('tbody', el));
@@ -2848,7 +2852,7 @@ function onHDInput(el, t) {
   const tr = t.closest('tr[data-i]'), f = t.dataset.f;
   if (!tr || !f) return;
   const i = +tr.dataset.i, l = d.lines[i];
-  if (f === 'DonGia') { const v = parseMoney(t.value); l.DonGia = v !== '' && /^\s*-/.test(t.value) ? -v : v; } // dòng giảm giá: đơn giá âm
+  if (f === 'DonGia') l.DonGia = parseTienO(t); // dòng giảm giá: đơn giá âm
   else if (f === 'SoLuong') l.SoLuong = t.value === '' ? '' : +t.value;
   else l[f] = t.value;
   if (f === 'IMEI') { // số lượng đếm theo số mã đã nhập
@@ -3365,7 +3369,10 @@ function openSuaChua(p) {
         if (moi && confirm('In phiếu nhận máy để đưa khách?')) printHtml(suaPrintHtml(kq));
       }) }]),
       ...(moi ? [] : [{ t: 'In phiếu nhận', ic: 'print', fn: () => printHtml(suaPrintHtml(p)) }]),
-      ...(moi || daTra ? [] : [{ t: 'Trả máy cho khách', ic: 'check', cls: 'soft', fn: () => openTraMay(p) }]),
+      ...(moi || daTra ? [] : [{ t: 'Trả máy cho khách', ic: 'check', cls: 'soft', fn: m => {
+        const d = formData(m), dsLK = lk.map(l => ({ MaHH: l.MaHH, TenHang: l.TenHang, DVT: l.DVT || '', SoLuong: +l.SoLuong || 0 }));
+        openTraMay(Object.assign({}, p, d, { LinhKien: dsLK }), Object.assign({}, d, { LinhKien: dsLK.map(l => ({ MaHH: l.MaHH, SoLuong: l.SoLuong })) }));
+      } }]),
     ],
   });
   const veLK = () => {
@@ -3390,7 +3397,7 @@ function openSuaChua(p) {
   }
 }
 
-function openTraMay(p) {
+function openTraMay(p, phieu) {
   const hinhThuc = S.congTy.hinhThuc || ['Tiền mặt'];
   modal({
     title: 'Trả máy cho khách – ' + p.SoPN,
@@ -3403,7 +3410,7 @@ function openTraMay(p) {
     buttons: [{ t: 'Trả máy (F8)', ic: 'check', cls: 'primary', save: true, fn: run(async m => {
       const d = formData(m);
       if (!(d.ChiPhi > 0) && !confirm(lkSua(p).length ? 'Trả máy không tính phí? Linh kiện vẫn xuất kho (đơn dịch vụ 0 đ).' : 'Trả máy không tính phí?')) return;
-      const kq = await api('traMaySua', p.SoPN, { ChiPhi: d.ChiPhi || 0, KetQua: d.KetQua, thu: { SoTien: d.SoTien || 0, HinhThuc: d.HinhThuc } });
+      const kq = await api('traMaySua', p.SoPN, { phieu: phieu, ChiPhi: d.ChiPhi || 0, KetQua: d.KetQua, thu: { SoTien: d.SoTien || 0, HinhThuc: d.HinhThuc } });
       if (kq.don) await loadAll(); else luuSuaLocal(kq); // có đơn dịch vụ: tải lại đơn hàng, phiếu thu
       closeModal(); render(); toast(`Đã trả máy ${p.SoPN}${kq.don ? ' · đơn ' + kq.don.SoDH : ''}.`);
     }) }],
@@ -3459,11 +3466,12 @@ function openThuMayCu(d) {
 }
 
 // ===================== Tài chính: lãi gộp, sổ quỹ, phiếu chi, nợ nhà cung cấp =====================
-// Lãi gộp của một đơn (quản trị): tiền hàng chưa VAT − giá vốn. Đơn đã lưu, chưa sửa: giá vốn máy chủ tính như báo cáo lợi nhuận (máy có IMEI theo giá
-// nhập đích danh, hàng khác bình quân đến ngày bán); đang sửa thì ước theo giá nhập bình quân. Dòng dịch vụ (không mã hàng) không có giá vốn.
+// Lãi gộp của một đơn (quản trị): tiền hàng chưa VAT − giá vốn. Đơn đã lưu, chưa sửa dòng hàng: giá vốn máy chủ tính như báo cáo lợi nhuận (máy có IMEI theo giá
+// nhập đích danh, hàng khác bình quân đến ngày bán); đang sửa dòng hàng thì ước theo giá nhập bình quân. Dòng dịch vụ (không mã hàng) không có giá vốn.
 function laiDonHtml(d) {
   if (!isAdmin()) return '';
-  const ls = filled(d.lines), dt = sum(ls, lineTotal) - (+d.GiamGia || 0), gv = !S.dirty && S.extra.giaVon && S.extra.giaVon.length === ls.length ? S.extra.giaVon : null;
+  const ls = filled(d.lines), dt = sum(ls, lineTotal) - (+d.GiamGia || 0);
+  const gv = S.extra.giaVon && S.extra.giaVon.length === ls.length && ls.every((l, i) => (l.MaHH || '') === (S.extra.giaVon[i].MaHH || '') && (+l.SoLuong || 0) === (+S.extra.giaVon[i].SoLuong || 0)) ? S.extra.giaVon : null;
   const von = gv ? sum(gv, x => +x.von || 0) : sum(ls, l => +l.SoLuong < 0 ? lineTotal(l) : l.MaHH ? (+l.SoLuong || 0) * (S.giaVon[l.MaHH] || 0) : 0); // máy cũ thu lại: giá vốn = giá thu
   const thieu = gv ? ls.filter((l, i) => !gv[i].du) : ls.filter(l => l.MaHH && +l.SoLuong > 0 && !S.giaVon[l.MaHH]);
   return `<div class="card"><div class="card-h"><h3>Lãi gộp</h3></div><div class="card-b">

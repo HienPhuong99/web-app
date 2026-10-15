@@ -196,6 +196,7 @@ function luuSuaChua(token, p) {
 function traMaySua(token, soPN, o) {
   const user = user_(token);
   o = o || {};
+  if (o.phieu) luuSuaChua(token, Object.assign({}, o.phieu, { SoPN: soPN }));
   // Giữ phiếu trong khóa trước khi lập đơn: bấm hai lần / hai máy cùng trả không tạo hai đơn, hai phiếu thu
   const giu = 'traSua_' + CUR_SHOP + '_' + soPN;
   const r = withLock_(() => {
@@ -214,7 +215,7 @@ function giuCho_(khoa) {
 }
 function boGiu_(khoa) { try { CacheService.getScriptCache().remove(khoa); } catch (e) {} }
 function traMaySuaDaGiu_(token, user, soPN, o, r) {
-  const chiPhi = Math.max(0, Math.round(+(o.ChiPhi == null ? r.ChiPhi : o.ChiPhi) || 0)), lk = docLinhKien_(r.LinhKien);
+  const chiPhi = Math.max(0, Math.round(+(o.ChiPhi == null ? r.ChiPhi : o.ChiPhi) || 0)), lk = o.LinhKien == null ? docLinhKien_(r.LinhKien) : chuanLinhKien_(o.LinhKien);
   let don = null;
   if (chiPhi > 0 || lk.length) {
     if (!r.MaKH) throw new Error('Phiếu chưa có khách trong danh sách: không lập được đơn ' + (chiPhi ? 'thu tiền' : 'xuất linh kiện') + '.');
@@ -226,7 +227,8 @@ function traMaySuaDaGiu_(token, user, soPN, o, r) {
   }
   return withLock_(() => {
     const sh = sheet_('SuaChua'), row = findRow_(sh, soPN), cur = rowObj_(sh, row);
-    Object.assign(cur, { TrangThai: 'Đã trả khách', NgayTra: now_(), ChiPhi: chiPhi, KetQua: String(o.KetQua == null ? cur.KetQua || '' : o.KetQua).trim().slice(0, 500), SoDH: don ? don.SoDH : cur.SoDH || '', NgaySua: now_() });
+    Object.assign(cur, { TrangThai: 'Đã trả khách', NgayTra: now_(), ChiPhi: chiPhi, KetQua: String(o.KetQua == null ? cur.KetQua || '' : o.KetQua).trim().slice(0, 500),
+      LinhKien: lk.length ? JSON.stringify(lk) : '', SoDH: don ? don.SoDH : cur.SoDH || '', NgaySua: now_() });
     writeRow_(sh, row, cur);
     log_(user, 'Trả máy cho khách', soPN, [cur.TenKH, cur.TenMay, chiPhi ? chiPhi + ' đ · đơn ' + cur.SoDH : 'không tính phí'].join(' · '));
     return Object.assign(phieuSua_(cur, homNay_()), { don: don });

@@ -954,8 +954,10 @@ const doiNgay = (bang, so, ngay) => { const sh = sheets['PS_' + bang], c = sh.ro
   goi(binh4, 'traHang', { SoDH: ld1.SoDH, lines: [{ MaHH: 'HH0002', IMEI: 'GV0001' }], hoan: { SoTien: 11000000, HinhThuc: 'Tiền mặt' } });
   const h8 = ld1.thuCu[0].MaHH;
   G.luuChungTu(t, 'NK', { Ngay: today, DoiTac: 'Khách bán máy', lines: [{ MaHH: h8, TenHang: 'iPhone 8 thử giá vốn (máy cũ)', SoLuong: 1, GiaVon: 10000000, IMEI: '359222000000002' }] });
-  const d3 = G.luuChungTu(t, 'DH', { Ngay: today, MaKH: kh.MaKH, TenKH: kh.TenKH, lines: [{ MaHH: h8, TenHang: 'iPhone 8 thử giá vốn (máy cũ)', SoLuong: 1, DonGia: 11000000 }] }).doc; // chưa giao: bình quân
-  assert.strictEqual(G.loiNhuan(t, today, today).theoDon.find(x => x.SoDH === d3.SoDH).giaVon, 10000000);
+  const d3 = G.luuChungTu(t, 'DH', { Ngay: today, MaKH: kh.MaKH, TenKH: kh.TenKH, lines: [{ MaHH: h8, TenHang: 'iPhone 8 thử giá vốn (máy cũ)', SoLuong: 1, DonGia: 11000000 }] }); // chưa giao: bình quân
+  assert.strictEqual(G.giaVonBQ_()[h8], 10000000);
+  assert.strictEqual(d3.giaVonDon[0].von, 10000000);
+  assert.strictEqual(G.loiNhuan(t, today, today).theoDon.find(x => x.SoDH === d3.doc.SoDH).giaVon, 10000000);
 }
 
 // Phiếu bán hàng PDF để gửi khách; nhắc khách sắp hết bảo hành
