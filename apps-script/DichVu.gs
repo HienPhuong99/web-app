@@ -196,7 +196,9 @@ function luuSuaChua(token, p) {
 function traMaySua(token, soPN, o) {
   const user = user_(token);
   o = o || {};
-  if (o.phieu) luuSuaChua(token, Object.assign({}, o.phieu, { SoPN: soPN }));
+  // web: lưu các thay đổi chưa bấm Lưu trên hộp thoại phiếu (linh kiện, kết quả…); phiếu đã trả thì bỏ qua để báo "đã trả khách" bên dưới
+  const cu = o.phieu ? findObj_('SuaChua', soPN) : null;
+  if (cu && cu.TrangThai !== 'Đã trả khách') luuSuaChua(token, Object.assign({}, o.phieu, { SoPN: soPN }));
   // Giữ phiếu trong khóa trước khi lập đơn: bấm hai lần / hai máy cùng trả không tạo hai đơn, hai phiếu thu
   const giu = 'traSua_' + CUR_SHOP + '_' + soPN;
   const r = withLock_(() => {

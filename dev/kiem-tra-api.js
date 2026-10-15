@@ -686,6 +686,15 @@ const doiNgay = (bang, so, ngay) => { const sh = sheets['PS_' + bang], c = sh.ro
   const traBH = goi(binh4, 'traMaySua', bh.SoPN, { ChiPhi: 0 });
   assert.deepStrictEqual([traBH.don.TongCong, ton()], [0, ton0 - 2]);
   assert.strictEqual(G.loiNhuan(t, today, today).theoDon.find(x => x.SoDH === traBH.SoDH).lai, -250000);
+  // Web: thêm linh kiện trên hộp thoại rồi bấm "Trả máy" luôn (chưa Lưu): phiếu gửi kèm được lưu trước, linh kiện vẫn xuất kho
+  const p3 = goi(binh4, 'luuSuaChua', { Loai: 'Sửa chữa', MaKH: p.MaKH, TenMay: 'iPhone 13', TinhTrang: 'Pin chai' });
+  const phieu = { Loai: 'Sửa chữa', TrangThai: 'Đã sửa xong', MaKH: p.MaKH, TenMay: 'iPhone 13', TinhTrang: 'Pin chai', ChiPhi: 700000, KetQua: 'Thay pin', LinhKien: [{ MaHH: pin.MaHH, SoLuong: 2 }] };
+  const tra3 = goi(binh4, 'traMaySua', p3.SoPN, { phieu, ChiPhi: 700000, KetQua: 'Thay pin', thu: { SoTien: 700000, HinhThuc: 'Tiền mặt' } });
+  assert.deepStrictEqual([tra3.LinhKien[0].SoLuong, tra3.KetQua, ton()], [2, 'Thay pin', ton0 - 4]);
+  assert.strictEqual(G.loiNhuan(t, today, today).theoDon.find(x => x.SoDH === tra3.SoDH).giaVon, 500000);
+  // Bấm lại (máy khác): báo đã trả khách, không sửa phiếu, không xuất thêm
+  assert.throws(() => goi(binh4, 'traMaySua', p3.SoPN, { phieu: Object.assign({}, phieu, { KetQua: 'Sửa lại' }), ChiPhi: 700000 }), /đã trả khách\.$/);
+  assert.deepStrictEqual([G.findObj_('SuaChua', p3.SoPN).KetQua, ton()], ['Thay pin', ton0 - 4]);
 }
 
 // Giảm giá cả đơn: trừ trước VAT, không quá tiền hàng; lợi nhuận trừ theo
