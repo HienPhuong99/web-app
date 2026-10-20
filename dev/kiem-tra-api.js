@@ -701,6 +701,7 @@ const doiNgay = (bang, so, ngay) => { const sh = sheets['PS_' + bang], c = sh.ro
   cache.set('traSua_phone_' + p4.SoPN, '1');
   assert.throws(() => goi(binh4, 'traMaySua', p4.SoPN, { phieu: Object.assign({}, phieu, { KetQua: 'Ghi đè' }), ChiPhi: 100000 }), /đang được trả ở máy khác/);
   assert.throws(() => goi(binh4, 'luuSuaChua', { SoPN: p4.SoPN, KetQua: 'Ghi đè 2' }), /đang được trả ở máy khác/);
+  assert.throws(() => goi(binh4, 'luuSuaChua', { SoPN: p4.SoPN, KetQua: 'Ghi đè 3', _tuTraMay: true }, true), /đang được trả ở máy khác/); // app không tự gửi cờ để mở chặn được
   assert.strictEqual(G.findObj_('SuaChua', p4.SoPN).KetQua, 'Gốc');
   cache.delete('traSua_phone_' + p4.SoPN);
 }

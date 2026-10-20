@@ -145,7 +145,9 @@ function chiTietSuaChua(token, soPN) {
  * LinhKien: [{ MaHH, SoLuong }] (bỏ trống = giữ như cũ) }.
  * Phiếu mới: ngày nhận hôm nay, trạng thái "Đã nhận". Trả máy dùng traMaySua (để lập đơn dịch vụ, thu tiền).
  */
-function luuSuaChua(token, p) {
+function luuSuaChua(token, p) { return luuSuaChua_(token, p, false); }
+// tuTraMay: traMaySua đã giữ chỗ phiếu này (tham số riêng: app / web không gửi được để bỏ qua chặn "đang được trả")
+function luuSuaChua_(token, p, tuTraMay) {
   const user = user_(token);
   p = Object.assign({}, p || {});
   const cu = p.SoPN ? findObj_('SuaChua', p.SoPN) : null;
@@ -182,7 +184,7 @@ function luuSuaChua(token, p) {
     // đọc lại trong khóa: máy khác vừa bấm Trả máy thì không ghi đè trạng thái cũ (phiếu hiện lại như đang sửa, trả lần nữa là tính tiền hai lần)
     const hien = moi ? null : findObj_('SuaChua', o.SoPN);
     if (hien && hien.TrangThai === 'Đã trả khách' && cu.TrangThai !== 'Đã trả khách') throw new Error('Phiếu ' + o.SoPN + ' vừa được trả khách ở máy khác. Tải lại phiếu rồi sửa.');
-    if (!moi && !p._tuTraMay && dangGiu_('traSua_' + CUR_SHOP + '_' + o.SoPN)) throw new Error('Phiếu ' + o.SoPN + ' đang được trả ở máy khác, đợi vài giây rồi tải lại.');
+    if (!moi && !tuTraMay && dangGiu_('traSua_' + CUR_SHOP + '_' + o.SoPN)) throw new Error('Phiếu ' + o.SoPN + ' đang được trả ở máy khác, đợi vài giây rồi tải lại.');
     if (moi) Object.assign(o, { NgayNhan: homNay_(), NguoiTao: user.ten, NgayTao: now });
     o.NgaySua = now;
     upsert_('SuaChua', o, () => nextSo_('SuaChua', 'PN', homNay_()), ['NgayNhan', 'NguoiTao', 'NgayTao', 'NgayTra', 'SoDH', 'Anh']);
@@ -208,7 +210,7 @@ function traMaySua(token, soPN, o) {
   });
   try {
     // web: lưu các thay đổi chưa bấm Lưu trên hộp thoại phiếu (linh kiện, kết quả…) khi đã giữ chỗ
-    if (o.phieu) luuSuaChua(token, Object.assign({}, o.phieu, { SoPN: soPN, _tuTraMay: true }));
+    if (o.phieu) luuSuaChua_(token, Object.assign({}, o.phieu, { SoPN: soPN }), true);
     return traMaySuaDaGiu_(token, user, soPN, o, findObj_('SuaChua', soPN));
   } finally { boGiu_(giu); }
 }
