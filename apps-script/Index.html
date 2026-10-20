@@ -3342,7 +3342,7 @@ function openSuaChua(p) {
     title: moi ? 'Nhận máy bảo hành – sửa chữa' : `Phiếu ${p.Loai.toLowerCase()} ${p.SoPN}`, wide: true,
     body: `<div class="fgrid">
       <label class="field"><span class="lb">Loại phiếu</span><select name="Loai"${khoa}>${opt(S.loaiSua || ['Bảo hành', 'Sửa chữa'], p.Loai)}</select></label>
-      <label class="field"><span class="lb">Trạng thái</span><select name="TrangThai"${khoa}>${opt(tt, p.TrangThai)}</select></label>
+      <label class="field"><span class="lb">Trạng thái</span><select name="TrangThai"${khoaLK}>${opt(tt, p.TrangThai)}</select></label>
       <label class="field"><span class="lb">Khách hàng *</span><input name="TenKH" value="${esc(p.TenKH)}" placeholder="Gõ tên hoặc SĐT để tìm, hoặc nhập khách mới" autocomplete="off"${moi ? '' : ' readonly'}><input type="hidden" name="MaKH" value="${esc(p.MaKH)}"></label>
       <label class="field"><span class="lb">Điện thoại</span><input name="SDT" value="${esc(p.SDT)}"${moi ? '' : ' readonly'}></label>
       <label class="field"><span class="lb">Tên máy *</span><input name="TenMay" value="${esc(p.TenMay)}" placeholder="vd: iPhone 14 Pro 128GB"${khoa}></label>
@@ -3483,7 +3483,8 @@ function laiDonHtml(d) {
 const laTienMat = ht => String(ht || '').trim().toLowerCase() === 'tiền mặt';
 // Quỹ của một hình thức: tiền mặt, chờ giải ngân (trả góp, thẻ… cài trong Thông tin cửa hàng) hoặc ngân hàng – như SoQuy.gs quyCua_
 const phiCho = () => { const m = {}; (S.congTy.choGiaiNgan || []).forEach(x => { m[x.HinhThuc] = +x.Phi || 0; }); return m; };
-const quyCua = ht => laTienMat(ht) ? 'tienMat' : Object.prototype.hasOwnProperty.call(phiCho(), String(ht || '').trim()) ? 'cho' : 'nganHang';
+const tenCho = (ht, cho = phiCho()) => { const s = String(ht || '').trim().toLowerCase(); return (s && Object.keys(cho).find(k => k.toLowerCase() === s)) || ''; };
+const quyCua = ht => laTienMat(ht) ? 'tienMat' : tenCho(ht) ? 'cho' : 'nganHang';
 // Mỗi phiếu thu / chi thành một dòng sổ quỹ; phiếu giải ngân: rời quỹ chờ, số thực nhận vào ngân hàng, phần chênh (phí) là chi
 const dongQuy = () => S.thuTien.filter(p => p.HinhThuc !== S.htMayCu).map(p => ({ loai: +p.SoTien < 0 ? 'Chi' : 'Thu', so: p.SoPT, Ngay: p.Ngay, NgayTao: p.NgayTao, noiDung: (+p.SoTien < 0 ? 'Trả lại tiền · ' : '') + p.TenKH + (p.SoDH ? ' · đơn ' + p.SoDH : ''), ghiChu: p.GhiChu, HinhThuc: p.HinhThuc, thu: Math.max(0, +p.SoTien || 0), chi: Math.max(0, -(+p.SoTien || 0)), NguoiTao: p.NguoiTao, goc: p }))
   .concat(S.phieuChi.map(c => ({ loai: 'Chi', so: c.SoPC, Ngay: c.Ngay, NgayTao: c.NgayTao, noiDung: c.Loai + (c.DoiTac ? ' · ' + c.DoiTac : ''), nhom: c.Loai, ghiChu: c.GhiChu, HinhThuc: c.HinhThuc, thu: 0, chi: +c.SoTien || 0, NguoiTao: c.NguoiTao, goc: c })))
@@ -3491,12 +3492,12 @@ const dongQuy = () => S.thuTien.filter(p => p.HinhThuc !== S.htMayCu).map(p => (
     ghiChu: g.GhiChu, HinhThuc: g.HinhThuc, thu: 0, chi: (+g.SoTien || 0) - (+g.ThucNhan || 0), NguoiTao: g.NguoiTao, goc: g, giaiNgan: true })));
 // Tồn quỹ tới hết ngày den (mặc định hôm nay): số dư đầu + thu − chi, tách tiền mặt / ngân hàng
 function tonQuy(den) {
-  const dau = S.soDuDau || {}, t = { tienMat: +dau.tienMat || 0, nganHang: +dau.nganHang || 0, cho: 0, choHT: {} }, d = den || today();
-  Object.keys(phiCho()).forEach(h => { t.choHT[h] = 0; });
+  const dau = S.soDuDau || {}, cho = phiCho(), t = { tienMat: +dau.tienMat || 0, nganHang: +dau.nganHang || 0, cho: 0, choHT: {} }, d = den || today();
+  Object.keys(cho).forEach(h => { t.choHT[h] = 0; });
   dongQuy().forEach(r => {
-    const n = String(r.Ngay).slice(0, 10), ht = String(r.HinhThuc || '').trim();
+    const n = String(r.Ngay).slice(0, 10), raw = String(r.HinhThuc || '').trim(), ht = tenCho(raw, cho) || raw;
     if ((dau.ngay && n < dau.ngay) || n > d) return;
-    if (r.giaiNgan) { t.cho -= +r.goc.SoTien || 0; t.nganHang += +r.goc.ThucNhan || 0; t.choHT[ht] = (t.choHT[ht] || 0) - (+r.goc.SoTien || 0); return; }
+    if (r.giaiNgan) { const q = quyCua(ht); t[q] -= +r.goc.SoTien || 0; t.nganHang += +r.goc.ThucNhan || 0; if (q === 'cho') t.choHT[ht] -= +r.goc.SoTien || 0; return; }
     const q = quyCua(ht);
     t[q] += r.thu - r.chi;
     if (q === 'cho') t.choHT[ht] += r.thu - r.chi;
@@ -3516,7 +3517,7 @@ function vSoQuy(el) {
   box.className = 'card'; box.style.marginBottom = '16px';
   box.innerHTML = `<div class="card-b"><div class="stats" style="margin-top:0" data-ton>
     ${stat('Tiền mặt tại quầy', money(t.tienMat) + ' ₫', t.tienMat < 0 ? 'red' : '')}${stat('Tiền trong ngân hàng', money(t.nganHang) + ' ₫', t.nganHang < 0 ? 'red' : '', 'chuyển khoản, thẻ, ví…')}
-    ${Object.keys(t.choHT).length ? stat('Chờ giải ngân', money(t.cho) + ' ₫', '', Object.keys(t.choHT).map(h => esc(h) + ' ' + money(t.choHT[h])).join(' · ')) : ''}
+    ${(Object.keys(t.choHT).length || t.cho) ? stat('Chờ giải ngân', money(t.cho) + ' ₫', t.cho < 0 ? 'red' : '', Object.keys(t.choHT).map(h => esc(h) + ' ' + money(t.choHT[h])).join(' · ')) : ''}
     ${stat('Thu hôm nay', money(sum(homNay, r => r.thu)) + ' ₫', 'green')}${stat('Chi hôm nay', money(sum(homNay, r => r.chi)) + ' ₫', 'red')}</div>
     <p class="muted" style="margin:10px 0 0">${dau.ngay ? `Tính từ ngày ${dmy(dau.ngay)} với số dư đầu: tiền mặt ${money(dau.tienMat)} ₫, ngân hàng ${money(dau.nganHang)} ₫.` : 'Chưa đặt số dư đầu kỳ: đang tính từ phiếu đầu tiên với số dư 0.' + (isAdmin() ? ' Bấm "Số dư đầu kỳ" để nhập số tiền đang có.' : '')}
     Tiền thu, chi bằng "Tiền mặt" tính vào quỹ tiền mặt${Object.keys(t.choHT).length ? ', ' + esc(Object.keys(t.choHT).join(', ')) + ' vào quỹ chờ giải ngân (tới khi ghi nhận tiền về)' : ''}, các hình thức khác vào ngân hàng.</p></div>`;

@@ -692,9 +692,17 @@ const doiNgay = (bang, so, ngay) => { const sh = sheets['PS_' + bang], c = sh.ro
   const tra3 = goi(binh4, 'traMaySua', p3.SoPN, { phieu, ChiPhi: 700000, KetQua: 'Thay pin', thu: { SoTien: 700000, HinhThuc: 'Tiền mặt' } });
   assert.deepStrictEqual([tra3.LinhKien[0].SoLuong, tra3.KetQua, ton()], [2, 'Thay pin', ton0 - 4]);
   assert.strictEqual(G.loiNhuan(t, today, today).theoDon.find(x => x.SoDH === tra3.SoDH).giaVon, 500000);
-  // Bấm lại (máy khác): báo đã trả khách, không sửa phiếu, không xuất thêm
+  // Bấm lại (máy khác): báo đã trả khách, không sửa phiếu, không xuất thêm; quản trị cũng không đổi ngược trạng thái về Đã sửa xong để trả lần 2
   assert.throws(() => goi(binh4, 'traMaySua', p3.SoPN, { phieu: Object.assign({}, phieu, { KetQua: 'Sửa lại' }), ChiPhi: 700000 }), /đã trả khách\.$/);
+  assert.throws(() => G.luuSuaChua(t, { SoPN: p3.SoPN, TrangThai: 'Đã sửa xong' }), /không đổi lại trạng thái/);
   assert.deepStrictEqual([G.findObj_('SuaChua', p3.SoPN).KetQua, ton()], ['Thay pin', ton0 - 4]);
+  // Khi máy 1 đang giữ chỗ trả máy (chưa kịp ghi Đã trả khách), máy 2 gửi kèm o.phieu hoặc bấm Lưu đều bị chặn trước khi ghi đè phiếu
+  const p4 = goi(binh4, 'luuSuaChua', { Loai: 'Sửa chữa', MaKH: p.MaKH, TenMay: 'iPhone 14', TinhTrang: 'Hỏng loa', KetQua: 'Gốc' });
+  cache.set('traSua_phone_' + p4.SoPN, '1');
+  assert.throws(() => goi(binh4, 'traMaySua', p4.SoPN, { phieu: Object.assign({}, phieu, { KetQua: 'Ghi đè' }), ChiPhi: 100000 }), /đang được trả ở máy khác/);
+  assert.throws(() => goi(binh4, 'luuSuaChua', { SoPN: p4.SoPN, KetQua: 'Ghi đè 2' }), /đang được trả ở máy khác/);
+  assert.strictEqual(G.findObj_('SuaChua', p4.SoPN).KetQua, 'Gốc');
+  cache.delete('traSua_phone_' + p4.SoPN);
 }
 
 // Giảm giá cả đơn: trừ trước VAT, không quá tiền hàng; lợi nhuận trừ theo
@@ -911,19 +919,25 @@ const doiNgay = (bang, so, ngay) => { const sh = sheets['PS_' + bang], c = sh.ro
   let sq = goiMoi(binh4, 'soQuyMay', '');
   assert.deepStrictEqual([sq.ton.cho - sq0.ton.cho, sq.ton.nganHang - sq0.ton.nganHang, sq.ton.tienMat - sq0.ton.tienMat], [30000000, 0, 0]);
   assert.deepStrictEqual(plain(sq.choGiaiNgan).map(x => [x.HinhThuc, x.Phi, x.con]), [['Trả góp', 0, 20000000], ['Thẻ tín dụng', 1.8, 10000000]]);
-  // Thẻ về tài khoản: bỏ trống số thực nhận thì trừ phí 1,8% (180.000), phí là chi trong ngày
+  // Thẻ về tài khoản: bỏ trống số thực nhận thì trừ phí 1,8% (180.000), phí là chi trong ngày; ngày giải ngân không trước ngày đầu kỳ hoặc sau hôm nay
   assert.throws(() => goi(binh4, 'luuGiaiNgan', { HinhThuc: 'Chuyển khoản', SoTien: 1000 }), /không phải hình thức chờ giải ngân/);
   assert.throws(() => goi(binh4, 'luuGiaiNgan', { HinhThuc: 'Thẻ tín dụng', SoTien: 11000000 }), /đang chờ giải ngân 10000000/);
   assert.throws(() => goi(binh4, 'luuGiaiNgan', { HinhThuc: 'Thẻ tín dụng', SoTien: 1000, ThucNhan: 2000 }), /thực nhận phải từ 0 đến 1000/);
-  const gn = goi(binh4, 'luuGiaiNgan', { HinhThuc: 'Thẻ tín dụng', SoTien: 10000000 });
-  assert.deepStrictEqual([gn.SoGN, gn.ThucNhan], ['001-' + today.slice(0, 4) + '/GN', 9820000]);
+  assert.throws(() => goi(binh4, 'luuGiaiNgan', { HinhThuc: 'Thẻ tín dụng', SoTien: 1000, Ngay: '2099-01-01' }), /sau ngày hôm nay/);
+  assert.throws(() => goi(binh4, 'luuGiaiNgan', { HinhThuc: 'Thẻ tín dụng', SoTien: 1000, Ngay: '2020-01-01' }), /trước ngày bắt đầu sổ quỹ/);
+  const gn = goi(binh4, 'luuGiaiNgan', { HinhThuc: 'thẻ tín dụng', SoTien: 10000000 }); // không phân biệt hoa thường, chuẩn hóa về 'Thẻ tín dụng'
+  assert.deepStrictEqual([gn.SoGN, gn.HinhThuc, gn.ThucNhan], ['001-' + today.slice(0, 4) + '/GN', 'Thẻ tín dụng', 9820000]);
   // Trả góp: công ty tài chính chuyển về 19,5tr (giữ phí 500k)
   goi(binh4, 'luuGiaiNgan', { HinhThuc: 'Trả góp', SoTien: 20000000, ThucNhan: 19500000, GhiChu: 'HD Saison' });
   sq = goiMoi(binh4, 'soQuyMay', '');
   assert.deepStrictEqual([sq.ton.cho - sq0.ton.cho, sq.ton.nganHang - sq0.ton.nganHang, sq.trongNgay.chi - sq0.trongNgay.chi], [0, 29320000, 680000]);
   assert.ok(sq.ds.some(x => x.loai === 'giaiNgan' && x.so === gn.SoGN && x.SoTien === 9820000 && /phí 180000/.test(x.noiDung)));
-  // Web nhận phiếu giải ngân; xóa chỉ quản trị
+  // Web nhận phiếu giải ngân; xóa chỉ quản trị; nếu bỏ hình thức khỏi chờ giải ngân khi đã có phiếu giải ngân thì vẫn giữ đúng tổng quỹ (không cộng đôi ngân hàng, không âm quỹ chờ)
   assert.strictEqual(G.taiDuLieu(t).giaiNgan.length, 2);
+  dat('');
+  const sqBoCho = goiMoi(binh4, 'soQuyMay', '');
+  assert.deepStrictEqual([sqBoCho.ton.cho, sqBoCho.ton.nganHang - sq0.ton.nganHang, sqBoCho.ton.tienMat - sq0.ton.tienMat], [0, 29320000, 0]);
+  dat('trả góp\nThẻ tín dụng, 1,8 %');
   assert.throws(() => G.xoaGiaiNgan(G.dangNhap('binh', 'binh-456').token, gn.SoGN), /quản trị/);
   G.xoaGiaiNgan(t, gn.SoGN);
   assert.strictEqual(goiMoi(binh4, 'soQuyMay', '').ton.cho - sq0.ton.cho, 10000000);

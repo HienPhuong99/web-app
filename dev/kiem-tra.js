@@ -947,7 +947,7 @@ assert.deepStrictEqual(plain(G.xoaCuaHangDaBo_()), []); // chạy lại không l
 
 require('./kiem-tra-tim-kiem'); // tìm kiếm thông minh: cùng mã ở web và máy chủ, đúng các mẫu
 require('./kiem-tra-html'); // giao diện: cú pháp, và các chỗ Apps Script sẽ cắt nhầm khi xóa chú thích
-// API app điện thoại: tiến trình riêng để có dữ liệu sạch
-['kiem-tra-api.js', 'kiem-tra-du-lieu-thu.js'].forEach(f => require('child_process').execFileSync(process.execPath, [require('path').join(__dirname, f)], { stdio: ['ignore', 'pipe', 'inherit'] })
+// API app điện thoại và kiểm toán sâu: tiến trình riêng để có dữ liệu sạch
+['kiem-tra-api.js', 'kiem-tra-du-lieu-thu.js', 'kiem-toan-sau.js'].forEach(f => require('child_process').execFileSync(process.execPath, [require('path').join(__dirname, f)], { stdio: ['ignore', 'pipe', 'inherit'] })
   .toString().split('\n').filter(l => /^OK/.test(l)).forEach(l => console.log(l)));
 console.log('OK - tất cả kiểm tra đều đạt');

@@ -166,6 +166,7 @@ function luuSuaChua(token, p) {
   const tt = p.TrangThai || (cu ? cu.TrangThai : TT_SUA[0]);
   if (TT_SUA.indexOf(tt) < 0) throw new Error('Trạng thái không hợp lệ.');
   if (tt === 'Đã trả khách' && (!cu || cu.TrangThai !== 'Đã trả khách')) throw new Error('Trả máy cho khách bằng nút "Trả máy" để ghi chi phí, thu tiền.');
+  if (cu && cu.TrangThai === 'Đã trả khách' && tt !== 'Đã trả khách') throw new Error('Phiếu đã trả khách: không đổi lại trạng thái.');
   o.TrangThai = tt;
   // Khách: giữ khách của phiếu cũ, chọn khách có sẵn, hoặc khách mới (trùng SĐT dùng khách cũ)
   let kh = null;
@@ -181,6 +182,7 @@ function luuSuaChua(token, p) {
     // đọc lại trong khóa: máy khác vừa bấm Trả máy thì không ghi đè trạng thái cũ (phiếu hiện lại như đang sửa, trả lần nữa là tính tiền hai lần)
     const hien = moi ? null : findObj_('SuaChua', o.SoPN);
     if (hien && hien.TrangThai === 'Đã trả khách' && cu.TrangThai !== 'Đã trả khách') throw new Error('Phiếu ' + o.SoPN + ' vừa được trả khách ở máy khác. Tải lại phiếu rồi sửa.');
+    if (!moi && !p._tuTraMay && dangGiu_('traSua_' + CUR_SHOP + '_' + o.SoPN)) throw new Error('Phiếu ' + o.SoPN + ' đang được trả ở máy khác, đợi vài giây rồi tải lại.');
     if (moi) Object.assign(o, { NgayNhan: homNay_(), NguoiTao: user.ten, NgayTao: now });
     o.NgaySua = now;
     upsert_('SuaChua', o, () => nextSo_('SuaChua', 'PN', homNay_()), ['NgayNhan', 'NguoiTao', 'NgayTao', 'NgayTra', 'SoDH', 'Anh']);
@@ -196,25 +198,26 @@ function luuSuaChua(token, p) {
 function traMaySua(token, soPN, o) {
   const user = user_(token);
   o = o || {};
-  // web: lưu các thay đổi chưa bấm Lưu trên hộp thoại phiếu (linh kiện, kết quả…); phiếu đã trả thì bỏ qua để báo "đã trả khách" bên dưới
-  const cu = o.phieu ? findObj_('SuaChua', soPN) : null;
-  if (cu && cu.TrangThai !== 'Đã trả khách') luuSuaChua(token, Object.assign({}, o.phieu, { SoPN: soPN }));
-  // Giữ phiếu trong khóa trước khi lập đơn: bấm hai lần / hai máy cùng trả không tạo hai đơn, hai phiếu thu
+  // Giữ phiếu trong khóa trước khi lưu nháp / lập đơn: bấm hai lần / hai máy cùng trả không ghi đè phiếu hoặc tạo hai đơn, hai phiếu thu
   const giu = 'traSua_' + CUR_SHOP + '_' + soPN;
-  const r = withLock_(() => {
+  withLock_(() => {
     const p = findObj_('SuaChua', soPN);
     if (!p) throw new Error('Không tìm thấy phiếu ' + soPN + '.');
     if (p.TrangThai === 'Đã trả khách') throw new Error('Phiếu ' + soPN + ' đã trả khách.');
     if (!giuCho_(giu)) throw new Error('Phiếu ' + soPN + ' đang được trả ở máy khác, đợi vài giây rồi tải lại.');
-    return p;
   });
-  try { return traMaySuaDaGiu_(token, user, soPN, o, r); } finally { boGiu_(giu); }
+  try {
+    // web: lưu các thay đổi chưa bấm Lưu trên hộp thoại phiếu (linh kiện, kết quả…) khi đã giữ chỗ
+    if (o.phieu) luuSuaChua(token, Object.assign({}, o.phieu, { SoPN: soPN, _tuTraMay: true }));
+    return traMaySuaDaGiu_(token, user, soPN, o, findObj_('SuaChua', soPN));
+  } finally { boGiu_(giu); }
 }
 // Giữ chỗ một việc dài (gọi trong withLock_): false nếu lần gọi khác đang giữ. CacheService lỗi thì cho chạy như khi chưa có giữ chỗ.
 function giuCho_(khoa) {
   try { const c = CacheService.getScriptCache(); if (c.get(khoa)) return false; c.put(khoa, '1', 120); } catch (e) {}
   return true;
 }
+function dangGiu_(khoa) { try { return !!CacheService.getScriptCache().get(khoa); } catch (e) { return false; } }
 function boGiu_(khoa) { try { CacheService.getScriptCache().remove(khoa); } catch (e) {} }
 function traMaySuaDaGiu_(token, user, soPN, o, r) {
   const chiPhi = Math.max(0, Math.round(+(o.ChiPhi == null ? r.ChiPhi : o.ChiPhi) || 0)), lk = o.LinhKien == null ? docLinhKien_(r.LinhKien) : chuanLinhKien_(o.LinhKien);

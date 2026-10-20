@@ -41,16 +41,18 @@ function choGiaiNgan_(cd) {
   (cuaHang_(CUR_SHOP, cd).congTy.choGiaiNgan || []).forEach(x => { m[x.HinhThuc] = +x.Phi || 0; });
   return m;
 }
+/** Tìm tên chuẩn trong cho ({ hình thức: % phí }) không phân biệt hoa thường; trả '' nếu không có */
+const tenCho_ = (ht, cho) => { const s = String(ht || '').trim().toLowerCase(); return (cho && s && Object.keys(cho).find(k => k.toLowerCase() === s)) || ''; };
 /** Quỹ của một hình thức thu / chi: 'tienMat', 'cho' (chờ giải ngân) hoặc 'nganHang' */
-const quyCua_ = (ht, cho) => (laTienMat_(ht) ? 'tienMat' : cho && Object.prototype.hasOwnProperty.call(cho, String(ht || '').trim()) ? 'cho' : 'nganHang');
+const quyCua_ = (ht, cho) => (laTienMat_(ht) ? 'tienMat' : tenCho_(ht, cho) ? 'cho' : 'nganHang');
 
 /** Tiền đang chờ giải ngân theo hình thức (từ ngày bắt đầu sổ quỹ tới hết ngày den): { hình thức: số tiền } */
 function dangCho_(den, dau, cho) {
   const n10 = v => String(v == null ? '' : v).slice(0, 10), trong = d => !((dau.ngay && d < dau.ngay) || (den && d > den)), kq = {};
   Object.keys(cho).forEach(h => { kq[h] = 0; });
-  readTable_('ThuTien').forEach(p => { const h = String(p.HinhThuc || '').trim(); if (quyCua_(h, cho) === 'cho' && trong(n10(p.Ngay))) kq[h] += +p.SoTien || 0; });
-  readTable_('PhieuChi').forEach(c => { const h = String(c.HinhThuc || '').trim(); if (quyCua_(h, cho) === 'cho' && trong(n10(c.Ngay))) kq[h] -= +c.SoTien || 0; });
-  readTable_('GiaiNgan').forEach(g => { const h = String(g.HinhThuc || '').trim(); if (trong(n10(g.Ngay))) kq[h] = (kq[h] || 0) - (+g.SoTien || 0); });
+  readTable_('ThuTien').forEach(p => { const h = tenCho_(p.HinhThuc, cho); if (h && trong(n10(p.Ngay))) kq[h] += +p.SoTien || 0; });
+  readTable_('PhieuChi').forEach(c => { const h = tenCho_(c.HinhThuc, cho); if (h && trong(n10(c.Ngay))) kq[h] -= +c.SoTien || 0; });
+  readTable_('GiaiNgan').forEach(g => { const h = tenCho_(g.HinhThuc, cho); if (h && trong(n10(g.Ngay))) kq[h] -= +g.SoTien || 0; });
   return kq;
 }
 
@@ -61,14 +63,17 @@ function dangCho_(den, dau, cho) {
 function luuGiaiNgan(token, g) {
   const user = user_(token);
   g = g || {};
-  const cho = choGiaiNgan_(), ht = String(g.HinhThuc || '').trim();
-  if (!Object.prototype.hasOwnProperty.call(cho, ht)) throw new Error('"' + ht + '" không phải hình thức chờ giải ngân (cài trong Cài đặt cửa hàng).');
-  const ngay = ngayHopLe_(g.Ngay) || homNay_(), soTien = Math.round(+g.SoTien || 0);
+  const cho = choGiaiNgan_(), raw = String(g.HinhThuc || '').trim(), ht = tenCho_(raw, cho);
+  if (!ht) throw new Error('"' + raw + '" không phải hình thức chờ giải ngân (cài trong Cài đặt cửa hàng).');
+  const homNay = homNay_(), ngay = ngayHopLe_(g.Ngay) || homNay, soTien = Math.round(+g.SoTien || 0);
+  if (ngay > homNay) throw new Error('Ngày giải ngân không được sau ngày hôm nay.');
   if (soTien <= 0) throw new Error('Nhập số tiền giải ngân.');
   const thucNhan = g.ThucNhan === '' || g.ThucNhan == null ? Math.round(soTien * (100 - cho[ht]) / 100) : Math.round(+g.ThucNhan);
   if (!(thucNhan >= 0 && thucNhan <= soTien)) throw new Error('Số thực nhận phải từ 0 đến ' + soTien + ' đ.');
   return withLock_(() => {
-    const con = dangCho_('', soDuDau_(), cho)[ht] || 0; // đọc trong khóa: hai máy cùng ghi không giải ngân quá số đang chờ
+    const dau = soDuDau_();
+    if (dau.ngay && ngay < dau.ngay) throw new Error('Ngày giải ngân không được trước ngày bắt đầu sổ quỹ (' + dau.ngay + ').');
+    const con = dangCho_('', dau, cho)[ht] || 0; // đọc trong khóa: hai máy cùng ghi không giải ngân quá số đang chờ
     if (soTien > con) throw new Error(ht + ' đang chờ giải ngân ' + Math.max(0, con) + ' đ, không ghi được ' + soTien + ' đ.');
     const o = { Ngay: ngay, HinhThuc: ht, SoTien: soTien, ThucNhan: thucNhan, GhiChu: String(g.GhiChu || '').trim().slice(0, 300), NguoiTao: user.ten, NgayTao: now_() };
     upsert_('GiaiNgan', o, () => nextSo_('GiaiNgan', 'GN', ngay), []);
@@ -297,10 +302,10 @@ function soQuyMay(token, ngay) {
     trong.chi += tien;
     ds.push({ loai: 'chi', so: c.SoPC, noiDung: c.Loai + (c.DoiTac ? ' · ' + c.DoiTac : '') + (c.GhiChu ? ' · ' + c.GhiChu : ''), SoTien: tien, HinhThuc: c.HinhThuc || '', MaKH: '', luc: String(c.NgayTao || '') });
   });
-  readTable_('GiaiNgan').forEach(g => { // tiền chờ về ngân hàng: rời quỹ chờ, vào ngân hàng số thực nhận; phần chênh là phí, tính vào chi trong ngày
+  readTable_('GiaiNgan').forEach(g => { // tiền chờ về ngân hàng: rời quỹ của hình thức đó, vào ngân hàng số thực nhận; phần chênh là phí, tính vào chi trong ngày
     const d = ngay10(g.Ngay), tien = +g.SoTien || 0, nhan = +g.ThucNhan || 0;
     if ((dau.ngay && d < dau.ngay) || d > n) return;
-    ton.cho -= tien; ton.nganHang += nhan;
+    ton[quyCua_(g.HinhThuc, cho)] -= tien; ton.nganHang += nhan;
     if (d !== n) return;
     trong.chi += tien - nhan;
     ds.push({ loai: 'giaiNgan', so: g.SoGN, noiDung: 'Giải ngân ' + g.HinhThuc + ' về ngân hàng' + (tien > nhan ? ' · phí ' + (tien - nhan) + ' đ' : '') + (g.GhiChu ? ' · ' + g.GhiChu : ''),

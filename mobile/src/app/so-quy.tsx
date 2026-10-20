@@ -45,10 +45,10 @@ export default function SoQuyMan() {
               <O nhan="Tiền mặt" so={tien(dangXem.ton.tienMat)} mauSo={dangXem.ton.tienMat < 0 ? mau.do : mau.chu} bieuTuong="cash-outline" />
               <O nhan="Ngân hàng" so={tien(dangXem.ton.nganHang)} mauSo={dangXem.ton.nganHang < 0 ? mau.do : mau.chu} bieuTuong="card-outline" />
             </View>
-            {dangXem.choGiaiNgan?.length ? (
+            {(dangXem.choGiaiNgan?.length || dangXem.ton.cho) ? (
               <View style={{ marginTop: 12 }} testID="quy-cho">
-                <O nhan="Chờ giải ngân" so={tien(dangXem.ton.cho ?? 0)} mauSo={mau.chu} bieuTuong="hourglass-outline" />
-                <Text style={[s.ghiChu, { marginTop: 4, textAlign: 'center' }]}>{dangXem.choGiaiNgan.map(x => `${x.HinhThuc} ${tien(x.con)}`).join(' · ')}</Text>
+                <O nhan="Chờ giải ngân" so={tien(dangXem.ton.cho ?? 0)} mauSo={(dangXem.ton.cho ?? 0) < 0 ? mau.do : mau.chu} bieuTuong="hourglass-outline" />
+                {dangXem.choGiaiNgan?.length ? <Text style={[s.ghiChu, { marginTop: 4, textAlign: 'center' }]}>{dangXem.choGiaiNgan.map(x => `${x.HinhThuc} ${tien(x.con)}`).join(' · ')}</Text> : null}
               </View>
             ) : null}
             <View style={[s.bo2, { marginTop: 12 }]}>
