@@ -83,6 +83,36 @@ function thuMayCu(token, o) {
   return ketQuaMayCu_(m, nk.SoPK);
 }
 
+// Thu mua máy cũ lẻ: khách bán đứt máy, không mua máy mới. Một phiếu nhập kho (giá nhập = giá thu, ghi chú "Thu mua máy cũ · CCCD …")
+// và một phiếu chi cùng loại trả tiền người bán. Phiếu nhập này không tính vào nợ nhà cung cấp (NHAP_TU_KHACH_), phiếu chi không vào lãi gộp
+// (giá vốn đã nằm ở phiếu nhập). Bắt buộc số CCCD người bán và xác nhận đã kiểm iCloud / Tìm iPhone, để có hồ sơ khi máy bị báo mất.
+const THU_MUA_MAY_CU = 'Thu mua máy cũ';
+/** o = { TenHang, IMEI, GiaThu, GiaLe, GhiChu (tình trạng máy), TenNguoiBan, SDT, CCCD, HinhThuc (trả tiền), daKiemICloud: true } */
+function thuMuaMayCu(token, o) {
+  const user = user_(token);
+  o = o || {};
+  if (o.daKiemICloud !== true) throw new Error('Kiểm tra máy đã thoát iCloud, tắt Tìm iPhone, không khóa mạng rồi tích ô xác nhận.');
+  const ten = String(o.TenNguoiBan || '').trim().slice(0, 150), sdt = String(o.SDT || '').trim().slice(0, 40), cccd = String(o.CCCD || '').replace(/[\s.\-]/g, '');
+  if (!ten) throw new Error('Nhập tên người bán máy.');
+  if (!/^(\d{12}|\d{9})$/.test(cccd)) throw new Error('Nhập số CCCD của người bán (12 số, hoặc CMND cũ 9 số).');
+  const ht = String(o.HinhThuc || '').trim().slice(0, 60) || 'Tiền mặt';
+  if (quyCua_(ht, choGiaiNgan_()) === 'cho') throw new Error('"' + ht + '" là hình thức chờ giải ngân, không dùng để trả tiền người bán.');
+  const m = chuanMayCu_([o])[0];
+  m.h = hangMayCu_(user, m);
+  const ngay = homNay_();
+  const nk = luuChungTu(token, 'NK', { Ngay: ngay, DoiTac: ten,
+    GhiChu: [THU_MUA_MAY_CU + ' · CCCD ' + cccd, sdt ? 'SĐT ' + sdt : '', 'đã kiểm iCloud / Tìm iPhone', m.GhiChu].filter(Boolean).join(' · '),
+    lines: [{ MaHH: m.h.MaHH, TenHang: m.h.TenHang, Model: m.h.Model || '', DVT: m.h.DVT || 'Máy', SoLuong: 1, IMEI: m.IMEI, GiaVon: m.GiaThu }] }).doc;
+  let pc;
+  try {
+    pc = luuPhieuChi(token, { Ngay: ngay, Loai: THU_MUA_MAY_CU, DoiTac: ten, SoTien: m.GiaThu, HinhThuc: ht, GhiChu: 'Phiếu nhập ' + nk.SoPK + ' · ' + m.h.TenHang + ' · IMEI ' + m.IMEI });
+  } catch (e) { // chi lỗi: bỏ phiếu nhập vừa lập, kẻo máy nằm trong kho mà sổ quỹ không trừ tiền
+    boPhieuKho_(user, nk.SoPK, 'Bỏ phiếu nhập thu mua máy cũ (ghi phiếu chi lỗi)');
+    throw e;
+  }
+  return Object.assign(ketQuaMayCu_(m, nk.SoPK), { GiaLe: m.GiaLe || +m.h.GiaLe || 0, SoPC: pc.SoPC, HinhThuc: pc.HinhThuc, TenNguoiBan: ten });
+}
+
 // ===== Bảo hành – sửa chữa =====
 const homNayCong_ = n => Utilities.formatDate(new Date(Date.parse(homNay_() + 'T12:00:00Z') + n * 864e5), 'UTC', 'yyyy-MM-dd');
 

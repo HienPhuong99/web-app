@@ -332,6 +332,12 @@ table.lines.hd { min-width: 980px; } /* hợp đồng */
   #print { display: block; }
   @page { size: A4; margin: 12mm 12mm 14mm; }
 }
+.tem { width: 50mm; height: 29.5mm; box-sizing: border-box; padding: 2mm; display: flex; gap: 2mm; align-items: center; overflow: hidden; font: 8pt/1.2 Arial, sans-serif; color: #000; }
+.tem + .tem { break-before: page; }
+.tem-qr svg { width: 24mm; height: 24mm; display: block; }
+.tem-ch { display: flex; flex-direction: column; gap: 1mm; min-width: 0; }
+.tem-ch span { font-size: 7pt; word-break: break-all; }
+.tem-gia { font-size: 10pt; }
 .p-page { font: 12.5px/1.4 "Times New Roman", Times, serif; color: #000; }
 .p-head { text-align: center; border-bottom: 2px solid #000; padding-bottom: 6px; }
 .p-co { font-size: 16px; font-weight: 700; }
@@ -1695,7 +1701,7 @@ async function openTheKho(h) {
 }
 
 function vTon(el) {
-  setTop('Kho hàng', 'Tồn kho', [{ t: 'Nhập kho', ic: 'down', cls: 'primary', fn: () => newDoc('NK') }, { t: 'Xuất kho', ic: 'up', fn: () => newDoc('XK') }, { t: 'Kiểm kho (IMEI)', ic: 'search', fn: openKiemKho }]);
+  setTop('Kho hàng', 'Tồn kho', [{ t: 'Nhập kho', ic: 'down', cls: 'primary', fn: () => newDoc('NK') }, { t: 'Xuất kho', ic: 'up', fn: () => newDoc('XK') }, { t: 'Kiểm kho (IMEI)', ic: 'search', fn: openKiemKho }, { t: 'Thu mua máy cũ', ic: 'phone', fn: openThuMua }]);
   listCard(el, {
     id: 'ton', ph: 'Tìm mặt hàng…',
     filters: [{ id: 'nhom', options: nhomOptions() }, { id: 'loc', options: [['ps', 'Có nhập / xuất'], ['con', 'Còn hàng'], ['it', 'Sắp hết / hết hàng'], ['het', 'Hết hàng'], ['', 'Tất cả mặt hàng']], def: Object.keys(S.ton).length ? 'ps' : '' }],
@@ -1719,7 +1725,7 @@ function vTon(el) {
 }
 
 function vKho(el) {
-  setTop('Kho hàng', 'Nhập – xuất kho', [{ t: 'Nhập kho', ic: 'down', cls: 'primary', fn: () => newDoc('NK') }, { t: 'Xuất kho', ic: 'up', fn: () => newDoc('XK') }]);
+  setTop('Kho hàng', 'Nhập – xuất kho', [{ t: 'Nhập kho', ic: 'down', cls: 'primary', fn: () => newDoc('NK') }, { t: 'Xuất kho', ic: 'up', fn: () => newDoc('XK') }, { t: 'Thu mua máy cũ', ic: 'phone', fn: openThuMua }]);
   S.onNew = () => newDoc('NK');
   listCard(el, {
     id: 'kho', ph: 'Tìm số phiếu, đối tác, đơn hàng…',
@@ -1816,6 +1822,7 @@ function vDoc(el) {
     if (saved && dh && conNo(dh) > 0) btns.push({ t: 'Thu tiền', ic: 'card', cls: 'soft', fn: () => openThu({ SoDH: d.SoDH }) }); // giao xong thu tiền luôn, khỏi quay lại đơn
     btns.push({ t: 'Mở đơn ' + d.SoDH, ic: 'cart', fn: run(() => openDoc('DH', dh)) });
   }
+  if (L === 'NK' && saved && !S.dirty && mayTrenPhieu(d).length) btns.push({ t: 'In tem máy', ic: 'print', fn: run(() => printTem(mayTrenPhieu(d))) });
   if (isAdmin() && saved) btns.push({ t: 'Xóa', ic: 'trash', cls: 'danger', fn: run(delDoc) });
   setTop(c.crumb + ' › ' + (L === 'NK' || L === 'XK' ? 'Nhập – xuất kho' : c.ten), docTitle() + (S.dirty ? ' •' : ''), btns);
   S.onNew = () => newDoc(L);
@@ -3429,25 +3436,58 @@ function suaPrintHtml(p) {
 // Đơn lên đời: máy cũ của khách thành một dòng −1 của đơn (giá thu), máy vào kho ngay; giữ NGAY_GIU ngày để khách trả hàng thì trả lại đúng máy
 const NGAY_GIU = 7;
 const coThuCu = d => (d.lines || []).some(l => +l.SoLuong < 0);
+// Ô xác nhận đã kiểm iCloud (Tìm iPhone) khi thu máy cũ: chưa tích thì chưa lưu được
+const O_ICLOUD = '<label class="check field full" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="daKiemICloud"><b>Đã thoát iCloud / tắt Tìm iPhone (Find My), kiểm tra máy không khóa mạng *</b></label>';
+function canICloud(o) { if (!o.daKiemICloud) throw new Error('Kiểm tra máy đã thoát iCloud, tắt Tìm iPhone, không khóa mạng rồi tích ô xác nhận.'); }
+const O_MAY_CU = `<label class="field"><span class="lb">Tên máy cũ *</span><input name="TenHang" placeholder="vd: iPhone 12 64GB"></label>
+      <label class="field"><span class="lb">IMEI / serial *</span><input name="IMEI"><small class="muted" data-lich-su></small></label>
+      <label class="field"><span class="lb">Giá thu *</span><input name="GiaThu" class="money num" inputmode="numeric"></label>
+      <label class="field"><span class="lb">Giá bán lại (dự kiến)</span><input name="GiaLe" class="money num" inputmode="numeric"></label>
+      <label class="field full"><span class="lb">Tình trạng máy</span><input name="GhiChu" placeholder="vd: trầy nhẹ, pin 85%"></label>`;
 function openThuMayCu(d) {
   const m = modal({
     title: 'Thu máy cũ trừ vào đơn ' + d.SoDH,
     body: `<p class="muted" style="margin-top:0">Đơn còn nợ ${money(conNo(d))} ₫. Máy cũ thành một dòng của đơn (số lượng −1, đơn giá = giá thu) và vào kho ngay, nhóm "Máy cũ".
       Trong ${NGAY_GIU} ngày kể từ ngày bán, khách trả máy mới thì cửa hàng trả lại đúng máy cũ này, nên máy cũ chưa bán được; quá ${NGAY_GIU} ngày không nhận trả.</p><div class="fgrid">
-      <label class="field"><span class="lb">Tên máy cũ *</span><input name="TenHang" placeholder="vd: iPhone 12 64GB"></label>
-      <label class="field"><span class="lb">IMEI / serial *</span><input name="IMEI"><small class="muted" data-lich-su></small></label>
-      <label class="field"><span class="lb">Giá thu *</span><input name="GiaThu" class="money num" inputmode="numeric"></label>
-      <label class="field"><span class="lb">Giá bán lại (dự kiến)</span><input name="GiaLe" class="money num" inputmode="numeric"></label>
-      <label class="field full"><span class="lb">Tình trạng máy</span><input name="GhiChu" placeholder="vd: trầy nhẹ, pin 85%"></label></div>`,
+      ${O_MAY_CU}${O_ICLOUD}</div>`,
     buttons: [{ t: 'Thu máy (F8)', ic: 'check', cls: 'primary', save: true, fn: run(async m => {
       const o = Object.assign(formData(m), { SoDH: d.SoDH });
+      canICloud(o);
       const kq = await api('thuMayCu', o);
       await loadAll();
       closeModal(); await openDoc('DH', S.donHang.find(x => x.SoDH === d.SoDH));
       toast(`Đã thu máy cũ ${kq.TenHang} (nhập kho ${kq.SoPK}): trừ ${money(kq.GiaThu)} ₫ vào đơn.`);
     }) }],
   });
-  // Gõ / quét xong IMEI: tra lịch sử. Máy cửa hàng từng bán thì tự điền tên máy; máy đang trong kho thì báo ngay (không thu được)
+  traLichSuMayCu(m);
+}
+// Thu mua máy cũ lẻ (khách bán đứt, không mua máy mới): máy chủ lập phiếu nhập kho và phiếu chi trả người bán (DichVu.gs thuMuaMayCu)
+function openThuMua() {
+  const cho = phiCho(), ht = (S.congTy.hinhThuc || ['Tiền mặt', 'Chuyển khoản']).filter(h => !tenCho(h, cho));
+  const m = modal({
+    title: 'Thu mua máy cũ', wide: true,
+    body: `<p class="muted" style="margin-top:0">Khách bán đứt máy, không mua máy mới. Máy vào kho ngay (nhóm "Máy cũ", giá nhập = giá thu), lập luôn phiếu chi trả tiền người bán.
+      Số CCCD lưu ở ghi chú phiếu nhập để tra lại khi cần.</p><div class="fgrid">
+      ${O_MAY_CU}
+      <label class="field"><span class="lb">Người bán *</span><input name="TenNguoiBan" placeholder="Họ tên theo CCCD"></label>
+      <label class="field"><span class="lb">Số CCCD *</span><input name="CCCD" inputmode="numeric" placeholder="12 số"></label>
+      <label class="field"><span class="lb">Điện thoại</span><input name="SDT" inputmode="tel"></label>
+      <label class="field"><span class="lb">Trả tiền bằng</span><select name="HinhThuc">${ht.map(h => `<option${h === 'Tiền mặt' ? ' selected' : ''}>${esc(h)}</option>`).join('')}</select></label>
+      ${O_ICLOUD}</div>`,
+    buttons: [{ t: 'Thu mua (F8)', ic: 'check', cls: 'primary', save: true, fn: run(async m => {
+      const o = formData(m);
+      canICloud(o);
+      const kq = await api('thuMuaMayCu', o);
+      await loadAll();
+      closeModal(); render();
+      toast(`Đã thu mua ${kq.TenHang} giá ${money(kq.GiaThu)} ₫ của ${kq.TenNguoiBan} (nhập kho ${kq.SoPK}, phiếu chi ${kq.SoPC}).`);
+      if (confirm('In tem dán lưng máy?')) await printTem([kq]);
+    }) }],
+  });
+  traLichSuMayCu(m);
+}
+// Gõ / quét xong IMEI: tra lịch sử. Máy cửa hàng từng bán thì tự điền tên máy; máy đang trong kho thì báo ngay (không thu được)
+function traLichSuMayCu(m) {
   const oMa = $('[name=IMEI]', m), oTen = $('[name=TenHang]', m), ghi = $('[data-lich-su]', m);
   let daTra = '';
   oMa.onchange = async () => {
@@ -3463,6 +3503,25 @@ function openThuMayCu(d) {
       }
     } catch (e) {} // mất mạng: vẫn thu được, máy chủ kiểm lại khi lưu
   };
+}
+
+// Tem dán lưng máy (giấy in nhiệt 50×30mm): tên máy, IMEI, giá bán, mã QR chứa IMEI để quét khi bán
+// ponytail: thư viện QR tải từ cdnjs lúc in lần đầu, mất mạng thì tem chỉ có chữ; cần chạy không mạng thì nhúng thư viện vào trang
+let thuVienQR = null;
+const taiQR = () => thuVienQR || (thuVienQR = new Promise(r => {
+  const sc = document.createElement('script');
+  sc.src = 'https:/' + '/cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+  sc.onload = () => r(window.qrcode || null);
+  sc.onerror = () => { thuVienQR = null; r(null); };
+  document.head.appendChild(sc);
+}));
+// Máy (có IMEI) trên các dòng của phiếu nhập: [{ TenHang, IMEI, GiaLe }], giá bán theo bảng giá mặt hàng
+const mayTrenPhieu = d => filled(d.lines || []).flatMap(l => String(l.IMEI || '').split(/[\s,;]+/).filter(Boolean)
+  .map(im => ({ TenHang: l.TenHang, IMEI: im, GiaLe: (hangByMa(l.MaHH) || {}).GiaLe })));
+async function printTem(ds) {
+  const qr = await taiQR();
+  const svg = ma => { try { const q = qr(0, 'M'); q.addData(String(ma)); q.make(); return q.createSvgTag(2, 0); } catch (e) { return ''; } };
+  await printHtml('<style>@page { size: 50mm 30mm; margin: 0; } body { margin: 0 !important; }</style>' + ds.map(m => `<div class="tem">${qr ? `<div class="tem-qr">${svg(m.IMEI)}</div>` : ''}<div class="tem-ch"><b>${esc(m.TenHang)}</b><span>IMEI ${esc(m.IMEI)}</span>${+m.GiaLe > 0 ? `<b class="tem-gia">${money(m.GiaLe)} ₫</b>` : ''}</div></div>`).join(''));
 }
 
 // ===================== Tài chính: lãi gộp, sổ quỹ, phiếu chi, nợ nhà cung cấp =====================
@@ -3546,9 +3605,9 @@ function vSoQuy(el) {
 
 // Nhà cung cấp = đối tác của phiếu nhập (trừ tồn đầu kỳ, kiểm kê). Nợ = giá trị nhập (theo giá nhập) − đã trả bằng phiếu chi "Trả nhà cung cấp".
 const NGUON_KHONG_NO = /tồn đầu|đầu kỳ|kiểm kê|chuyển kho/i;
-// Phiếu nhập từ khách (thu cũ đổi mới, khách trả hàng: Đối tác là tên khách) không phải mua của nhà cung cấp; nhận theo số đơn hoặc ghi chú server tự ghi
-const NHAP_TU_KHACH = /^(Thu cũ đổi mới|Khách trả hàng)/i;
-const dsNCC = () => S.phieuKho.filter(laNhapNCC).map(p => String(p.DoiTac).trim()).concat(S.phieuChi.map(c => c.DoiTac)); // tên nhà cung cấp đã dùng (gợi ý)
+// Phiếu nhập từ khách (thu cũ đổi mới, khách trả hàng, thu mua máy cũ lẻ: Đối tác là tên khách) không phải mua của nhà cung cấp; nhận theo số đơn hoặc ghi chú server tự ghi
+const NHAP_TU_KHACH = /^(Thu cũ đổi mới|Khách trả hàng|Thu mua máy cũ)/i;
+const dsNCC = () => S.phieuKho.filter(laNhapNCC).map(p => String(p.DoiTac).trim()).concat(S.phieuChi.filter(c => c.Loai !== 'Thu mua máy cũ').map(c => c.DoiTac)); // tên nhà cung cấp đã dùng (gợi ý), không gồm người bán máy cũ lẻ
 const laNhapNCC = p => p.Loai === 'Nhập' && !p.SoDH && String(p.DoiTac || '').trim() && !NGUON_KHONG_NO.test(p.DoiTac) && !NHAP_TU_KHACH.test(String(p.GhiChu || '').trim()); // phiếu nhập gắn đơn hàng (trả hàng) là từ khách
 function noNCC() { // gom theo tên không phân biệt hoa thường, khoảng trắng thừa ("NCC Hoàng Hà" = "ncc  hoàng hà"); hiện tên gặp đầu tiên
   const m = {}, row = ten => { const k = ten.toLowerCase().replace(/\s+/g, ' '); return m[k] || (m[k] = { ten, nhap: 0, soPhieu: 0, tra: 0, cuoi: '' }); };

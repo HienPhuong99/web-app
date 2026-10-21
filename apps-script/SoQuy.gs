@@ -321,10 +321,10 @@ function soQuyMay(token, ngay) {
 
 // Tên nhà cung cấp / người nhận đã dùng (gợi ý ô "Chi cho"): bên giao ở phiếu nhập từ nhà cung cấp (không phải tồn đầu kỳ, kiểm kê,
 // máy cũ thu của khách, khách trả hàng) và người nhận ở phiếu chi. Cùng cách lọc với màn Nợ nhà cung cấp của web (laNhapNCC).
-const NGUON_KHONG_NO_ = /tồn đầu|đầu kỳ|kiểm kê|chuyển kho/i, NHAP_TU_KHACH_ = /^(Thu cũ đổi mới|Khách trả hàng)/i;
+const NGUON_KHONG_NO_ = /tồn đầu|đầu kỳ|kiểm kê|chuyển kho/i, NHAP_TU_KHACH_ = /^(Thu cũ đổi mới|Khách trả hàng|Thu mua máy cũ)/i;
 function dsNCC_() {
   const ten = readTable_('PhieuKho').filter(p => p.Loai === 'Nhập' && !p.SoDH && String(p.DoiTac || '').trim() && !NGUON_KHONG_NO_.test(p.DoiTac) && !NHAP_TU_KHACH_.test(String(p.GhiChu || '').trim()))
-    .map(p => String(p.DoiTac).trim()).concat(readTable_('PhieuChi').map(c => String(c.DoiTac || '').trim()));
+    .map(p => String(p.DoiTac).trim()).concat(readTable_('PhieuChi').filter(c => c.Loai !== THU_MUA_MAY_CU).map(c => String(c.DoiTac || '').trim()));
   const khoa = x => x.toLowerCase().replace(/\s+/g, ' '), da = {}; // cùng tên khác hoa thường / khoảng trắng: gợi ý một lần
   return ten.filter(x => x && !da[khoa(x)] && (da[khoa(x)] = 1)).sort((a, b) => a.localeCompare(b, 'vi'));
 }

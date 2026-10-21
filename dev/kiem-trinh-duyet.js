@@ -318,6 +318,10 @@ BUOC.push(['Nhận máy sửa chữa, đổi trạng thái, trả máy lập đ�
     await page.fill('#modal [name=TenHang]', 'iPhone 8 64GB');
     await page.fill('#modal [name=IMEI]', '356000999888777');
     await page.fill('#modal [name=GiaThu]', '1000000');
+    await page.locator('#modal .btn', { hasText: 'Thu máy' }).click(); // chưa tích đã kiểm iCloud: chưa lưu
+    await page.waitForSelector('#toast div:has-text("thoát iCloud")');
+    assert.ok(await page.locator('#modal').isVisible());
+    await page.check('#modal [name=daKiemICloud]');
     await page.locator('#modal .btn', { hasText: 'Thu máy' }).click();
     await page.waitForSelector('#modal', { state: 'hidden' });
     // Đơn lên đời: máy cũ thành dòng −1 của đơn (chỉ xem), tổng đơn giảm; không còn nút Hủy đơn (hủy bằng Khách trả hàng)
@@ -445,6 +449,48 @@ BUOC.push(['Phiếu nhập từ khách (thu cũ, khách trả hàng) không thà
   await page.waitForSelector('tr[data-go="pk:T-TRA"]');
   assert.match(await page.locator('tr[data-go="pk:T-TRA"]').textContent(), /Khách trả hàng/);
   await page.evaluate(() => { S.phieuKho = S.phieuKho.filter(p => !/^T-/.test(p.SoPK)); S.dirty = false; go('home'); });
+}]);
+BUOC.push(['Thu mua máy cũ lẻ: bắt buộc CCCD và ô iCloud, nhập kho + phiếu chi, không thành nợ NCC; in tem 50×30mm có mã QR', async page => {
+  // thư viện QR (cdnjs) thay bằng bản giả để test không cần mạng
+  await page.route('**/qrcode-generator/**', r => r.fulfill({ contentType: 'text/javascript', body: 'window.qrcode = () => ({ addData(d) { this.d = d; }, make() {}, createSvgTag() { return "<svg data-qr=\\"" + this.d + "\\"></svg>"; } });' }));
+  await page.evaluate(() => { window.__in = []; window.print = () => window.__in.push(document.querySelector('#print').innerHTML); });
+  const hoi = [], ghi = d => { hoi.push(d.message()); d.accept(); };
+  page.on('dialog', ghi);
+  try {
+    await page.click('#nav a[data-go="kho"]');
+    await page.locator('#topActions .btn', { hasText: 'Thu mua máy cũ' }).click();
+    await page.fill('#modal [name=TenHang]', 'iPhone 12 Pro 256GB');
+    await page.fill('#modal [name=IMEI]', '353222000111999');
+    await page.fill('#modal [name=GiaThu]', '7000000');
+    await page.fill('#modal [name=GiaLe]', '8900000');
+    await page.fill('#modal [name=TenNguoiBan]', 'Chị Lan Bán Máy');
+    await page.fill('#modal [name=SDT]', '0912345678');
+    await page.locator('#modal .btn', { hasText: 'Thu mua' }).click(); // chưa tích iCloud
+    await page.waitForSelector('#toast div:has-text("thoát iCloud")');
+    await page.check('#modal [name=daKiemICloud]');
+    await page.locator('#modal .btn', { hasText: 'Thu mua' }).click(); // thiếu CCCD: máy chủ chặn
+    await page.waitForSelector('#toast div:has-text("CCCD")');
+    await page.fill('#modal [name=CCCD]', '001090123456');
+    await page.locator('#modal .btn', { hasText: 'Thu mua' }).click();
+    await page.waitForSelector('#modal', { state: 'hidden' });
+    await page.waitForFunction(() => window.__in.length === 1, null, { timeout: 8000 });
+    assert.ok(hoi.some(m => /In tem/.test(m)), hoi.join('|'));
+    const tem = (await page.evaluate(() => window.__in[0]));
+    assert.ok(['class="tem"', 'iPhone 12 Pro 256GB (máy cũ)', 'IMEI 353222000111999', '8.900.000', 'data-qr="353222000111999"'].every(x => tem.includes(x)), tem);
+    const r = await page.evaluate(() => {
+      const pk = S.phieuKho.find(p => p.DoiTac === 'Chị Lan Bán Máy'), pc = S.phieuChi.find(c => c.DoiTac === 'Chị Lan Bán Máy');
+      return { pk: pk && [pk.SoPK, pk.GhiChu], pc: pc && [pc.Loai, pc.SoTien, pc.HinhThuc], ncc: noNCC().map(x => x.ten), goiY: dsNCC() };
+    });
+    assert.match(r.pk[1], /^Thu mua máy cũ · CCCD 001090123456 · SĐT 0912345678 · đã kiểm iCloud/);
+    assert.deepStrictEqual(r.pc, ['Thu mua máy cũ', 7000000, 'Tiền mặt']);
+    assert.ok(!r.ncc.includes('Chị Lan Bán Máy') && !r.goiY.includes('Chị Lan Bán Máy'), 'Người bán lẻ không là nhà cung cấp: ' + r.ncc);
+    // Mở phiếu nhập vừa lập: nút In tem máy in đúng máy trên phiếu
+    await page.evaluate(so => openPK(S.phieuKho.find(p => p.SoPK === so)), r.pk[0]);
+    await page.locator('#topActions .btn', { hasText: 'In tem máy' }).click();
+    await page.waitForFunction(() => window.__in.length === 2, null, { timeout: 8000 });
+    assert.match(await page.evaluate(() => window.__in[1]), /IMEI 353222000111999/);
+    await page.evaluate(() => go('home'));
+  } finally { page.off('dialog', ghi); await page.unroute('**/qrcode-generator/**'); }
 }]);
 BUOC.push(['Ngày "hôm nay" trên web theo giờ Việt Nam như máy chủ, dù máy để múi giờ khác', async page => {
   const [web, vn] = await page.evaluate(() => [today(), new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())]);
