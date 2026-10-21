@@ -37,8 +37,8 @@ Skill dùng chung (`agent-browser`, `agent-browser-dogfood`, `fixing-accessibili
 | VIEC-02 | Đưa công cụ kiểm toán của Argon (`kiem-toan-sau.js`, `audit-ui-playwright.js`) vào `dev/` để chạy lại được, cân nhắc gắn vào `dev/kiem-tra.js` | Báo cáo kiểm toán, mục 2 | Xong (`3bc17d4`) |
 | VIEC-03 | Soi các tính năng của đợt 2: quỹ "Chờ giải ngân", thanh toán kết hợp, linh kiện sửa chữa xuất kho, kiểm kho lưu tạm | PR #16–#19 | Xong (`3bc17d4`, `967b02c`) |
 | VIEC-04 | Đi khắp web và app (bản web) bằng skill `agent-browser-dogfood`, báo lỗi giao diện kèm ảnh và bước tái hiện | Yêu cầu của chủ cửa hàng | Xong (`3bc17d4`) |
-| VIEC-05 | Thu mua máy cũ lẻ (khách bán đứt, không mua máy mới) | Báo cáo kiểm toán, mục 4.5 | Chờ chủ quyết (đã có đề xuất ở tin #2) |
-| VIEC-06 | Checklist bắt buộc "Đã thoát iCloud / tắt Tìm iPhone" + in tem QR dán lưng máy cũ | Báo cáo kiểm toán, mục 4.6 | Chờ chủ quyết (đã có đề xuất ở tin #2) |
+| VIEC-05 | Thu mua máy cũ lẻ (khách bán đứt, không mua máy mới) | Báo cáo kiểm toán, mục 4.5 | Xong: chủ chọn web + app, CCCD bắt buộc; Opus làm (nhánh `claude/thu-mua-may-cu`) |
+| VIEC-06 | Checklist bắt buộc "Đã thoát iCloud / tắt Tìm iPhone" + in tem QR dán lưng máy cũ | Báo cáo kiểm toán, mục 4.6 | Xong: chủ chọn cả A và B; Opus làm (nhánh `claude/thu-mua-may-cu`) |
 
 ### Cần chủ cửa hàng quyết định
 

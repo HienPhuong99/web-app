@@ -16,7 +16,7 @@ function apiHam_() {
     cauHinhMay: cauHinhMay, khoMay: khoMay, traMaKho: traMaKho, dsMaTon: dsMaTon, dsKhachMay: dsKhachMay, chiTietKhach: chiTietKhach, banNhanh: banNhanh,
     dsHopDongMay: dsHopDongMay, taiPdfHopDong: taiPdfHopDong, dsThietBi: dsThietBi, xoaThietBi: xoaThietBi, thuThongBao: thuThongBao, chiTietTongQuan: chiTietTongQuan,
     soQuyMay: soQuyMay, luuPhieuChi: luuPhieuChi, luuGiaiNgan: luuGiaiNgan, loiNhuan: loiNhuan,
-    kiemKho: kiemKho, traHang: traHang, phieuBanHangPdf: phieuBanHangPdf, dsSuaChua: dsSuaChua, chiTietSuaChua: chiTietSuaChua, luuSuaChua: luuSuaChua, traMaySua: traMaySua, luuAnhSuaChua: luuAnhSuaChua, anhSuaChua: anhSuaChua, phieuNhanMayPdf: phieuNhanMayPdf,
+    kiemKho: kiemKho, traHang: traHang, phieuBanHangPdf: phieuBanHangPdf, dsSuaChua: dsSuaChua, chiTietSuaChua: chiTietSuaChua, luuSuaChua: luuSuaChua, traMaySua: traMaySua, thuMuaMayCu: thuMuaMayCu, luuAnhSuaChua: luuAnhSuaChua, anhSuaChua: anhSuaChua, phieuNhanMayPdf: phieuNhanMayPdf,
   };
 }
 
@@ -79,7 +79,7 @@ function goiApi_(q) {
   if (maGhi) { try { CacheService.getScriptCache().put(maGhi, JSON.stringify(r === undefined ? null : r), 600); } catch (e) { boGiu_(maGhi); } }
   return r;
 }
-const GHI_MOT_LAN_ = ['banNhanh', 'luuThuTien', 'luuPhieuChi', 'luuGiaiNgan', 'traHang', 'traMaySua', 'luuSuaChua'], DANG_GHI_ = '…đang ghi';
+const GHI_MOT_LAN_ = ['banNhanh', 'luuThuTien', 'luuPhieuChi', 'luuGiaiNgan', 'traHang', 'traMaySua', 'luuSuaChua', 'thuMuaMayCu'], DANG_GHI_ = '…đang ghi';
 
 function bamMay_(may) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(may), Utilities.Charset.UTF_8)
@@ -234,7 +234,7 @@ function traBaoHanh(token, q) {
 function cauHinhMay(token) {
   const user = user_(token), c = cuaHang_(CUR_SHOP).congTy, nh = NGAN_HANG.find(b => b[0] === c.qrNganHang);
   return {
-    hinhThuc: (c.hinhThuc || []).slice(), vat: +c.vatMacDinh || 0, quanTri: user.vaiTro === 'admin',
+    hinhThuc: (c.hinhThuc || []).slice(), choGiaiNgan: Object.keys(choGiaiNgan_()), vat: +c.vatMacDinh || 0, quanTri: user.vaiTro === 'admin',
     qr: c.qrNganHang && c.qrSoTK ? { bin: c.qrNganHang, nganHang: nh ? nh[1] : c.qrNganHang, soTK: c.qrSoTK, chuTK: c.qrChuTK || '' } : null,
   };
 }

@@ -1002,6 +1002,41 @@ const doiNgay = (bang, so, ngay) => { const sh = sheets['PS_' + bang], c = sh.ro
   assert.deepStrictEqual([nhac && nhac.MaKH, nhac && nhac.n], [kh.MaKH, 5]);
 }
 
+// Thu mua máy cũ lẻ (khách bán đứt): một phiếu nhập + một phiếu chi; bắt buộc CCCD và xác nhận iCloud; không thành nợ nhà cung cấp
+{
+  const t = G.dangNhap('admin', adminPass).token, imei = '353111000222333';
+  const o = { TenHang: 'iPhone 13 Pro 128GB', IMEI: imei, GiaThu: 9000000, GiaLe: 11500000, GhiChu: 'pin 86%', TenNguoiBan: 'Anh Tuấn bán máy', SDT: '0909 123 456', CCCD: '079 090 001 234', HinhThuc: 'Chuyển khoản', daKiemICloud: true };
+  assert.throws(() => goi(binh4, 'thuMuaMayCu', Object.assign({}, o, { daKiemICloud: false })), /thoát iCloud/);
+  assert.throws(() => goi(binh4, 'thuMuaMayCu', Object.assign({}, o, { CCCD: '' })), /CCCD/);
+  assert.throws(() => goi(binh4, 'thuMuaMayCu', Object.assign({}, o, { CCCD: '07909000123' })), /CCCD/); // 11 số
+  assert.throws(() => goi(binh4, 'thuMuaMayCu', Object.assign({}, o, { TenNguoiBan: ' ' })), /người bán/);
+  const htCho = Object.keys(G.choGiaiNgan_())[0];
+  if (htCho) assert.throws(() => goi(binh4, 'thuMuaMayCu', Object.assign({}, o, { HinhThuc: htCho })), /chờ giải ngân/);
+  const nh0 = goiMoi(binh4, 'soQuyMay', '').ton.nganHang, pk0 = sheets.PS_PhieuKho.rows.length;
+  // Ghi phiếu chi lỗi: bỏ phiếu nhập vừa lập, máy không nằm lại trong kho
+  const goc = G.luuPhieuChi;
+  G.luuPhieuChi = () => { throw new Error('giả lập lỗi phiếu chi'); };
+  try { assert.throws(() => goi(binh4, 'thuMuaMayCu', o), /giả lập lỗi/); } finally { G.luuPhieuChi = goc; }
+  assert.deepStrictEqual([sheets.PS_PhieuKho.rows.length, goi(binh4, 'traMaKho', imei).trangThai], [pk0, 'chuaCo']);
+  // Gửi lại cùng mã lần gửi (mạng chập chờn): chỉ một phiếu nhập, một phiếu chi
+  const gui = () => api({ may: binh4, fn: 'thuMuaMayCu', args: [o], maGhi: 'thu-mua-0001' });
+  const r = gui().result;
+  assert.deepStrictEqual(plain(gui().result), plain(r));
+  assert.deepStrictEqual([r.TenHang, r.IMEI, r.GiaThu, r.GiaLe, r.HinhThuc], ['iPhone 13 Pro 128GB (máy cũ)', imei, 9000000, 11500000, 'Chuyển khoản']);
+  const pk = G.findObj_('PhieuKho', r.SoPK), pc = G.findObj_('PhieuChi', r.SoPC);
+  assert.deepStrictEqual([pk.Loai, pk.DoiTac], ['Nhập', 'Anh Tuấn bán máy']);
+  assert.match(pk.GhiChu, /^Thu mua máy cũ · CCCD 079090001234 · SĐT 0909 123 456 · đã kiểm iCloud \/ Tìm iPhone · pin 86%$/);
+  assert.deepStrictEqual([pc.Loai, pc.DoiTac, pc.SoTien, pc.HinhThuc], ['Thu mua máy cũ', 'Anh Tuấn bán máy', 9000000, 'Chuyển khoản']);
+  assert.strictEqual(G.readTable_('PhieuChi').filter(c => c.Loai === 'Thu mua máy cũ').length, 1);
+  assert.strictEqual(goi(binh4, 'traMaKho', imei).trangThai, 'trongKho');
+  assert.strictEqual(goiMoi(binh4, 'soQuyMay', '').ton.nganHang, nh0 - 9000000);
+  assert.ok(!G.dsNCC_().includes('Anh Tuấn bán máy')); // người bán lẻ không thành nhà cung cấp (gợi ý, nợ NCC)
+  // Máy đã trong kho: không thu mua lại được; bán lại thì lãi tính theo giá thu
+  assert.throws(() => goi(binh4, 'thuMuaMayCu', Object.assign({}, o)), /đã nhập|trong kho/);
+  const b = goi(binh4, 'banNhanh', { khachMoi: { TenKH: 'Khách mua máy thu' }, lines: [{ MaHH: r.MaHH, SoLuong: 1, DonGia: 11500000, IMEI: imei }], thu: { SoTien: 11500000, HinhThuc: 'Tiền mặt' } });
+  assert.strictEqual(G.loiNhuan(t, today, today).theoDon.find(x => x.SoDH === b.SoDH).giaVon, 9000000);
+}
+
 // Sai mật khẩu 5 lần: chặn 10 phút như web
 for (let i = 0; i < 5; i++) api({ fn: 'dangNhapMay', args: ['admin', 'sai'] });
 assert.match(api({ fn: 'dangNhapMay', args: ['admin', adminPass] }).error, /quá 5 lần/);

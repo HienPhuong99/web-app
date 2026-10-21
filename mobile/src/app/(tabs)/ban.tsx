@@ -24,6 +24,7 @@ import { Chip } from '../../ui/Chip';
 import { KhungQuet } from '../../ui/KhungQuet';
 import { MaQR } from '../../ui/MaQR';
 import { Nut } from '../../ui/Nut';
+import { LOI_ICLOUD, OICloud } from '../../ui/OICloud';
 import { The } from '../../ui/The';
 import { mau } from '../../ui/theme';
 
@@ -286,7 +287,7 @@ type MayCu = { k: number; TenHang: string; IMEI: string; GiaThu: number };
 function ThuMayCu({ ds, setDs }: { ds: MayCu[]; setDs: React.Dispatch<React.SetStateAction<MayCu[]>> }) {
   const { goi } = useAuth();
   const [mo, setMo] = useState(false), [ten, setTen] = useState(''), [imei, setImei] = useState(''), [gia, setGia] = useState(0), [loi, setLoi] = useState('');
-  const [lichSu, setLichSu] = useState(''), daTra = useRef('');
+  const [lichSu, setLichSu] = useState(''), [daKiem, setDaKiem] = useState(false), daTra = useRef('');
   // Gõ / quét xong IMEI máy cũ: tra lịch sử. Máy cửa hàng từng bán thì tự điền tên máy; máy đang trong kho thì báo ngay (không thu được)
   const traLichSu = async () => {
     const ma = chuanHoaMa(imei);
@@ -308,8 +309,9 @@ function ThuMayCu({ ds, setDs }: { ds: MayCu[]; setDs: React.Dispatch<React.SetS
     if (ma.length < 4) return setLoi('Nhập IMEI/serial của máy cũ.');
     if (gia <= 0) return setLoi('Nhập giá thu.');
     if (ds.some(m => m.IMEI === ma)) return setLoi('Máy cũ này đã thêm.');
+    if (!daKiem) return setLoi(LOI_ICLOUD);
     setDs(d => [...d, { k: Date.now(), TenHang: ten.trim(), IMEI: ma, GiaThu: gia }]);
-    setTen(''); setImei(''); setGia(0); setLoi(''); setLichSu(''); daTra.current = ''; setMo(false);
+    setTen(''); setImei(''); setGia(0); setLoi(''); setLichSu(''); setDaKiem(false); daTra.current = ''; setMo(false);
   };
   return (
     <View style={{ marginTop: 12 }} testID="thu-may-cu">
@@ -329,6 +331,7 @@ function ThuMayCu({ ds, setDs }: { ds: MayCu[]; setDs: React.Dispatch<React.SetS
           <TextInput style={[s.o, { flex: 0 }]} value={imei} onChangeText={setImei} placeholder="IMEI / serial máy cũ" placeholderTextColor={mau.xam} autoCapitalize="characters" autoCorrect={false}
             onEndEditing={traLichSu} onSubmitEditing={traLichSu} testID="o-imei-may-cu" />
           {lichSu ? <Text style={[s.phu, { marginTop: 0 }]} testID="lich-su-may-cu">{lichSu}</Text> : null}
+          <OICloud chon={daKiem} onDoi={setDaKiem} />
           <View style={s.hangNhap}>
             <TextInput style={s.o} value={soTienNhap(gia)} onChangeText={t => setGia(docTien(t))} keyboardType="number-pad" placeholder="Giá thu" placeholderTextColor={mau.xam} testID="o-gia-may-cu" />
             <Nut chu="Thêm" bieuTuong="add" onPress={them} style={{ minHeight: 48 }} testID="nut-them-may-cu" />

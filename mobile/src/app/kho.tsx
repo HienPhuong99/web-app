@@ -13,6 +13,7 @@ import { BoLoc, BoSapXep } from '../ui/BoLoc';
 import { ChuLoi, ChuNhat, Dong, DongTT, KhungDanhSach, Nhan, OTim } from '../ui/DanhSach';
 import { DauTrang } from '../ui/DauTrang';
 import { HangLayMa } from '../ui/KhungQuet';
+import { Nut } from '../ui/Nut';
 import { The } from '../ui/The';
 import { DongCapNhat, KhungCho, useKeo } from '../ui/TrangThaiTai';
 import { mau } from '../ui/theme';
@@ -30,6 +31,7 @@ export default function KhoMan() {
         <View style={{ marginBottom: 12 }}>
           <DauTrang tieuDe="Kho hàng" phu={hang ? `${hang.length} mặt hàng · ${tongTon} sản phẩm còn trong kho` : undefined} />
           <DongCapNhat dl={dl} />
+          <Nut chu="Thu mua máy cũ (khách bán đứt)" phu bieuTuong="phone-portrait-outline" onPress={() => router.push('/thu-mua')} style={{ marginBottom: 12, minHeight: 46 }} testID="nut-thu-mua" />
           <KiemTraIMEI />
           <OTim value={q} onChangeText={setQ} placeholder="Tìm hàng theo tên, mã, model" testID="o-tim-kho" />
           <BoLoc ds={LOC_KHO} chon={loc} onChon={setLoc} dem={v => demKho(hang ?? [], v)} testID="loc-kho" />

@@ -413,6 +413,36 @@ buoc('Sổ quỹ: tồn tiền mặt / ngân hàng, ghi phiếu chi; lãi gộp 
   await rpc(c, 'luuCuaHang', t, Object.assign({}, d.congTy, { tenNgan: d.cuaHang.ten, moTa: d.cuaHang.moTa, choGiaiNgan: '' }));
 });
 
+buoc('Thu mua máy cũ lẻ: bắt buộc CCCD và ô iCloud, lập phiếu nhập + phiếu chi', async page => {
+  await page.getByTestId('tab-tai-khoan').click();
+  await v(page, 'mo-kho').click();
+  await v(page, 'nut-thu-mua').click();
+  await v(page, 'o-imei-thu-mua').fill('353444000555666');
+  await v(page, 'o-ten-thu-mua').fill('iPhone 11 128GB');
+  await v(page, 'o-gia-thu-mua').fill('3500000');
+  await v(page, 'o-gia-le-thu-mua').fill('4500000');
+  await v(page, 'o-nguoi-ban').fill('Anh Bình Bán Máy');
+  await v(page, 'o-cccd').fill('0790');
+  await v(page, 'nut-luu-thu-mua').click();
+  await v(page, 'loi-thu-mua').getByText(/CCCD/).waitFor();
+  await v(page, 'o-cccd').fill('079090001111');
+  await v(page, 'nut-luu-thu-mua').click();
+  await v(page, 'loi-thu-mua').getByText(/thoát iCloud/).waitFor();
+  assert.strictEqual(await v(page, 'o-icloud').getAttribute('aria-checked'), 'false');
+  await v(page, 'o-icloud').click();
+  assert.strictEqual(await v(page, 'o-icloud').getAttribute('aria-checked'), 'true');
+  await khongTranNgang(page);
+  await v(page, 'nut-luu-thu-mua').click();
+  await v(page, 'thu-mua-xong').waitFor({ timeout: 20000 });
+  const kq = await v(page, 'thu-mua-xong').textContent();
+  assert.match(kq, /iPhone 11 128GB \(máy cũ\).*353444000555666.*3\.500\.000.*Anh Bình Bán Máy.*NK.*PC.*Tiền mặt/s);
+  await v(page, 'nut-xong-thu-mua').click();
+  await v(page, 'o-kiem-imei').fill('353444000555666');
+  await v(page, 'nut-kiem-imei').click();
+  await v(page, 'tt-imei').getByText('Còn trong kho').waitFor({ timeout: 15000 });
+  await v(page, 'nut-lui').click();
+});
+
 buoc('Thu cũ đổi mới khi bán nhanh; nhận bảo hành từ kết quả tra, đổi trạng thái, trả máy', async (page, c) => {
   await page.getByTestId('tab-ban').click();
   await v(page, 'tieu-de-ban').waitFor();
@@ -427,6 +457,9 @@ buoc('Thu cũ đổi mới khi bán nhanh; nhận bảo hành từ kết quả t
   await v(page, 'o-ten-may-cu').fill('iPhone 8 64GB');
   await v(page, 'o-imei-may-cu').fill('356000999888111');
   await v(page, 'o-gia-may-cu').fill('300000');
+  await v(page, 'nut-them-may-cu').click(); // chưa tích đã kiểm iCloud: chưa thêm được
+  await page.getByText(/thoát iCloud/).filter({ visible: true }).first().waitFor();
+  await v(page, 'o-icloud').click();
   await v(page, 'nut-them-may-cu').click();
   await v(page, 'tong-cong').getByText('200.000 đ').waitFor(); // đơn lên đời: tổng đơn đã trừ máy cũ
   assert.strictEqual(await v(page, 'o-khach-tra').inputValue(), '200.000');

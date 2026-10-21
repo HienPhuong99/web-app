@@ -95,7 +95,7 @@ export type ChiTietNgay = {
 /** chiTietTongQuan('no'): mọi khách còn nợ, nhiều nhất trước */
 export type KhachNo = { tong: number; ds: { MaKH: string; TenKH: string; SDT: string; tien: number }[] };
 
-export type CauHinh = { hinhThuc: string[]; vat: number; quanTri: boolean; qr: { bin: string; nganHang: string; soTK: string; chuTK: string } | null };
+export type CauHinh = { hinhThuc: string[]; choGiaiNgan?: string[]; vat: number; quanTri: boolean; qr: { bin: string; nganHang: string; soTK: string; chuTK: string } | null };
 
 export type HangKho = { MaHH: string; TenHang: string; Model: string; NhomHang: string; DVT: string; GiaLe: number; GiaSi: number; TonToiThieu: number; nhap: number; xuat: number; ton: number };
 export type DongTheKho = { SoPK: string; Ngay: string; Loai: 'Nhập' | 'Xuất' | string; SoDH: string; DoiTac: string; GhiChu: string; SoLuong: number; IMEI: string };
