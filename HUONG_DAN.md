@@ -66,7 +66,7 @@ Sheet đã nạp dữ liệu thử bằng bản cũ (tên có dấu `[THỬ]`): 
 
 ## App điện thoại (Android / iOS)
 
-Thư mục `mobile/` là app cho nhân viên đứng quầy: **Tổng quan**, **Khách** (hồ sơ, công nợ, gọi / Zalo), **Bán nhanh** (quét IMEI → một nút lập đơn + xuất kho + thu tiền, mã VietQR), **Thu tiền**, **Quét** tra bảo hành (camera, chọn ảnh có mã, dán IMEI), **Kho**, **Hợp đồng** (chia sẻ PDF), **Điện thoại đăng nhập**, khóa **Face ID**, **thông báo việc cần làm mỗi sáng**. Cách chạy thử, cài APK, kiểm tra: xem `mobile/README.md`.
+Thư mục `mobile/` là app cho nhân viên đứng quầy: **Tổng quan**, **Khách** (hồ sơ, công nợ, gọi / Zalo), **Bán nhanh** (quét IMEI → một nút lập đơn + xuất kho + thu tiền, mã VietQR), **Thu tiền**, **Quét** tra bảo hành (camera, chọn ảnh có mã, dán IMEI), **Kho** (thu mua máy cũ), **Kiểm kho** theo IMEI, **Bảo hành – sửa chữa**, **Sổ quỹ** (phiếu chi, tiền chờ giải ngân), **Khách trả máy**, **Hợp đồng** (chia sẻ PDF), **Điện thoại đăng nhập**, khóa **Face ID**, **thông báo việc cần làm mỗi sáng**. Cách chạy thử, cài APK, kiểm tra: xem `mobile/README.md`.
 
 1. **Đưa code lên Google** (`node dev/trien-khai.js`, hoặc dán tay rồi triển khai lại như mục *Lên bản mới*). Lần gọi đầu tiên tự thêm trang `ThietBi` (và cột `PushToken`) vào Sheet.
 2. **Cấp quyền mới cho thông báo đẩy** (một lần): mở Apps Script (`clasp open` hoặc Tiện ích mở rộng → Apps Script), chọn hàm `caiDat` → **Chạy** → **Cho phép** quyền *kết nối tới dịch vụ bên ngoài* (gửi thông báo qua máy chủ Expo). Chưa cấp thì riêng việc gửi thông báo báo lỗi, các phần khác vẫn chạy.
@@ -178,9 +178,6 @@ Chi tiết lý do và nguồn nằm ở `BAO_CAO_KHAO_SAT_THI_TRUONG.md`. Tất 
 4. **Thu tiền**: trong đơn hoặc ngay trên phiếu giao bấm *Thu tiền* (hoặc menu *Thu tiền & công nợ*) → số tiền điền sẵn phần còn nợ, sửa nếu là tiền cọc → Lưu. In được phiếu thu.
    Khách chuyển khoản: bấm **Mã QR chuyển khoản** để hiện mã VietQR có sẵn số tiền và số đơn cho khách quét. Mã QR cũng được in trên báo giá và đơn hàng. Bật ở *Cài đặt → Thông tin cửa hàng → Sửa*: chọn ngân hàng, nhập số tài khoản, tên chủ tài khoản – rồi **quét thử một lần** xem tên chủ tài khoản hiện đúng chưa.
 5. **Kho**: *Nhập kho* khi hàng về (ghi IMEI nếu muốn, không bắt buộc). *Tồn kho* xem số tồn, bấm vào mặt hàng xem **thẻ kho**. Đặt *Tồn tối thiểu* trong Hàng hóa để được báo *Sắp hết*.
-   **Thu mua máy cũ** (khách bán đứt, không mua máy mới): *Nhập – xuất kho* hoặc *Tồn kho* → **Thu mua máy cũ** (app: *Kho* → *Thu mua máy cũ*). Nhập máy, IMEI, giá thu, giá bán dự kiến, **họ tên và số CCCD người bán** (bắt buộc), cách trả tiền. Một lần bấm lập **phiếu nhập kho** (máy vào nhóm *Máy cũ*, giá nhập = giá thu nên lãi tính đúng khi bán lại) và **phiếu chi** trả người bán. Số CCCD lưu ở ghi chú phiếu nhập: báo người bán mục đích lưu (hồ sơ khi máy bị báo mất) theo Nghị định 13/2023/NĐ-CP. Người bán không tính vào *Nợ nhà cung cấp*.
-   **Kiểm iCloud trước khi nhận máy cũ**: khi thu mua và khi thu cũ đổi mới (web và app) phải tích ô *Đã thoát iCloud / tắt Tìm iPhone, kiểm tra máy không khóa mạng* thì mới lưu được.
-   **In tem dán lưng máy** (web): mở phiếu nhập có IMEI → **In tem máy** (sau khi thu mua máy cũ, web cũng hỏi in tem luôn). Mỗi máy một tem 50×30mm: tên máy, IMEI, giá bán, mã QR chứa IMEI để quét khi bán. Máy in nhiệt: chọn khổ giấy 50×30mm, lề 0. Mã QR cần mạng lúc in lần đầu; mất mạng thì tem chỉ có chữ.
 6. **Bảo hành**: menu *Bảo hành* → gõ IMEI, SĐT hoặc tên khách là ra máy đã bán, ngày giao, ngày hết bảo hành. Thời hạn: ô *Bảo hành (tháng)* của từng mặt hàng; để trống thì theo cửa hàng (mặc định 12 tháng), 0 là không bảo hành.
 7. **Báo cáo & sổ doanh thu**: chọn kỳ (tháng, quý, năm hoặc từ ngày – đến ngày) → doanh thu theo ngày, theo nhân viên, theo khách, theo mặt hàng; *Xuất CSV* để mở bằng Excel/Google Sheets. Nút **In sổ doanh thu (S1a-HKD)** in sổ doanh thu bán hàng hóa, dịch vụ theo mẫu của Thông tư 152/2025/TT-BTC (hộ kinh doanh phải ghi sổ từ 01/01/2026), mỗi ngày một dòng. Điền tên chủ hộ và mã số thuế ở *Cài đặt → Thông tin cửa hàng*. Đối chiếu với mẫu của cơ quan thuế trước khi nộp; hộ doanh thu trên 1 tỷ đồng/năm dùng mẫu khác (S2a…) và phải xuất hóa đơn điện tử – app chưa làm hai việc này.
 8. **Nhật ký** (quản trị): ai thêm, sửa, xóa, hủy chứng từ nào, lúc nào. Google Sheet chỉ ghi mọi thay đổi dưới tên chủ file nên đây là chỗ duy nhất biết nhân viên nào đã làm.
@@ -192,12 +189,55 @@ Chi tiết lý do và nguồn nằm ở `BAO_CAO_KHAO_SAT_THI_TRUONG.md`. Tất 
 | Xem, thêm/sửa khách hàng, báo giá, đơn hàng, phiếu kho, phiếu thu | ✓ | ✓ |
 | Lập, sửa hợp đồng, tạo file Docs, tải PDF, nhân bản, tạo hàng loạt, gia hạn, nhắc khách, lịch thanh toán, thu đợt, ký tại quầy | ✓ | ✓ |
 | Sửa hàng hóa và số tiền của hợp đồng đã hiệu lực; hủy chữ ký; hủy thu đợt; xóa hợp đồng; sửa mẫu hợp đồng; bật email sáng | | ✓ |
+| Phiếu chi, ghi nhận tiền chờ giải ngân về, thu mua máy cũ, nhận và trả máy sửa chữa, khách trả hàng, kiểm kho | ✓ | ✓ |
+| Sửa, xóa phiếu chi và phiếu giải ngân; đặt số dư đầu kỳ sổ quỹ; sửa phiếu sửa chữa đã trả khách; xem lãi gộp | | ✓ |
 | Thêm/sửa bảng giá hàng hóa | | ✓ |
 | Xóa chứng từ, khách hàng, mặt hàng | | ✓ |
 | Quản lý tài khoản, cấp quyền cửa hàng | | ✓ |
 | Sửa thông tin cửa hàng, tài khoản nhận chuyển khoản; xem nhật ký | | ✓ |
 
 Khóa tài khoản, đổi quyền hoặc đặt lại mật khẩu có hiệu lực **ngay**: các máy đang đăng nhập bằng tài khoản đó bị đăng xuất. Tự đổi mật khẩu thì máy đang dùng giữ nguyên, các máy khác phải đăng nhập lại.
+
+## Việc ở quầy: giảm giá, máy cũ, trả hàng, sửa chữa, sổ quỹ
+
+### Giảm giá, khách trả nhiều hình thức
+- **Giảm giá cả đơn**: ô *Giảm giá* dưới bảng hàng (web) hoặc khi bán nhanh (app). Trừ vào tiền hàng trước khi tính VAT, không quá tiền hàng. Lãi gộp trừ theo.
+- **Khách trả bằng hai hình thức** (vd. một phần tiền mặt, một phần chuyển khoản): app *Bán nhanh* bấm **+ Trả thêm hình thức khác**; web thì lập hai phiếu thu cho cùng đơn.
+
+### Máy cũ
+- **Thu cũ đổi mới** (khách đưa máy cũ trừ vào máy mới): web mở đơn → **Thu máy cũ**; app bán nhanh → *Thu máy cũ của khách*. Máy cũ thành một dòng âm của đơn và vào kho ngay (nhóm *Máy cũ*, giá nhập = giá thu). Trong **7 ngày** kể từ ngày bán, khách trả máy mới thì cửa hàng trả lại đúng máy cũ đó, nên máy cũ chưa bán được trong 7 ngày này. Đơn lên đời không hủy được, muốn hủy thì làm *Khách trả hàng*.
+- **Thu mua máy cũ** (khách bán đứt, không mua máy mới): web *Nhập – xuất kho* hoặc *Tồn kho* → **Thu mua máy cũ**; app *Thêm* → *Kho hàng* → **Thu mua máy cũ**. Nhập máy, IMEI, giá thu, giá bán dự kiến, **họ tên và số CCCD người bán** (bắt buộc), cách trả tiền. Một lần bấm lập **phiếu nhập kho** và **phiếu chi** trả người bán. Số CCCD lưu ở ghi chú phiếu nhập: báo người bán mục đích lưu (làm hồ sơ khi máy bị báo mất) theo Nghị định 13/2023/NĐ-CP. Người bán không tính vào *Nợ nhà cung cấp*.
+- **Kiểm iCloud trước khi nhận máy**: khi thu mua và khi thu cũ đổi mới phải tích ô *Đã thoát iCloud / tắt Tìm iPhone, kiểm tra máy không khóa mạng* thì mới lưu được.
+- **Làm lại máy cũ** (thay pin, thay màn trước khi bán lại): lập phiếu chi loại *Làm lại máy cũ*, ghi IMEI máy đang trong kho. Tiền này cộng vào giá vốn máy đó, nên lãi khi bán lại không bị tính cao hơn thực tế.
+- **In tem dán lưng máy** (web): mở phiếu nhập có IMEI → **In tem máy**. Sau khi thu mua máy cũ, web cũng hỏi in tem luôn. Mỗi máy một tem 50×30mm: tên máy, IMEI, giá bán, mã QR chứa IMEI để quét khi bán. Máy in nhiệt: chọn khổ giấy 50×30mm, lề 0. Mã QR cần mạng lúc in lần đầu; mất mạng thì tem chỉ có chữ.
+
+### Khách trả hàng, đổi máy
+- Web: mở đơn → **Khách trả hàng**. App: hồ sơ khách hoặc kết quả tra bảo hành → ở thẻ máy bấm **Khách trả máy**.
+- Máy trả về nhập lại kho, đơn giảm theo; trả hết thì đơn tự hủy. Khách đã trả nhiều hơn số mới thì lập luôn phiếu trả lại tiền (xem trước số tối đa được hoàn).
+- Đơn có giảm giá: **trả máy thì mất hết giảm giá**; chỉ trả phụ kiện thì giảm giá chia theo tiền hàng còn lại.
+- **Đổi máy** = khách trả máy này rồi bán máy khác.
+
+### Bảo hành – sửa chữa
+- Web: *Nhận bảo hành – sửa chữa*. App: *Thêm* → *Bảo hành – sửa chữa*, hoặc từ kết quả tra bảo hành, hồ sơ khách.
+- Phiếu nhận máy ghi lỗi khách báo, phụ kiện kèm, mật khẩu máy, ngày hẹn trả, ảnh. In / gửi khách *phiếu nhận máy* (PDF).
+- Đổi trạng thái theo tiến độ: *Đã nhận → Đang sửa → Chờ linh kiện → Đã sửa xong / Không sửa được*.
+- **Linh kiện lấy từ kho** (pin, màn…) ghi vào phiếu. Kho chỉ trừ khi trả máy.
+- **Trả máy**: bấm *Trả máy cho khách*, ghi chi phí, khách trả bao nhiêu. Có phí hoặc có linh kiện thì máy chủ lập **đơn dịch vụ** (doanh thu, công nợ, phiếu thu như đơn bán) và xuất kho linh kiện. Bảo hành miễn phí cũng xuất kho linh kiện (đơn 0 đ).
+- Phiếu đã trả khách: chỉ quản trị sửa được ghi chú; không đổi lại trạng thái, không trả lần hai.
+
+### Sổ quỹ, phiếu chi, tiền chờ giải ngân
+- Web: *Tài chính → Sổ quỹ (thu – chi)*. App: *Thêm* → *Sổ quỹ*. Xem **tiền mặt tại quầy**, **tiền trong ngân hàng**, thu – chi từng ngày.
+- **Số dư đầu kỳ** (quản trị, làm một lần): bấm *Số dư đầu kỳ*, nhập ngày bắt đầu và số tiền mặt, tiền ngân hàng đang có. Sổ quỹ tính từ ngày đó.
+- Thu bằng *Tiền mặt* vào quỹ tiền mặt; hình thức khác vào ngân hàng.
+- **Phiếu chi**: trả nhà cung cấp, ship, điện nước, lương… Ai cũng lập được (cả trên app); sửa, xóa chỉ quản trị.
+- **Tiền chờ giải ngân** (trả góp qua công ty tài chính, quẹt thẻ chưa về ngay): quản trị khai ở *Cài đặt → Thông tin cửa hàng → Sửa*, ô *Hình thức chờ giải ngân*, mỗi dòng một hình thức kèm % phí, vd. `Trả góp, 0` và `Thẻ tín dụng, 1.8`. Thu bằng các hình thức này vào quỹ *Chờ giải ngân*. Khi tiền về tài khoản, bấm **Ghi nhận tiền về**: nhập số tiền, số thực nhận (bỏ trống thì tự trừ % phí). Phần chênh là phí, tính vào chi trong ngày.
+- **Nợ nhà cung cấp** (*Tài chính*): giá trị đã nhập kho từ nhà cung cấp trừ số đã trả bằng phiếu chi *Trả nhà cung cấp*. Bấm *Trả tiền* để lập phiếu chi.
+- **Lãi gộp** (chỉ quản trị, ở Tổng quan và Báo cáo): doanh thu chưa VAT trừ giá vốn. Máy có IMEI tính theo giá nhập của chính máy đó (cộng tiền làm lại máy); hàng khác theo giá nhập bình quân đến ngày bán. Tách lãi bán máy cũ và lãi bán hàng mới.
+
+### Kiểm kho theo IMEI
+- Web: *Tồn kho* → **Kiểm kho (IMEI)**: quét lần lượt từng máy trên kệ (máy quét mã vạch tự xuống dòng) hoặc dán danh sách, bấm *So sánh*.
+- App: *Thêm* → *Kiểm kho*: quét liên tục bằng camera (hoặc gõ, dán). Danh sách đang quét lưu trên máy, thoát app vẫn còn.
+- Kết quả: **máy thiếu** (trong kho mà không thấy trên kệ), **mã lạ** (đã bán hoặc chưa nhập). Lưu kết quả vào nhật ký để đối chiếu sau.
 
 ## Dữ liệu ban đầu
 
